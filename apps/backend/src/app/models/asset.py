@@ -27,6 +27,7 @@ class Asset(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     asset_code: Mapped[str] = mapped_column(CHAR(10), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[AssetType] = mapped_column(Enum(AssetType), nullable=False)
     model: Mapped[str] = mapped_column(String(255), nullable=False)
     specification: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -45,12 +46,6 @@ class Asset(Base):
     warranty_expiry: Mapped[date] = mapped_column(
         Date,
         nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
     )
     status: Mapped[AssetStatus] = mapped_column(Enum(AssetStatus), nullable=False, default=AssetStatus.AVAILABLE)
     created_at: Mapped[datetime] = mapped_column(

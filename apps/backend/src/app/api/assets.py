@@ -19,6 +19,10 @@ from app.core.db import get_db
 from app.core.storage import storage
 from app.models import Asset
 
+from app.api.deps import require_role, get_current_user
+admin_required = require_role("ADMIN")
+
+
 router = APIRouter()
 
 
@@ -47,16 +51,21 @@ def _to_out(asset: Asset) -> AssetOut:
 
 
 @router.get("/assets", response_model=list[AssetOut])
-async def list_assets(db: AsyncSession = Depends(get_db)) -> list[AssetOut]:
+async def list_assets(db: AsyncSession = Depends(get_db), user=Depends(admin_required),) -> list[AssetOut]:
     rows = (await db.scalars(select(Asset).order_by(Asset.id.desc()))).all()
     return [_to_out(a) for a in rows]
 
 
 @router.get("/assets/{asset_id}", response_model=AssetOut)
-async def get_asset(asset_id: int, db: AsyncSession = Depends(get_db)) -> AssetOut:
+async def get_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user),) -> AssetOut:
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
+
+    # 權限判斷：ADMIN 可讀取所有資產，USER 只能讀取自己的資產
+    if user.get("role") != "ADMIN" and asset.owner_id != user.get("id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     return _to_out(asset)
 
 
@@ -65,6 +74,7 @@ async def create_asset(
     file: UploadFile = File(...),
     name: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required),
 ) -> AssetOut:
     data = await file.read()
     display_name = name or file.filename or "unnamed"
@@ -90,7 +100,7 @@ async def create_asset(
 
 
 @router.delete("/assets/{asset_id}", status_code=204)
-async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required),) -> None:
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")

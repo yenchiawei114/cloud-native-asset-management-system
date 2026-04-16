@@ -20,6 +20,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     employee_id: Mapped[str] = mapped_column(CHAR(9), unique=True, nullable=False)
+    password: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     sex: Mapped[Sex] = mapped_column(Enum(Sex), name='sex',
         nullable=False,

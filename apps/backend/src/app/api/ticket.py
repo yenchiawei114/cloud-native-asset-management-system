@@ -25,9 +25,6 @@ class RepairRequestCreate(BaseModel):
     backup_spec: str | None = None
     expected_completion_date: date | None = None
     pickup_location: str | None = None
-    photo_url1: str | None = None
-    photo_url2: str | None = None
-    photo_url3: str | None = None
 
 
 class RepairRequestStatusUpdate(BaseModel):
@@ -46,18 +43,12 @@ class RepairRequestOut(BaseModel):
     pickup_location: str | None
     created_at: datetime
     version: int
-    photo_url1: str | None
-    photo_url2: str | None
-    photo_url3: str | None
 
 
 class RepairInspectionCreate(BaseModel):
     status: bool
     note: str | None = None
     checked_by: int
-    photo_url1: str | None = None
-    photo_url2: str | None = None
-    photo_url3: str | None = None
 
 
 class RepairInspectionOut(BaseModel):
@@ -67,9 +58,6 @@ class RepairInspectionOut(BaseModel):
     note: str | None
     checked_by: int
     checked_at: datetime
-    photo_url1: str | None
-    photo_url2: str | None
-    photo_url3: str | None
 
 
 class RepairRecordCreate(BaseModel):
@@ -104,9 +92,6 @@ def _request_to_out(row: RepairRequest) -> RepairRequestOut:
         pickup_location=row.pickup_location,
         created_at=row.created_at,
         version=row.version,
-        photo_url1=row.photo_url1,
-        photo_url2=row.photo_url2,
-        photo_url3=row.photo_url3,
     )
 
 
@@ -118,9 +103,6 @@ def _inspection_to_out(row: RepairInspection) -> RepairInspectionOut:
         note=row.note,
         checked_by=row.checked_by,
         checked_at=row.checked_at,
-        photo_url1=row.photo_url1,
-        photo_url2=row.photo_url2,
-        photo_url3=row.photo_url3,
     )
 
 
@@ -169,9 +151,6 @@ async def create_ticket(payload: RepairRequestCreate, db: AsyncSession = Depends
         backup_spec=payload.backup_spec,
         expected_completion_date=payload.expected_completion_date,
         pickup_location=payload.pickup_location,
-        photo_url1=payload.photo_url1,
-        photo_url2=payload.photo_url2,
-        photo_url3=payload.photo_url3,
     )
     db.add(row)
     await db.commit()
@@ -228,9 +207,6 @@ async def create_ticket_inspection(
         status=payload.status,
         note=payload.note,
         checked_by=payload.checked_by,
-        photo_url1=payload.photo_url1,
-        photo_url2=payload.photo_url2,
-        photo_url3=payload.photo_url3,
     )
     db.add(row)
     await db.commit()

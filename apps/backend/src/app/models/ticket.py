@@ -54,3 +54,21 @@ class RepairRecord(Base):
     vendor: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
     request: Mapped["RepairRequest"] = relationship("RepairRequest", back_populates="record")
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    attachable_type: Mapped[str] = mapped_column(
+        Enum("REPAIR_REQUEST", "REPAIR_INSPECTION", "REPAIR_RECORD", name="attachment_attachable_type"),
+        nullable=False,
+    )
+    attachable_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    file_url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    file_type: Mapped[str] = mapped_column(
+        Enum("IMAGE", "VIDEO", "DOCUMENT", "OTHER", name="attachment_file_type"),
+        nullable=False,
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -6,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.models import RepairInspection, RepairRecord, RepairRequest
+from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment
 from app.core.cache import redis
 
 router = APIRouter()
@@ -28,7 +29,18 @@ class RepairRequestCreate(BaseModel):
 
 
 class RepairRequestStatusUpdate(BaseModel):
-    status: str
+    status: Literal["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"]
+
+
+class RepairRequestUpdate(BaseModel):
+    asset_id: int
+    requester_id: int
+    description: str
+    need_backup: bool = False
+    backup_spec: str | None = None
+    status: Literal["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"] = "OPEN"
+    expected_completion_date: date | None = None
+    pickup_location: str | None = None
 
 
 class RepairRequestOut(BaseModel):
@@ -65,7 +77,21 @@ class RepairRecordCreate(BaseModel):
     issue_description: str
     solution: str
     cost: int = 0
-    vendor: int
+    vendor: str
+
+
+class RepairInspectionUpdate(BaseModel):
+    status: bool
+    note: str | None = None
+    checked_by: int
+
+
+class RepairRecordUpdate(BaseModel):
+    repair_date: date
+    issue_description: str
+    solution: str
+    cost: int = 0
+    vendor: str
 
 
 class RepairRecordOut(BaseModel):
@@ -75,7 +101,35 @@ class RepairRecordOut(BaseModel):
     issue_description: str
     solution: str
     cost: int
-    vendor: int
+    vendor: str
+    created_at: datetime
+
+
+AttachmentAttachableType = Literal["REPAIR_REQUEST", "REPAIR_INSPECTION", "REPAIR_RECORD"]
+AttachmentFileType = Literal["IMAGE", "VIDEO", "DOCUMENT", "OTHER"]
+
+
+class AttachmentCreate(BaseModel):
+    attachable_type: AttachmentAttachableType
+    attachable_id: int
+    file_url: str
+    file_type: AttachmentFileType
+    file_name: str
+
+
+class AttachmentUpdate(BaseModel):
+    file_url: str
+    file_type: AttachmentFileType
+    file_name: str
+
+
+class AttachmentOut(BaseModel):
+    id: int
+    attachable_type: AttachmentAttachableType
+    attachable_id: int
+    file_url: str
+    file_type: AttachmentFileType
+    file_name: str
     created_at: datetime
 
 
@@ -117,6 +171,34 @@ def _record_to_out(row: RepairRecord) -> RepairRecordOut:
         vendor=row.vendor,
         created_at=row.created_at,
     )
+
+
+def _attachment_to_out(row: Attachment) -> AttachmentOut:
+    return AttachmentOut(
+        id=row.id,
+        attachable_type=row.attachable_type,
+        attachable_id=row.attachable_id,
+        file_url=row.file_url,
+        file_type=row.file_type,
+        file_name=row.file_name,
+        created_at=row.created_at,
+    )
+
+
+async def _ensure_attachable_exists(
+    db: AsyncSession,
+    attachable_type: AttachmentAttachableType,
+    attachable_id: int,
+) -> None:
+    if attachable_type == "REPAIR_REQUEST":
+        row = await db.get(RepairRequest, attachable_id)
+    elif attachable_type == "REPAIR_INSPECTION":
+        row = await db.get(RepairInspection, attachable_id)
+    else:
+        row = await db.get(RepairRecord, attachable_id)
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="attachable target not found")
 
 
 @router.get("/tickets", response_model=list[RepairRequestOut])
@@ -161,6 +243,34 @@ async def create_ticket(payload: RepairRequestCreate, db: AsyncSession = Depends
     return result
 
 
+@router.put("/tickets/{ticket_id}", response_model=RepairRequestOut)
+async def update_ticket(
+    ticket_id: int,
+    payload: RepairRequestUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> RepairRequestOut:
+    row = await db.get(RepairRequest, ticket_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="ticket not found")
+
+    row.asset_id = payload.asset_id
+    row.requester_id = payload.requester_id
+    row.description = payload.description
+    row.need_backup = payload.need_backup
+    row.backup_spec = payload.backup_spec
+    row.status = payload.status
+    row.expected_completion_date = payload.expected_completion_date
+    row.pickup_location = payload.pickup_location
+    row.version += 1
+
+    await db.commit()
+    await db.refresh(row)
+
+    result = _request_to_out(row)
+    await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
+    return result
+
+
 @router.patch("/tickets/{ticket_id}/status", response_model=RepairRequestOut)
 async def update_ticket_status(
     ticket_id: int,
@@ -178,6 +288,17 @@ async def update_ticket_status(
     result = _request_to_out(row)
     await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
     return result
+
+
+@router.delete("/tickets/{ticket_id}", status_code=204)
+async def delete_ticket(ticket_id: int, db: AsyncSession = Depends(get_db)) -> None:
+    row = await db.get(RepairRequest, ticket_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="ticket not found")
+
+    await db.delete(row)
+    await db.commit()
+    await redis.delete(_ticket_cache_key(ticket_id))
 
 
 @router.get("/tickets/{ticket_id}/inspection", response_model=RepairInspectionOut)
@@ -214,6 +335,35 @@ async def create_ticket_inspection(
     return _inspection_to_out(row)
 
 
+@router.put("/tickets/{ticket_id}/inspection", response_model=RepairInspectionOut)
+async def update_ticket_inspection(
+    ticket_id: int,
+    payload: RepairInspectionUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> RepairInspectionOut:
+    row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="inspection not found")
+
+    row.status = payload.status
+    row.note = payload.note
+    row.checked_by = payload.checked_by
+
+    await db.commit()
+    await db.refresh(row)
+    return _inspection_to_out(row)
+
+
+@router.delete("/tickets/{ticket_id}/inspection", status_code=204)
+async def delete_ticket_inspection(ticket_id: int, db: AsyncSession = Depends(get_db)) -> None:
+    row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="inspection not found")
+
+    await db.delete(row)
+    await db.commit()
+
+
 @router.get("/tickets/{ticket_id}/record", response_model=RepairRecordOut)
 async def get_ticket_record(ticket_id: int, db: AsyncSession = Depends(get_db)) -> RepairRecordOut:
     row = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
@@ -248,3 +398,94 @@ async def create_ticket_record(
     await db.commit()
     await db.refresh(row)
     return _record_to_out(row)
+
+
+@router.put("/tickets/{ticket_id}/record", response_model=RepairRecordOut)
+async def update_ticket_record(
+    ticket_id: int,
+    payload: RepairRecordUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> RepairRecordOut:
+    row = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="repair record not found")
+
+    row.repair_date = payload.repair_date
+    row.issue_description = payload.issue_description
+    row.solution = payload.solution
+    row.cost = payload.cost
+    row.vendor = payload.vendor
+
+    await db.commit()
+    await db.refresh(row)
+    return _record_to_out(row)
+
+
+@router.delete("/tickets/{ticket_id}/record", status_code=204)
+async def delete_ticket_record(ticket_id: int, db: AsyncSession = Depends(get_db)) -> None:
+    row = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="repair record not found")
+
+    await db.delete(row)
+    await db.commit()
+
+
+@router.get("/attachments", response_model=list[AttachmentOut])
+async def list_attachments(db: AsyncSession = Depends(get_db)) -> list[AttachmentOut]:
+    rows = (await db.scalars(select(Attachment).order_by(Attachment.id.desc()))).all()
+    return [_attachment_to_out(row) for row in rows]
+
+
+@router.get("/attachments/{attachment_id}", response_model=AttachmentOut)
+async def get_attachment(attachment_id: int, db: AsyncSession = Depends(get_db)) -> AttachmentOut:
+    row = await db.get(Attachment, attachment_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="attachment not found")
+    return _attachment_to_out(row)
+
+
+@router.post("/attachments", response_model=AttachmentOut, status_code=201)
+async def create_attachment(payload: AttachmentCreate, db: AsyncSession = Depends(get_db)) -> AttachmentOut:
+    await _ensure_attachable_exists(db, payload.attachable_type, payload.attachable_id)
+
+    row = Attachment(
+        attachable_type=payload.attachable_type,
+        attachable_id=payload.attachable_id,
+        file_url=payload.file_url,
+        file_type=payload.file_type,
+        file_name=payload.file_name,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return _attachment_to_out(row)
+
+
+@router.put("/attachments/{attachment_id}", response_model=AttachmentOut)
+async def update_attachment(
+    attachment_id: int,
+    payload: AttachmentUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> AttachmentOut:
+    row = await db.get(Attachment, attachment_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="attachment not found")
+
+    row.file_url = payload.file_url
+    row.file_type = payload.file_type
+    row.file_name = payload.file_name
+
+    await db.commit()
+    await db.refresh(row)
+    return _attachment_to_out(row)
+
+
+@router.delete("/attachments/{attachment_id}", status_code=204)
+async def delete_attachment(attachment_id: int, db: AsyncSession = Depends(get_db)) -> None:
+    row = await db.get(Attachment, attachment_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="attachment not found")
+
+    await db.delete(row)
+    await db.commit()

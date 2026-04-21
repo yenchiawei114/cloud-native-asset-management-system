@@ -53,3 +53,11 @@ class User(Base):
         "AuditLog",
         back_populates="user"
     )
+    repair_inspections: Mapped[list["RepairInspection"]] = relationship(
+        "RepairInspection",
+        back_populates="checker"
+    )
+    repair_requests: Mapped[list["RepairRequest"]] = relationship(
+        "RepairRequest",
+        back_populates="requester"
+    )

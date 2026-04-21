@@ -7,8 +7,8 @@ class RepairRequest(Base):
     __tablename__ = "repair_requests"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
-    asset_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    requester_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), nullable=False)
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     need_backup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     backup_spec: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -21,12 +21,15 @@ class RepairRequest(Base):
     pickup_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
     inspection: Mapped["RepairInspection | None"] = relationship(
         "RepairInspection", back_populates="request", uselist=False, cascade="all, delete-orphan"
     )
     record: Mapped["RepairRecord | None"] = relationship(
         "RepairRecord", back_populates="request", uselist=False, cascade="all, delete-orphan"
     )
+    requester: Mapped["User"] = relationship("User", back_populates="repair_requests")
+    target_asset: Mapped["Asset"] = relationship("Asset", back_populates="repair_requests")
 
 
 class RepairInspection(Base):
@@ -37,9 +40,11 @@ class RepairInspection(Base):
 
     status: Mapped[bool] = mapped_column(Boolean, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    checked_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    checked_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     checked_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
+
     request: Mapped["RepairRequest"] = relationship("RepairRequest", back_populates="inspection")
+    checker: Mapped["User"] = relationship("User", back_populates="repair_inspections")
 
 
 class RepairRecord(Base):
@@ -53,6 +58,7 @@ class RepairRecord(Base):
     cost: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     vendor: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
+    
     request: Mapped["RepairRequest"] = relationship("RepairRequest", back_populates="record")
 
 

@@ -5,7 +5,7 @@ import sys
 
 from sqlalchemy import select
 
-from app.core.db import WriteSession, dispose_engines
+from app.core.db import Session, dispose_engines
 from app.models import Asset
 
 from datetime import date
@@ -60,7 +60,7 @@ SAMPLES = [
 
 async def run() -> None:
     inserted = 0
-    async with WriteSession() as session:
+    async with Session() as session:
         for row in SAMPLES:
             existing = await session.scalar(select(Asset).where(Asset.asset_code == row["asset_code"]))
             if existing:

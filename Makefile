@@ -4,8 +4,8 @@ help:
 	@echo "Targets:"
 	@echo "  doctor              Check required tools are installed"
 	@echo "  setup               Install backend + frontend deps, copy .env"
-	@echo "  infra-up            Start MariaDB + Redis (Docker)"
-	@echo "  infra-down          Stop MariaDB + Redis"
+	@echo "  infra-up            Start MySQL + Redis (Docker)"
+	@echo "  infra-down          Stop MySQL + Redis"
 	@echo "  infra-reset         Stop + wipe volumes (fresh DB)"
 	@echo "  migrate             Run Alembic upgrade head"
 	@echo "  migrate-new m='msg' Create new migration"
@@ -36,13 +36,13 @@ setup: doctor
 
 infra-up:
 	cd infra/local && docker compose up -d
-	@echo "Waiting for MariaDB to be healthy..."
+	@echo "Waiting for MySQL to be healthy..."
 	@for i in $$(seq 1 60); do \
-		status=$$(docker inspect --format='{{.State.Health.Status}}' local-mariadb-1 2>/dev/null || echo "starting"); \
-		if [ "$$status" = "healthy" ]; then echo "OK MariaDB healthy"; exit 0; fi; \
+		status=$$(docker inspect --format='{{.State.Health.Status}}' local-mysql-1 2>/dev/null || echo "starting"); \
+		if [ "$$status" = "healthy" ]; then echo "OK MySQL healthy"; exit 0; fi; \
 		sleep 1; \
 	done; \
-	echo "X MariaDB did not become healthy in 60s"; exit 1
+	echo "X MySQL did not become healthy in 60s"; exit 1
 
 infra-down:
 	cd infra/local && docker compose down

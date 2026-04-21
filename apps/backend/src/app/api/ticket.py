@@ -7,8 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.models import RepairInspection, RepairRecord, RepairRequest
+from app.core.cache import redis
 
 router = APIRouter()
+CACHE_TTL_SECONDS = 60
+
+
+def _ticket_cache_key(ticket_id: int) -> str:
+    return f"ticket:{ticket_id}"
 
 
 class RepairRequestCreate(BaseModel):
@@ -139,10 +145,18 @@ async def list_tickets(db: AsyncSession = Depends(get_db)) -> list[RepairRequest
 
 @router.get("/tickets/{ticket_id}", response_model=RepairRequestOut)
 async def get_ticket(ticket_id: int, db: AsyncSession = Depends(get_db)) -> RepairRequestOut:
+    cache_key = _ticket_cache_key(ticket_id)
+    cached = await redis.get(cache_key)
+    if cached:
+        return RepairRequestOut.model_validate_json(cached)
+
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
-    return _request_to_out(row)
+
+    result = _request_to_out(row)
+    await redis.setex(cache_key, CACHE_TTL_SECONDS, result.model_dump_json())
+    return result
 
 
 @router.post("/tickets", response_model=RepairRequestOut, status_code=201)
@@ -162,7 +176,10 @@ async def create_ticket(payload: RepairRequestCreate, db: AsyncSession = Depends
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return _request_to_out(row)
+
+    result = _request_to_out(row)
+    await redis.setex(_ticket_cache_key(result.id), CACHE_TTL_SECONDS, result.model_dump_json())
+    return result
 
 
 @router.patch("/tickets/{ticket_id}/status", response_model=RepairRequestOut)
@@ -178,7 +195,10 @@ async def update_ticket_status(
     row.version += 1
     await db.commit()
     await db.refresh(row)
-    return _request_to_out(row)
+
+    result = _request_to_out(row)
+    await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
+    return result
 
 
 @router.get("/tickets/{ticket_id}/inspection", response_model=RepairInspectionOut)

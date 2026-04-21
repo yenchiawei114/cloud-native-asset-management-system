@@ -27,6 +27,10 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
 
+    # JWT
+    secret_key: str = Field(...)
+    algorithm: str = "HS256"
+
     # Storage backend："local" 或 "gcs"
     storage_backend: str = "local"
     storage_local_root: str = "./uploads"

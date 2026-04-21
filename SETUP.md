@@ -1,6 +1,6 @@
 # 開發環境建置
 
-本文件說明如何在本機架設本專案的開發環境。雲端部署（GKE、GCS、MariaDB 主從、Prometheus/Grafana）不在本文件範圍內。
+本文件說明如何在本機架設本專案的開發環境。雲端部署（GKE、GCS、MySQL、Prometheus/Grafana）不在本文件範圍內。
 
 ---
 
@@ -24,7 +24,7 @@
 ```bash
 make doctor          # 檢查 docker / uv / node / npm
 make setup           # 安裝後端與前端相依套件，並複製 .env
-make infra-up        # 以 Docker 啟動 MariaDB + Redis
+make infra-up        # 以 Docker 啟動 MySQL + Redis
 make migrate         # 建立資料表
 make seed            # 載入範例資料
 
@@ -63,7 +63,7 @@ make frontend-dev    # Vite   跑在 http://localhost:5173
 | 現象                                           | 解決方式                                                              |
 | ---------------------------------------------- | --------------------------------------------------------------------- |
 | `make infra-up` 在 healthcheck 階段逾時        | `docker compose -f infra/local/docker-compose.yml logs mariadb`       |
-| 後端連不到資料庫                               | 等 `make infra-up` 顯示 `OK MariaDB healthy` 後再啟動                 |
+| 後端連不到資料庫                               | 等 `make infra-up` 顯示 `OK MySQL healthy` 後再啟動                 |
 | 寫入時出現 `Access denied for user 'app_ro'`   | 讀取路由誤用了寫入操作，請改用 `get_db`                               |
 | 前端顯示 `backend err`                         | 後端沒啟動，或 proxy 設定有誤                                         |
 | 拉完 code 後 schema 不一致                     | 執行 `make migrate`                                                   |

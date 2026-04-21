@@ -36,10 +36,10 @@ def upgrade() -> None:
                existing_type=mysql.DATETIME(),
                server_default=sa.text('now()'),
                existing_nullable=False)
-    op.alter_column('assets', 'updated_at',
-               existing_type=mysql.DATETIME(),
-               server_default=sa.text('now()'),
-               existing_nullable=False)
+    # op.alter_column('assets', 'updated_at',
+    #            existing_type=mysql.DATETIME(),
+    #            server_default=sa.text('now()'),
+    #            existing_nullable=False)
     op.drop_column('repair_inspections', 'photo_url3')
     op.drop_column('repair_inspections', 'photo_url1')
     op.drop_column('repair_inspections', 'photo_url2')

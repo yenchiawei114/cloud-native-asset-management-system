@@ -67,18 +67,18 @@ def upgrade() -> None:
     sa.UniqueConstraint('request_id')
     )
     op.create_index(op.f('ix_repair_records_id'), 'repair_records', ['id'], unique=False)
-    op.alter_column('assets', 'size_bytes',
-               existing_type=mysql.BIGINT(display_width=20),
-               server_default=None,
-               existing_nullable=False)
+    # op.alter_column('assets', 'size_bytes',
+    #            existing_type=mysql.BIGINT(display_width=20),
+    #            server_default=None,
+    #            existing_nullable=False)
     op.alter_column('assets', 'created_at',
                existing_type=mysql.DATETIME(),
                server_default=sa.text('now()'),
                existing_nullable=False)
-    op.alter_column('assets', 'updated_at',
-               existing_type=mysql.DATETIME(),
-               server_default=sa.text('now()'),
-               existing_nullable=False)
+    # op.alter_column('assets', 'updated_at',
+    #            existing_type=mysql.DATETIME(),
+    #            server_default=sa.text('now()'),
+    #            existing_nullable=False)
     # ### end Alembic commands ###
 
 

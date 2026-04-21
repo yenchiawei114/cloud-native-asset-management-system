@@ -9,7 +9,7 @@ All dev tasks go through the root `Makefile`. Run `make help` for the full list.
 ```bash
 make doctor          # verify docker / uv / node / npm are present
 make setup           # install backend + frontend deps, copy .env.example -> .env
-make infra-up        # start MariaDB + Redis via docker compose (waits for healthcheck)
+make infra-up        # start MySQL + Redis via docker compose (waits for healthcheck)
 make infra-down      # stop containers
 make infra-reset     # stop + wipe volumes (fresh DB)
 make migrate         # alembic upgrade head
@@ -39,7 +39,7 @@ Monorepo with two apps and shared local infra:
 
 - `apps/backend/` — FastAPI + SQLAlchemy (async) + Alembic + Redis
 - `apps/frontend/` — Vite + React + TS (dev server proxies `/api` and `/static` to backend, so no CORS dance locally)
-- `infra/local/` — docker-compose for MariaDB + Redis, plus tuned configs
+- `infra/local/` — docker-compose for MySQL + Redis, plus tuned configs
 
 ### Environment-aware core layer (critical)
 

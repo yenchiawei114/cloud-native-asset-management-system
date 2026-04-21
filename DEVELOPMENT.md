@@ -141,25 +141,16 @@ await storage.delete(key)
 
 ## 架構重點
 
-### 讀寫分離（與未來 DB Proxy 的相容性）
+### 雲端架構相容性（與 DB Proxy 的對接）
 
-`get_db` 與 `get_read_db` 背後是兩個獨立 engine，對應 `DB_WRITE_URL` / `DB_READ_URL`。本機雖然都指向同一個 MariaDB，但 `DB_READ_URL` 使用 `app_ro`（只有 SELECT 權限）。若路由意外在讀取 session 上寫入，本機就會被 MariaDB 拒絕，行為與雲端 replica 一致。
+目前的開發慣例是所有新 endpoint 一律使用 `Depends(get_db)`。
 
-**開發慣例（重要）：新 endpoint 一律使用 `Depends(get_db)`。** 只有在滿足以下三個條件時才改用 `get_read_db`：
+**為什麼預設只用 `get_db`？**
+- **簡化維護**：現代雲端架構通常透過 Database Proxy (如 Cloud SQL Auth Proxy 或 AlloyDB Proxy) 處理讀寫分流與負載平衡。
+- **防止讀取延遲問題**：寫入後立即讀取時，如果誤用了 read-replica 且同步有延遲，會讀到舊資料。使用單一入口點能有效避免此問題。
+- **架構純粹**：程式碼不需要關心底層是單機還是叢集，所有路由、session 一致性、failover 都交給基礎設施層處理。
 
-1. Endpoint 是純讀（完全不寫入）
-2. 實測證實是效能熱點
-3. 可以容忍 replica lag（「剛寫完馬上讀」可能讀到舊資料）
-
-目前專案中**沒有任何 endpoint** 使用 `get_read_db`，這是刻意維持的狀態。
-
-**為什麼這樣設計？** 未來若採用 DB proxy（MaxScale / ProxySQL），讀寫路由、session 一致性、failover 都會交給 proxy 處理，程式只需要認一個 URL。屆時的切換步驟是：
-
-- `DB_WRITE_URL` 與 `DB_READ_URL` 都指向 proxy 的 Service
-- 設 `DB_PROBE_READ=false`（`/readyz` 不需重複探測同一個端點）
-- **程式零改動**
-
-如果今天就亂用 `get_read_db`，未來切 proxy 時每個 endpoint 都要重新檢視 replica lag 風險。預設用 `get_db` 就沒這個包袱。
+本機開發環境已簡化為單一 `DB_URL` 並移除 `get_read_db`，確保程式碼在任何環境下皆具備高度的一致性與可移植性。
 
 ### Metrics
 

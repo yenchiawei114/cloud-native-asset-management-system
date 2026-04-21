@@ -46,7 +46,7 @@ Monorepo with two apps and shared local infra:
 `apps/backend/src/app/core/` is **the only place that knows local vs. cloud**. Everything else (models, routes, frontend) must stay environment-agnostic. When adding features, call into this layer instead of importing cloud SDKs directly.
 
 - `core/config.py` — Pydantic Settings reads `.env` at repo root. Single source of truth for all config.
-- `core/db.py` — exposes `get_db` (write session) and `get_read_db` (read session). They are backed by **separate engines** against `DB_WRITE_URL` and `DB_READ_URL`. Locally, `DB_READ_URL` points at a `app_ro` user with SELECT-only grants — writing through `get_read_db` fails locally the same way it would against a cloud replica. **Default to `get_db` everywhere** — see the "Adding a Feature" note. `/readyz` probes both engines; set `DB_PROBE_READ=false` behind a DB proxy where both URLs point at the same endpoint.
+- `core/db.py` — exposes `get_db` (async session). Backed by a single engine against `DB_URL`. `/readyz` probes the engine. **Always use `get_db`** — no read/write split.
 - `core/cache.py` — shared async Redis client exported as `redis`. Do not construct your own client.
 - `core/storage.py` — `Storage` ABC with `LocalStorage` / `GCSStorage` implementations. Switched via `STORAGE_BACKEND=local|gcs`. Routes call `storage.upload/get_url/delete` and never import `google.cloud.storage`.
 
@@ -74,7 +74,7 @@ Uses a **sync** engine via `pymysql` (`DB_SYNC_URL`) rather than async — simpl
 
 1. Add model under `app/models/foo.py`, re-export in `app/models/__init__.py`.
 2. `make migrate-new m='add foos'`, review diff, `make migrate`.
-3. Create router in `app/api/foos.py`, use `Depends(get_db)`. `get_db` auto-rolls back on exception — no transaction boilerplate needed. **Do not reach for `get_read_db`** unless the endpoint is (a) pure read, (b) a proven hot path, and (c) tolerant of replica lag. Keeping every endpoint on `get_db` makes a future DB proxy (MaxScale/ProxySQL) switch a pure infra change with zero code churn. See `DEVELOPMENT.md` → 讀寫分離.
+3. Create router in `app/api/foos.py`, use `Depends(get_db)`. `get_db` auto-rolls back on exception — no transaction boilerplate needed.
 4. Include the router in `app/main.py` with `app.include_router(foos.router, prefix="/api", tags=["foos"])`.
 
 For Redis caching use the shared `from app.core.cache import redis`. For uploads use `from app.core.storage import storage` (works identically on local disk and GCS).
@@ -87,78 +87,110 @@ For Redis caching use the shared `from app.core.cache import redis`. For uploads
 
 ## Deployment TODO
 
-App code is designed to be env-driven: `core/config.py` reads settings from env, `core/storage.py` swaps `LocalStorage` / `GCSStorage` via `STORAGE_BACKEND`, `core/db.py` splits read/write via two URLs, `core/logging.py` switches formatter via `LOG_FORMAT`, and `frontend/public/config.js` injects `API_BASE_URL` at runtime. The goal is that moving to k8s should be an env + manifest change, not a code change — verify this assumption against the current code before each deployment step. What's missing is the packaging + infra layer. Target deployment: GKE + GCS only (MariaDB / Redis self-hosted as container images on k8s, no Cloud SQL / Memorystore).
+App code is env-driven: `core/config.py` reads settings from env, `core/storage.py` swaps `LocalStorage` / `GCSStorage` via `STORAGE_BACKEND`, `core/db.py` connects via single `DB_URL`, `core/logging.py` switches formatter via `LOG_FORMAT`, and `frontend/public/config.js` injects `API_BASE_URL` at runtime. Moving to k8s is an env + manifest change, not a code change.
+
+**Target stack:** GKE Autopilot · Cloud SQL MySQL HA · Memorystore for Redis · GCS · Nginx Ingress Controller · GitHub Actions
+
+### Phase 0 — Code cleanup (prerequisite, do first)
+
+Remove the read/write split that no longer applies:
+
+- [ ] `core/db.py` — 移除 `get_read_db`、`read_engine`；只保留 `get_db` + 單一 `DB_URL`
+- [ ] `core/config.py` — 移除 `DB_READ_URL`、`DB_PROBE_READ`、`DB_WRITE_URL`，改為單一 `DB_URL`
+- [ ] 全域搜尋 `get_read_db`，確認無任何 router 仍在使用
+- [ ] `/readyz` 只探測單一 engine
 
 ### Phase 1 — Packaging (blocks any deploy)
 
-- [ ] **`apps/backend/Dockerfile`** — multi-stage, `python:3.12-slim` base, `uv sync --no-dev --extra gcs`, non-root user, `CMD ["uvicorn", ...]` exec form (no `--reload`), uses `--workers N` tuned by env. Must work identically for local `docker build` smoke test and GitHub Actions build — no dev shortcuts baked in.
-- [ ] **`apps/frontend/Dockerfile`** — two-stage: `node:20` build → `nginx:alpine` serve. Ships `dist/` + `nginx.conf` + `entrypoint.sh`.
-- [ ] **`apps/frontend/public/config.js` → `config.js.template`** — template with `${API_BASE_URL}` placeholder; entrypoint runs `envsubst` on container start so one image targets multiple environments.
-- [ ] **`apps/frontend/nginx/nginx.conf`** — SPA fallback (`try_files $uri /index.html`), gzip, cache headers for static assets.
-- [ ] **`.dockerignore` × 2** — backend excludes `.venv`, `uploads/`, `__pycache__`, `.pytest_cache`; frontend excludes `node_modules`, `dist`.
-- [ ] **Decision: dev stays on host, containers are prod-only.** Do not add a dev target to the Dockerfile — `make backend-dev` / `make frontend-dev` remain the fast iteration path. Containers are used for (a) local smoke test of the prod image, (b) CI build for deploy.
+- [ ] **`apps/backend/Dockerfile`** — multi-stage, `python:3.12-slim` base, `uv sync --no-dev --extra gcs`, non-root user, `CMD ["uvicorn", ...]` exec form (no `--reload`), workers 由 `WEB_CONCURRENCY` env 控制
+- [ ] **`apps/frontend/Dockerfile`** — two-stage: `node:20` build → `nginx:alpine` serve `dist/`；包含 `nginx.conf` + `entrypoint.sh`
+- [ ] **`apps/frontend/public/config.js` → `config.js.template`** — `${API_BASE_URL}` placeholder；entrypoint 執行 `envsubst` 後輸出為 `config.js`，一個 image 打所有環境
+- [ ] **`apps/frontend/nginx/nginx.conf`** — SPA fallback (`try_files $uri /index.html`)、gzip、靜態資源 cache headers
+- [ ] **`.dockerignore` × 2** — backend 排除 `.venv`、`uploads/`、`__pycache__`；frontend 排除 `node_modules`、`dist`
+- [ ] 本地 smoke test：`docker build` + `docker run` 確認兩個 image 正常啟動
 
-### Phase 2 — k8s manifests skeleton
+**決策：dev 繼續跑在 host，container 僅用於 prod smoke test 和 CI build。**
 
-Prefer **Kustomize** (`base/` + `overlays/staging/` + `overlays/production/`) over Helm for this scale. Layout:
+### Phase 2 — k8s manifests
+
+使用 **Kustomize**（`base/` + `overlays/staging/` + `overlays/production/`）：
 
 ```
 infra/k8s/
-├── README.md                     # what each piece does, how to apply
+├── README.md
 ├── base/
-│   ├── backend/                  # Deployment, Service, HPA
-│   ├── frontend/                 # Deployment, Service
-│   ├── mariadb/                  # StatefulSet (master + replica), 2 Services (write/read)
-│   ├── redis/                    # Deployment (single pod is fine to start)
-│   ├── migration/                # Job template (alembic upgrade head)
-│   └── ingress/                  # path-based: / → frontend, /api → backend (no CORS needed)
+│   ├── backend/        # Deployment, Service, HPA, PodDisruptionBudget
+│   ├── frontend/       # Deployment (nginx static), Service
+│   ├── cloudsql-proxy/ # Deployment (Cloud SQL Auth Proxy，standalone)
+│   ├── migration/      # Job: alembic upgrade head
+│   └── ingress/        # Nginx IngressClass + Ingress（/ → frontend，/api → backend）
 └── overlays/
     ├── staging/
     └── production/
 ```
 
-- [ ] Backend Deployment: `livenessProbe` → `/healthz`, `readinessProbe` → `/readyz`, resource requests/limits, `securityContext: runAsNonRoot`, env from ConfigMap + Secret.
-- [ ] Frontend Deployment: same shape, lighter resources.
-- [ ] MariaDB StatefulSet with replication. Easiest path: Bitnami MariaDB Helm chart's values as reference, or `mariadb-operator`. Two Services: `mariadb-write` (→ master pod), `mariadb-read` (→ replica pods).
-- [ ] Redis Deployment (single pod to start; Sentinel/cluster later if needed).
-- [ ] Migration Job — runs `alembic upgrade head` with the same image as backend. Trigger pre-deploy, not as initContainer (avoids race conditions when scaling).
-- [ ] Ingress with path routing — avoids CORS entirely (frontend and `/api` share origin).
-- [ ] ConfigMap for non-sensitive env (`APP_ENV`, `LOG_FORMAT`, `ENABLE_METRICS`, `STORAGE_BACKEND`, `GCS_BUCKET`, `GCS_SIGNED_URLS`, URLs pointing at in-cluster Services).
-- [ ] HPA on backend (CPU-based to start).
+- [ ] **Backend Deployment**
+  - `livenessProbe` → `/healthz`，`readinessProbe` → `/readyz`
+  - `securityContext: runAsNonRoot: true`
+  - env 來自 ConfigMap（非敏感）+ Secret（敏感，由 ESO 同步）
+  - anti-affinity：確保 pods 分散在不同 node（Autopilot multi-zone）
+  - min replicas: 2（HA）
+- [ ] **HPA** — CPU 70% 觸發，min 2 / max 10
+- [ ] **PodDisruptionBudget** — `minAvailable: 1`，rolling update 不中斷
+- [ ] **Frontend Deployment** — nginx:alpine serve 靜態檔，輕量 resource requests
+- [ ] **Cloud SQL Auth Proxy** — 跑為獨立 Deployment（非 sidecar），backend 透過 `127.0.0.1:3306` 連線；Workload Identity 授權，不掛 JSON key
+- [ ] **Migration Job** — 用與 backend 相同的 image，pre-deploy 手動觸發，非 initContainer
+- [ ] **Nginx Ingress Controller** — 用 Helm 安裝 `ingress-nginx`，建立 LoadBalancer Service 取得 GCP External LB；路徑路由讓 frontend 與 `/api` 共用同一 origin，不需要 CORS
+- [ ] **ConfigMap** — `APP_ENV`、`LOG_FORMAT`、`ENABLE_METRICS`、`STORAGE_BACKEND`、`GCS_BUCKET`、`DB_URL`（指向 cloudsql-proxy Service）、`REDIS_URL`（指向 Memorystore VPC 內網址）
 
 ### Phase 3 — GCP infrastructure
 
-Out of git-managed manifests but document here:
+用 gcloud CLI 手動開通一次，記錄在 `infra/gcp/setup.md`（指令 + 決策，不含 secrets）：
 
-- [ ] GKE cluster (Autopilot or Standard, your call).
-- [ ] Artifact Registry repo for images.
-- [ ] GCS bucket — **private**, with CORS configured for signed URLs from frontend origin.
-- [ ] GCP Service Account + **Workload Identity** binding so backend pods access GCS without mounting JSON keys.
-- [ ] Cloud DNS + managed certificate for the Ingress.
+- [ ] **GKE Autopilot cluster** — regional（e.g. `asia-east1`），啟用 Workload Identity
+- [ ] **Artifact Registry** — Docker repo，供 CI push image
+- [ ] **GCS bucket** — private，設定 CORS 允許你的 domain（signed URL 用）
+- [ ] **Cloud SQL MySQL** — HA 實例（啟用 automatic failover），`db-n1-standard-2` 起步；建立 `app` user，限制只能從 Cloud SQL Auth Proxy 連入
+- [ ] **Memorystore for Redis** — Standard tier（HA，自動 failover），與 GKE 同 VPC
+- [ ] **GCP Service Account** — 綁 Workload Identity，授 `roles/cloudsql.client` + `roles/storage.objectAdmin`
+- [ ] **Static global IP** — 給 Nginx Ingress 的 LoadBalancer Service annotation 用
+- [ ] **Cloud DNS + Google Managed Certificate** — 指向 global IP
 
 ### Phase 4 — Secrets management
 
-**Never commit secrets**, even to overlays. Pick one:
+- [ ] **External Secrets Operator（ESO）** — Helm 安裝，設定 `ClusterSecretStore` 指向 GCP Secret Manager
+- [ ] 每個 secret 建 `ExternalSecret` resource（DB 密碼、Redis AUTH、GCS SA）
+- [ ] Manifests 裡只存 `ExternalSecret`，不存實際值；`SecretStore` 的 SA 用 Workload Identity 授權
 
-- [ ] **External Secrets Operator + GCP Secret Manager** (recommended) — secrets live in GCP, ESO syncs them to k8s Secrets. Manifests reference `SecretStore` / `ExternalSecret` resources, not raw values.
-- [ ] **Sealed Secrets** — encrypt secrets before committing. Simpler but coupling to cluster key.
+**絕不 commit secrets，即使是 overlays。**
 
 ### Phase 5 — CI/CD
 
-- [ ] `.github/workflows/build.yml` — on push to main: build backend + frontend images (multi-arch if needed), push to Artifact Registry, tag with `${{ github.sha }}` + `latest`. Use `docker/build-push-action@v5` with `cache-from/to: type=gha`.
-- [ ] `.github/workflows/deploy.yml` — after build: run migration Job, then `kustomize build overlays/<env> | kubectl apply -f -`. Or switch to ArgoCD / Flux (GitOps) for declarative sync.
-- [ ] `.github/workflows/test.yml` — on PR: `make test` + `ruff check` + frontend lint/typecheck. Must pass before merge.
+```
+.github/workflows/
+├── test.yml    # PR trigger：make test + ruff check + frontend lint/typecheck；全過才可 merge
+├── build.yml   # push main：docker build → push Artifact Registry，tag: sha + latest
+└── deploy.yml  # build 完成後：kubectl apply migration Job → kustomize | kubectl apply
+```
 
-### Phase 6 — Observability (post-deploy polish)
+- [ ] `build.yml` — 使用 `docker/build-push-action@v5`，`cache-from/to: type=gha`
+- [ ] `deploy.yml` — 用 `google-github-actions/auth` + Workload Identity Federation 授權 kubectl（不存 SA JSON key）
+- [ ] `deploy.yml` — migration Job 完成後才 apply app manifests（`kubectl wait --for=condition=complete job/migration`）
+- [ ] image tag 用 `${{ github.sha }}`，overlays 用 `kustomize edit set image` 注入
 
-- [ ] Prometheus stack (`kube-prometheus-stack` Helm chart) scraping `/metrics` from backend.
-- [ ] Grafana dashboards for HTTP latency, DB pool saturation, Redis hit rate.
-- [ ] Alert rules (PagerDuty / Slack) for error rate, pod restart loops.
-- [ ] Structured log-based metrics in Cloud Logging (leverages the JSON log format already in place).
+### Phase 6 — Observability（post-deploy）
 
-### Non-goals / decisions already made
+- [ ] **Cloud Logging** — JSON log format 已就位，GKE 自動收集，直接在 Cloud Console 查
+- [ ] **Cloud Monitoring** — 建 uptime check（`/healthz`）+ alert policy（5xx rate、latency p99）
+- [ ] **Prometheus + Grafana**（可選）— `kube-prometheus-stack` Helm chart，scrape backend `/metrics`（需 `ENABLE_METRICS=true`）
+- [ ] **Alert 通知** — Slack 或 Email，觸發條件：error rate 飆升、pod restart loop、Cloud SQL failover
 
-- **No Cloud SQL / Memorystore** — MariaDB and Redis run as container images on k8s. Trade-off: more ops work, but full portability and lower cost.
-- **Read/write split stays app-layer** — `DB_WRITE_URL` / `DB_READ_URL` point at two k8s Services. No MaxScale / ProxySQL unless failover automation becomes a real need.
-- **No dev containers** — host-run dev via `make *-dev` is faster and already works. Containers are prod-only.
-- **Mono-repo for infra** — Dockerfiles, k8s manifests, CI all live here. Easier for a small team; re-evaluate if the repo outgrows it.
+### Decisions made
+
+- **GKE Autopilot** — Google 管 node，只付 pod resource 費用，省 ops 負擔
+- **Cloud SQL MySQL HA** — 單 region，automatic failover，不做讀寫分離，優先資料一致性
+- **Memorystore for Redis** — 全託管，避免 k8s 上 Redis 的 sysctl 限制（Autopilot 不允許 privileged container）
+- **No read/write split** — QPS 不高，單一 `DB_URL`，確保一致性優先
+- **Cloud SQL Auth Proxy as standalone Deployment** — 比 sidecar 更容易管理連線數與 scaling
+- **No dev containers** — `make *-dev` 繼續為 dev 路徑，container 只用於 prod
+- **Mono-repo for infra** — Dockerfiles、k8s manifests、CI 全在同一 repo

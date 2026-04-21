@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from app.api import assets, health, auth
+from app.api import assets, health, ticket, auth
 from app.core.cache import close_cache
 from app.core.config import settings
 from app.core.db import dispose_engines
@@ -49,3 +49,4 @@ if settings.enable_metrics:
 app.include_router(health.router, tags=["health"])
 app.include_router(assets.router, prefix="/api", tags=["assets"])
 app.include_router(auth.router, prefix="/api", tags=["auth"])
+app.include_router(ticket.router, prefix="/api", tags=["tickets"])

@@ -8,3 +8,4 @@ uploads/
 *.egg-info
 dist/
 .env
+tests/

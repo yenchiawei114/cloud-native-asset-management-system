@@ -1,0 +1,102 @@
+name: cnams
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: local-mysql-1
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: app
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./infra/local/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./infra/local/mysql/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uapp", "-papp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: local-redis-1
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./infra/local/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: local-backend-1
+    restart: unless-stopped
+    environment:
+      APP_ENV: local
+      LOG_LEVEL: DEBUG
+      LOG_FORMAT: text
+      SECRET_KEY: jwt-demo-secret-key-change-me
+      DB_URL: mysql+asyncmy://app:app@local-mysql-1:3306/app
+      DB_SYNC_URL: mysql+pymysql://app:app@local-mysql-1:3306/app
+      DB_POOL_SIZE: "5"
+      REDIS_URL: redis://local-redis-1:6379/0
+      STORAGE_BACKEND: local
+      STORAGE_LOCAL_ROOT: /app/uploads
+      STORAGE_LOCAL_BASE_URL: http://localhost:8000/static
+      ENABLE_METRICS: "false"
+      CORS_ORIGINS: http://localhost:5173,http://localhost
+      WEB_CONCURRENCY: "1"
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend-uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    container_name: local-frontend-1
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://localhost:8000
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  mysql-data:
+  redis-data:
+  backend-uploads:

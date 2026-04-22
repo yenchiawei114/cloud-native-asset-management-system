@@ -16,11 +16,11 @@ services:
       - ./infra/local/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./infra/local/mysql/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u${MYSQL_USER} -p${MYSQL_PASSWORD}"]
+      test: ["CMD-SHELL", "mysql -h localhost -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE} -e 'SELECT 1'"]
       interval: 5s
       timeout: 5s
-      retries: 20
-      start_period: 10s
+      retries: 30
+      start_period: 30s
 
   redis:
     image: redis:7.4-alpine

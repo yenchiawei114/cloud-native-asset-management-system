@@ -37,6 +37,16 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+class _HealthCheckFilter(logging.Filter):
+    """過濾掉 uvicorn access log 中的 health check 請求，避免 log 被 probe 洗版。"""
+
+    _PATHS = ("/healthz", "/readyz")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(path in msg for path in self._PATHS)
+
+
 def configure_logging() -> None:
     handler = logging.StreamHandler(sys.stdout)
     if settings.log_format.lower() == "json":
@@ -50,3 +60,5 @@ def configure_logging() -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(settings.log_level.upper())
+
+    logging.getLogger("uvicorn.access").addFilter(_HealthCheckFilter())

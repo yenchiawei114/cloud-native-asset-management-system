@@ -39,6 +39,21 @@ services:
       timeout: 3s
       retries: 10
 
+  migration:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: local-migration-1
+    restart: "no"
+    environment:
+      DB_URL: mysql+asyncmy://app:app@local-mysql-1:3306/app
+      DB_SYNC_URL: mysql+pymysql://app:app@local-mysql-1:3306/app
+      SECRET_KEY: not-used-by-migration
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
   backend:
     build:
       context: ./apps/backend
@@ -69,6 +84,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')\" || exit 1"]
       interval: 10s

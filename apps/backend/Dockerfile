@@ -31,6 +31,10 @@ RUN addgroup --system app && adduser --system --ingroup app app
 # 只拷貝 venv，不帶 builder 的源碼與工具鏈
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 
+# alembic migration 檔（migration service 需要）
+COPY --chown=app:app alembic/ /app/alembic/
+COPY --chown=app:app alembic.ini /app/alembic.ini
+
 # 本地存儲掛載點
 RUN mkdir -p /app/uploads && chown app:app /app/uploads
 

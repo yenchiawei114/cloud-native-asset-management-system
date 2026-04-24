@@ -12,7 +12,7 @@ from app.models.asset import AssetType, AssetStatus
 
 from app.api.deps import require_role, get_current_user
 
-admin_required = require_role("admin")
+admin_required = require_role("ADMIN")
 router = APIRouter()
 
 class AssetCreate(BaseModel):

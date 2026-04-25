@@ -69,7 +69,7 @@ class Attachment(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
     attachable_type: Mapped[str] = mapped_column(
-        Enum("REPAIR_REQUEST", "REPAIR_INSPECTION", "REPAIR_RECORD", name="attachment_attachable_type"),
+        Enum("REPAIR_REQUEST", "REPAIR_INSPECTION", name="attachment_attachable_type"),
         nullable=False,
     )
     attachable_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)

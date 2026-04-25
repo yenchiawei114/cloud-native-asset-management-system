@@ -13,6 +13,9 @@ from app.core.db import get_db
 from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment
 from app.core.cache import redis
 
+from app.api.deps import require_role, get_current_user
+admin_required = require_role("ADMIN")
+
 router = APIRouter()
 CACHE_TTL_SECONDS = 60
 MAX_ATTACHMENT_IMAGE_BYTES = 5 * 1024 * 1024
@@ -219,22 +222,46 @@ async def _ensure_attachable_exists(
         raise HTTPException(status_code=404, detail="attachable target not found")
 
 
+async def _extract_attachment_owner(db: AsyncSession, row: Attachment, user: dict) -> int:
+    if row.attachable_type == "REPAIR_REQUEST":
+        attachable_row = await db.get(RepairRequest, row.attachable_id)
+        if attachable_row is None:
+            raise HTTPException(status_code=404, detail="attachable target not found")
+        return attachable_row.requester_id
+
+    if row.attachable_type == "REPAIR_INSPECTION":
+        attachable_row = await db.get(RepairInspection, row.attachable_id)
+        if attachable_row is None:
+            raise HTTPException(status_code=404, detail="attachable target not found")
+        return attachable_row.checked_by
+
+    raise HTTPException(status_code=422, detail="unsupported attachable type")
+
+
 @router.get("/tickets", response_model=list[RepairRequestOut])
-async def list_tickets(db: AsyncSession = Depends(get_db)) -> list[RepairRequestOut]:
+async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> list[RepairRequestOut]:
     rows = (await db.scalars(select(RepairRequest).order_by(RepairRequest.id.desc()))).all()
     return [_request_to_out(r) for r in rows]
 
 
 @router.get("/tickets/{ticket_id}", response_model=RepairRequestOut)
-async def get_ticket(ticket_id: int, db: AsyncSession = Depends(get_db)) -> RepairRequestOut:
+async def get_ticket(ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> RepairRequestOut:       
     cache_key = _ticket_cache_key(ticket_id)
     cached = await redis.get(cache_key)
     if cached:
-        return RepairRequestOut.model_validate_json(cached)
+        request_row = RepairRequestOut.model_validate_json(cached)
+        # 權限判斷：ADMIN 可讀取所有表單，USER 只能讀取自己的表單
+        if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return request_row
 
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+
+    # 權限判斷：ADMIN 可讀取所有表單，USER 只能讀取自己的表單
+    if user.get("role") != "ADMIN" and row.requester_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     result = _request_to_out(row)
     await redis.setex(cache_key, CACHE_TTL_SECONDS, result.model_dump_json())
@@ -266,10 +293,15 @@ async def update_ticket(
     ticket_id: int,
     payload: RepairRequestUpdate,
     db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
 ) -> RepairRequestOut:
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+
+    # 權限判斷：只能修改自己的表單
+    if row.requester_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     row.asset_id = payload.asset_id
     row.requester_id = payload.requester_id
@@ -294,6 +326,7 @@ async def update_ticket_status(
     ticket_id: int,
     payload: RepairRequestStatusUpdate,
     db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required)
 ) -> RepairRequestOut:
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
@@ -309,10 +342,14 @@ async def update_ticket_status(
 
 
 @router.delete("/tickets/{ticket_id}", status_code=204)
-async def delete_ticket(ticket_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_ticket(ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> None:
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+
+    # 權限判斷：只能刪除自己的表單
+    if row.requester_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     await db.delete(row)
     await db.commit()
@@ -320,7 +357,7 @@ async def delete_ticket(ticket_id: int, db: AsyncSession = Depends(get_db)) -> N
 
 
 @router.get("/tickets/{ticket_id}/inspection", response_model=RepairInspectionOut)
-async def get_ticket_inspection(ticket_id: int, db: AsyncSession = Depends(get_db)) -> RepairInspectionOut:
+async def get_ticket_inspection(ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> RepairInspectionOut:
     row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
     if row is None:
         raise HTTPException(status_code=404, detail="inspection not found")
@@ -332,6 +369,7 @@ async def create_ticket_inspection(
     ticket_id: int,
     payload: RepairInspectionCreate,
     db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required)
 ) -> RepairInspectionOut:
     request_row = await db.get(RepairRequest, ticket_id)
     if request_row is None:
@@ -358,6 +396,7 @@ async def update_ticket_inspection(
     ticket_id: int,
     payload: RepairInspectionUpdate,
     db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required)
 ) -> RepairInspectionOut:
     row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
     if row is None:
@@ -373,7 +412,7 @@ async def update_ticket_inspection(
 
 
 @router.delete("/tickets/{ticket_id}/inspection", status_code=204)
-async def delete_ticket_inspection(ticket_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_ticket_inspection(ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> None:
     row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
     if row is None:
         raise HTTPException(status_code=404, detail="inspection not found")
@@ -383,10 +422,15 @@ async def delete_ticket_inspection(ticket_id: int, db: AsyncSession = Depends(ge
 
 
 @router.get("/tickets/{ticket_id}/record", response_model=RepairRecordOut)
-async def get_ticket_record(ticket_id: int, db: AsyncSession = Depends(get_db)) -> RepairRecordOut:
+async def get_ticket_record(ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> RepairRecordOut:
     row = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
     if row is None:
         raise HTTPException(status_code=404, detail="repair record not found")
+
+    request_row = await db.get(RepairRequest, row.request_id)
+    if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     return _record_to_out(row)
 
 
@@ -395,6 +439,7 @@ async def create_ticket_record(
     ticket_id: int,
     payload: RepairRecordCreate,
     db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required)
 ) -> RepairRecordOut:
     request_row = await db.get(RepairRequest, ticket_id)
     if request_row is None:
@@ -423,6 +468,7 @@ async def update_ticket_record(
     ticket_id: int,
     payload: RepairRecordUpdate,
     db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required)
 ) -> RepairRecordOut:
     row = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
     if row is None:
@@ -440,7 +486,7 @@ async def update_ticket_record(
 
 
 @router.delete("/tickets/{ticket_id}/record", status_code=204)
-async def delete_ticket_record(ticket_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_ticket_record(ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> None:
     row = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
     if row is None:
         raise HTTPException(status_code=404, detail="repair record not found")
@@ -450,16 +496,22 @@ async def delete_ticket_record(ticket_id: int, db: AsyncSession = Depends(get_db
 
 
 @router.get("/attachments", response_model=list[AttachmentOut])
-async def list_attachments(db: AsyncSession = Depends(get_db)) -> list[AttachmentOut]:
+async def list_attachments(db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> list[AttachmentOut]:
     rows = (await db.scalars(select(Attachment).order_by(Attachment.id.desc()))).all()
     return [_attachment_to_out(row) for row in rows]
 
 
 @router.get("/attachments/{attachment_id}", response_model=AttachmentOut)
-async def get_attachment(attachment_id: int, db: AsyncSession = Depends(get_db)) -> AttachmentOut:
+async def get_attachment(attachment_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> AttachmentOut:
     row = await db.get(Attachment, attachment_id)
     if row is None:
         raise HTTPException(status_code=404, detail="attachment not found")
+
+    owner_id = await _extract_attachment_owner(db, row, user)
+    # 權限判斷：ADMIN 可讀取所有附件，USER 只能讀取自己的附件
+    if user.get("role") != "ADMIN" and owner_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     return _attachment_to_out(row)
 
 
@@ -528,10 +580,16 @@ async def update_attachment(
     attachment_id: int,
     payload: AttachmentUpdate,
     db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
 ) -> AttachmentOut:
     row = await db.get(Attachment, attachment_id)
     if row is None:
         raise HTTPException(status_code=404, detail="attachment not found")
+    
+    owner_id = await _extract_attachment_owner(db, row, user)
+    # 權限判斷：只能更新自己的附件
+    if owner_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     row.file_url = payload.file_url
     row.file_type = payload.file_type
@@ -543,10 +601,15 @@ async def update_attachment(
 
 
 @router.delete("/attachments/{attachment_id}", status_code=204)
-async def delete_attachment(attachment_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_attachment(attachment_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> None:
     row = await db.get(Attachment, attachment_id)
     if row is None:
         raise HTTPException(status_code=404, detail="attachment not found")
+
+    owner_id = await _extract_attachment_owner(db, row, user)
+    # 權限判斷：只能刪除自己的附件
+    if owner_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     if not _is_remote_url(row.file_url):
         await storage.delete(row.file_url)

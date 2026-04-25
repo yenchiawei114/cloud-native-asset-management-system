@@ -66,7 +66,8 @@ async def get_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depe
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
-    if user.get("role") != "admin" and asset.owner_id != user.get("id"):
+    # 權限判斷：ADMIN 可讀取所有資產，USER 只能讀取自己的資產
+    if user.get("role") != "ADMIN" and asset.owner_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     return _to_out(asset)

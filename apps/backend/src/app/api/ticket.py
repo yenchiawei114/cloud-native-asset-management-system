@@ -1,17 +1,22 @@
 from datetime import date, datetime
+from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.storage import storage
 from app.core.db import get_db
 from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment
 from app.core.cache import redis
 
 router = APIRouter()
 CACHE_TTL_SECONDS = 60
+MAX_ATTACHMENT_IMAGE_BYTES = 5 * 1024 * 1024
+ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 def _ticket_cache_key(ticket_id: int) -> str:
@@ -174,15 +179,28 @@ def _record_to_out(row: RepairRecord) -> RepairRecordOut:
 
 
 def _attachment_to_out(row: Attachment) -> AttachmentOut:
+    file_url = row.file_url
+    if not (file_url.startswith("http://") or file_url.startswith("https://")):
+        file_url = storage.get_url(file_url)
+
     return AttachmentOut(
         id=row.id,
         attachable_type=row.attachable_type,
         attachable_id=row.attachable_id,
-        file_url=row.file_url,
+        file_url=file_url,
         file_type=row.file_type,
         file_name=row.file_name,
         created_at=row.created_at,
     )
+
+
+def _is_remote_url(value: str) -> bool:
+    return value.startswith("http://") or value.startswith("https://")
+
+
+def _safe_filename(raw_name: str | None) -> str:
+    name = Path(raw_name or "image").name.strip()
+    return name or "image"
 
 
 async def _ensure_attachable_exists(
@@ -462,6 +480,49 @@ async def create_attachment(payload: AttachmentCreate, db: AsyncSession = Depend
     return _attachment_to_out(row)
 
 
+@router.post("/attachments/upload", response_model=AttachmentOut, status_code=201)
+async def upload_attachment_image(
+    attachable_type: AttachmentAttachableType = Form(...),
+    attachable_id: int = Form(...),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> AttachmentOut:
+    await _ensure_attachable_exists(db, attachable_type, attachable_id)
+
+    if (file.content_type or "") not in ALLOWED_IMAGE_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported image type: {file.content_type}. allowed: {sorted(ALLOWED_IMAGE_CONTENT_TYPES)}",
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="empty file is not allowed")
+    if len(data) > MAX_ATTACHMENT_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="file too large, max size is 5MB")
+
+    file_name = _safe_filename(file.filename)
+    key = f"attachments/{attachable_type.lower()}/{attachable_id}/{uuid4().hex}_{file_name}"
+    await storage.upload(key, data)
+
+    try:
+        row = Attachment(
+            attachable_type=attachable_type,
+            attachable_id=attachable_id,
+            file_url=key,
+            file_type="IMAGE",
+            file_name=file_name,
+        )
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+    except Exception:
+        await storage.delete(key)
+        raise
+
+    return _attachment_to_out(row)
+
+
 @router.put("/attachments/{attachment_id}", response_model=AttachmentOut)
 async def update_attachment(
     attachment_id: int,
@@ -486,6 +547,9 @@ async def delete_attachment(attachment_id: int, db: AsyncSession = Depends(get_d
     row = await db.get(Attachment, attachment_id)
     if row is None:
         raise HTTPException(status_code=404, detail="attachment not found")
+
+    if not _is_remote_url(row.file_url):
+        await storage.delete(row.file_url)
 
     await db.delete(row)
     await db.commit()

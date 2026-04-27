@@ -1,0 +1,43 @@
+{
+  "auth": {
+    "loginError": "登入過程中發生錯誤，請稍後再試",
+    "loginInvalid": "員工編號或密碼錯誤，請重新確認",
+    "title": "歡迎回來",
+    "subtitle": "請進行身份驗證以進入您的工作空間。",
+    "loginTab": "登入",
+    "registerTab": "註冊",
+    "idEmail": "員工編號 / 電子郵件",
+    "idEmailPlaceholder": "例如：EMP-10293",
+    "password": "密碼",
+    "passwordPlaceholder": "••••••••",
+    "forgotPassword": "忘記密碼？",
+    "rememberMe": "在此設備上保持登入狀態",
+    "enterControlCenter": "進入控制中心",
+    "version": "資產控制系統 v4.2.0",
+    "authorizedOnly": "僅限授權人員使用",
+    "registerTitle": "建立新帳號",
+    "registerSubtitle": "填寫以下資料以申請系統存取權限。",
+    "fullName": "姓名",
+    "fullNamePlaceholder": "請輸入完整姓名",
+    "employeeId": "員工編號",
+    "employeeIdPlaceholder": "請輸入 9 位員編",
+    "departmentId": "部門 ID",
+    "createAccount": "提交申請",
+    "layout": {
+      "brand": "Executive Architect",
+      "headline": "企業資產的智慧指揮中心",
+      "description": "為高價值組織基礎設施提供精確追蹤與生命週期管理。",
+      "availability": "--",
+      "availabilityLabel": "系統可用性",
+      "audit": "--",
+      "auditLabel": "主動稽核中",
+      "securityLevel": "安全層級",
+      "enterpriseAuth": "企業級驗證"
+    }
+  },
+  "errors": {
+    "unauthorized": "身份驗證失敗",
+    "forbidden": "您沒有權限存取此內容",
+    "network": "網路連線異常，請檢查您的網路狀態"
+  }
+}

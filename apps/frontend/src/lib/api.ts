@@ -23,7 +23,13 @@ export interface Asset extends AssetCreate {
 }
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, init);
+  const token = localStorage.getItem('token');
+  const headers = {
+    ...init?.headers,
+    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+  };
+  
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}: ${text}`);
@@ -44,4 +50,12 @@ export const api = {
     body: JSON.stringify(payload) 
   }),
   deleteAsset: (id: number) => http<void>(`/api/assets/${id}`, { method: "DELETE" }),
+
+  // Auth
+  login: (payload: any) => http<any>("/api/login", { 
+    method: "POST", 
+    headers: { "Content-Type": "application/json" }, 
+    body: JSON.stringify(payload) 
+  }),
+  getMe: () => http<any>("/api/me"),
 };

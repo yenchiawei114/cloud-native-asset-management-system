@@ -26,12 +26,21 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     token = create_access_token({
         "user_id": user.id,
-        "role": user.role.value
+        "role": user.role.name,
+        "employee_id": user.employee_id,
     })
 
-    return {"access_token": token}
+    return {
+        "access_token": token,
+        "must_change_password": user.must_change_password,
+    }
 
 
 @router.get("/me")
 async def get_me(user=Depends(get_current_user)):
     return user
+
+
+@router.post("/logout")
+async def logout(user=Depends(get_current_user)):
+    return {"message": "logout success"}

@@ -43,6 +43,12 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173"
 
+    # Email（SMTP）
+    sender_email: str = ""
+    google_smtp_password: str = ""
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

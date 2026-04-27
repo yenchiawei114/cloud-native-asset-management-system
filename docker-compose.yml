@@ -71,6 +71,10 @@ services:
       ENABLE_METRICS: ${ENABLE_METRICS}
       CORS_ORIGINS: ${COMPOSE_CORS_ORIGINS}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      GOOGLE_SMTP_PASSWORD: ${GOOGLE_SMTP_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
     ports:
       - "8000:8000"
     volumes:
@@ -88,6 +92,32 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  celery-worker:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_FORMAT: ${LOG_FORMAT}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_URL: ${COMPOSE_DB_URL}
+      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL}
+      REDIS_URL: ${COMPOSE_REDIS_URL}
+      STORAGE_BACKEND: ${STORAGE_BACKEND}
+      STORAGE_LOCAL_ROOT: ${COMPOSE_STORAGE_LOCAL_ROOT}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      GOOGLE_SMTP_PASSWORD: ${GOOGLE_SMTP_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
 
   frontend:
     build:

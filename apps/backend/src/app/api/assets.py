@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.models import Asset
 from app.models.asset import AssetType, AssetStatus
+from app.models.user import User
 
 from app.api.deps import require_role, get_current_user
 
@@ -30,10 +31,28 @@ class AssetCreate(BaseModel):
     warranty_expiry: date
     status: AssetStatus = AssetStatus.AVAILABLE
 
+
+class AssetUpdate(BaseModel):
+    # asset_code 為唯一鍵，不允許修改
+    name: str | None = None
+    type: AssetType | None = None
+    model: str | None = None
+    specification: str | None = None
+    vendor: str | None = None
+    purchase_date: date | None = None
+    purchase_price: int | None = None
+    storage_location: str | None = None
+    owner_id: int | None = None
+    activation_date: date | None = None
+    warranty_expiry: date | None = None
+    status: AssetStatus | None = None
+
+
 class AssetOut(AssetCreate):
     id: int
     created_at: datetime
     version: int
+
 
 def _to_out(asset: Asset) -> AssetOut:
     return AssetOut(
@@ -56,9 +75,35 @@ def _to_out(asset: Asset) -> AssetOut:
     )
 
 @router.get("/assets", response_model=list[AssetOut])
-async def list_assets(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> list[AssetOut]:
-    rows = (await db.scalars(select(Asset).order_by(Asset.id.desc()))).all()
+async def list_assets(
+    owner_employee_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+) -> list[AssetOut]:
+    stmt = select(Asset).order_by(Asset.id.desc())
+
+    is_admin = user.get("role") == "ADMIN"
+    my_employee_id = user.get("employee_id")
+    my_user_id = user.get("user_id")
+
+    if not is_admin:
+        # 一般用戶只能查自己的資產
+        if owner_employee_id is not None and owner_employee_id != my_employee_id:
+            raise HTTPException(status_code=403, detail="Forbidden: You can only query your own assets")
+        stmt = stmt.where(Asset.owner_id == my_user_id)
+    else:
+        # 管理員可依 employee_id 篩選，查無此員工則回傳 404
+        if owner_employee_id is not None:
+            target_user = (await db.execute(
+                select(User).where(User.employee_id == owner_employee_id)
+            )).scalar_one_or_none()
+            if target_user is None:
+                raise HTTPException(status_code=404, detail="user not found")
+            stmt = stmt.where(Asset.owner_id == target_user.id)
+
+    rows = (await db.scalars(stmt)).all()
     return [_to_out(a) for a in rows]
+
 
 @router.get("/assets/{asset_id}", response_model=AssetOut)
 async def get_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> AssetOut:
@@ -88,11 +133,33 @@ async def create_asset(
         raise HTTPException(status_code=409, detail="該資產編號已存在 (Asset code already exists)")
     return _to_out(asset)
 
+@router.put("/assets/{asset_id}", response_model=AssetOut)
+async def update_asset(
+    asset_id: int,
+    payload: AssetUpdate,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required),
+) -> AssetOut:
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+
+    # 使用 model_fields_set 確保明確傳入 null 時能清除欄位
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(asset, field, value)
+
+    asset.version += 1
+    await db.commit()
+    await db.refresh(asset)
+    return _to_out(asset)
+
+
 @router.delete("/assets/{asset_id}", status_code=204)
 async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> None:
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
-    
+
     await db.delete(asset)
     await db.commit()

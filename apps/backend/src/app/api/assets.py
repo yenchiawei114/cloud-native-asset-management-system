@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.models import Asset
 from app.models.asset import AssetType, AssetStatus
+from app.models.user import User
 
 from app.api.deps import require_role, get_current_user
 
@@ -29,6 +30,22 @@ class AssetCreate(BaseModel):
     activation_date: date
     warranty_expiry: date
     status: AssetStatus = AssetStatus.AVAILABLE
+
+
+class AssetUpdate(BaseModel):
+    name: str | None = None
+    type: AssetType | None = None
+    model: str | None = None
+    specification: str | None = None
+    vendor: str | None = None
+    purchase_date: date | None = None
+    purchase_price: int | None = None
+    storage_location: str | None = None
+    owner_id: int | None = None
+    activation_date: date | None = None
+    warranty_expiry: date | None = None
+    status: AssetStatus | None = None
+
 
 class AssetOut(AssetCreate):
     id: int
@@ -56,8 +73,22 @@ def _to_out(asset: Asset) -> AssetOut:
     )
 
 @router.get("/assets", response_model=list[AssetOut])
-async def list_assets(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> list[AssetOut]:
-    rows = (await db.scalars(select(Asset).order_by(Asset.id.desc()))).all()
+async def list_assets(
+    owner_employee_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+) -> list[AssetOut]:
+    stmt = select(Asset).order_by(Asset.id.desc())
+
+    if owner_employee_id is not None:
+        # JOIN users 以找到 employee_id 對應的 owner_id
+        stmt = (
+            stmt
+            .join(User, Asset.owner_id == User.id)
+            .where(User.employee_id == owner_employee_id)
+        )
+
+    rows = (await db.scalars(stmt)).all()
     return [_to_out(a) for a in rows]
 
 @router.get("/assets/{asset_id}", response_model=AssetOut)
@@ -88,11 +119,53 @@ async def create_asset(
         raise HTTPException(status_code=409, detail="該資產編號已存在 (Asset code already exists)")
     return _to_out(asset)
 
+@router.put("/assets/{asset_id}", response_model=AssetOut)
+async def update_asset(
+    asset_id: int,
+    payload: AssetUpdate,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required),
+) -> AssetOut:
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+
+    if payload.name is not None:
+        asset.name = payload.name
+    if payload.type is not None:
+        asset.type = payload.type
+    if payload.model is not None:
+        asset.model = payload.model
+    if payload.specification is not None:
+        asset.specification = payload.specification
+    if payload.vendor is not None:
+        asset.vendor = payload.vendor
+    if payload.purchase_date is not None:
+        asset.purchase_date = payload.purchase_date
+    if payload.purchase_price is not None:
+        asset.purchase_price = payload.purchase_price
+    if payload.storage_location is not None:
+        asset.storage_location = payload.storage_location
+    if payload.owner_id is not None:
+        asset.owner_id = payload.owner_id
+    if payload.activation_date is not None:
+        asset.activation_date = payload.activation_date
+    if payload.warranty_expiry is not None:
+        asset.warranty_expiry = payload.warranty_expiry
+    if payload.status is not None:
+        asset.status = payload.status
+
+    asset.version += 1
+    await db.commit()
+    await db.refresh(asset)
+    return _to_out(asset)
+
+
 @router.delete("/assets/{asset_id}", status_code=204)
 async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> None:
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
-    
+
     await db.delete(asset)
     await db.commit()

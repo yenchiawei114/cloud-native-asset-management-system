@@ -2,13 +2,16 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_role
+from app.core.audit import log_action
 from app.core.db import get_db
 from app.models import NotificationPreference, User
+from app.models.audit_log import Action, TargetType
 from app.models.notification_preference import NoteType
 from app.models.user import Role, Sex
 
@@ -112,6 +115,8 @@ async def _register_with_role(
 	payload: UserRegisterRequest,
 	role: Role,
 	db: AsyncSession,
+	actor_id: int,
+	actor_name: str,
 ) -> UserOut:
 	existing = (await db.execute(select(User).where(User.employee_id == payload.employee_id))).scalar_one_or_none()
 	if existing is not None:
@@ -134,6 +139,18 @@ async def _register_with_role(
 	# 預設通知偏好為公司信箱
 	default_pref = NotificationPreference(user_id=row.id, type=NoteType.EMAIL, value=row.email)
 	db.add(default_pref)
+
+	safe_detail = {k: v for k, v in payload.model_dump(mode="json").items() if k != "password"}
+	await log_action(
+		db,
+		user_id=actor_id,
+		actor_name=actor_name,
+		action=Action.CREATE,
+		target_type=TargetType.USER,
+		target_id=row.id,
+		target_name=f"{row.name} ({row.employee_id})",
+		detail={"after": safe_detail},
+	)
 
 	await db.commit()
 	await db.refresh(row)
@@ -227,7 +244,13 @@ async def admin_create_user(
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-	return await _register_with_role(payload=payload, role=Role[payload.role], db=db)
+	return await _register_with_role(
+		payload=payload,
+		role=Role[payload.role],
+		db=db,
+		actor_id=user["user_id"],
+		actor_name=user["name"],
+	)
 
 
 @router.get("/users", response_model=list[UserOut])
@@ -268,6 +291,8 @@ async def admin_update_user(
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 
+	before = _user_to_out(row).model_dump(mode="json")
+
 	if payload.name is not None:
 		row.name = payload.name
 	if payload.sex is not None:
@@ -281,6 +306,17 @@ async def admin_update_user(
 	if payload.password is not None:
 		row.password = payload.password
 
+	after = _user_to_out(row).model_dump(mode="json")
+	await log_action(
+		db,
+		user_id=user["user_id"],
+		actor_name=user["name"],
+		action=Action.UPDATE,
+		target_type=TargetType.USER,
+		target_id=target_user_id,
+		target_name=f"{row.name} ({row.employee_id})",
+		detail={"before": before, "after": after},
+	)
 	await db.commit()
 	await db.refresh(row)
 	return _user_to_out(row)
@@ -292,9 +328,28 @@ async def admin_delete_user(
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
 ) -> None:
+	if target_user_id == user["user_id"]:
+		raise HTTPException(status_code=400, detail="cannot delete yourself")
+
 	row = await db.get(User, target_user_id)
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 
+	before = _user_to_out(row).model_dump(mode="json")
+	target_name = f"{row.name} ({row.employee_id})"
 	await db.delete(row)
-	await db.commit()
+	await log_action(
+		db,
+		user_id=user["user_id"],
+		actor_name=user["name"],
+		action=Action.DELETE,
+		target_type=TargetType.USER,
+		target_id=target_user_id,
+		target_name=target_name,
+		detail={"before": before},
+	)
+	try:
+		await db.commit()
+	except IntegrityError:
+		await db.rollback()
+		raise HTTPException(status_code=409, detail="cannot delete user with existing records")

@@ -1,23 +1,23 @@
 name: cnams-local
 
 services:
-  mariadb:
-    image: mariadb:11.4
-    container_name: local-mariadb-1
+  mysql:
+    image: mysql:8.0
+    container_name: local-mysql-1
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: rootpw
-      MARIADB_DATABASE: app
-      MARIADB_USER: app
-      MARIADB_PASSWORD: app
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: app
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
     ports:
       - "3306:3306"
     volumes:
-      - mariadb-data:/var/lib/mysql
-      - ./mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-      - ./mariadb/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./mysql/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uapp", "-papp"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -40,5 +40,5 @@ services:
       retries: 10
 
 volumes:
-  mariadb-data:
+  mysql-data:
   redis-data:

@@ -1,0 +1,144 @@
+name: cnams
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./infra/local/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./infra/local/mysql/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -h localhost -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE} -e 'SELECT 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./infra/local/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migration:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    restart: "no"
+    environment:
+      DB_URL: ${COMPOSE_DB_URL}
+      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL}
+      SECRET_KEY: ${SECRET_KEY}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_FORMAT: ${LOG_FORMAT}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_URL: ${COMPOSE_DB_URL}
+      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL}
+      DB_POOL_SIZE: ${DB_POOL_SIZE}
+      REDIS_URL: ${COMPOSE_REDIS_URL}
+      STORAGE_BACKEND: ${STORAGE_BACKEND}
+      STORAGE_LOCAL_ROOT: ${COMPOSE_STORAGE_LOCAL_ROOT}
+      STORAGE_LOCAL_BASE_URL: ${COMPOSE_STORAGE_LOCAL_BASE_URL}
+      ENABLE_METRICS: ${ENABLE_METRICS}
+      CORS_ORIGINS: ${COMPOSE_CORS_ORIGINS}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      GOOGLE_SMTP_PASSWORD: ${GOOGLE_SMTP_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend-uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  celery-worker:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_FORMAT: ${LOG_FORMAT}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_URL: ${COMPOSE_DB_URL}
+      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL}
+      REDIS_URL: ${COMPOSE_REDIS_URL}
+      STORAGE_BACKEND: ${STORAGE_BACKEND}
+      STORAGE_LOCAL_ROOT: ${COMPOSE_STORAGE_LOCAL_ROOT}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      GOOGLE_SMTP_PASSWORD: ${GOOGLE_SMTP_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: ${COMPOSE_API_BASE_URL}
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  mysql-data:
+  redis-data:
+  backend-uploads:

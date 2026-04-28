@@ -1,99 +1,98 @@
-"""Asset CRUD 端點，作為新功能開發的參考範例。
+from datetime import date, datetime
 
-此處展示的模式：
-- 使用 `Depends(get_db)` 取得預設 DB session。
-- 透過 `storage.upload / delete / get_url` 處理 blob，不綁定特定後端。
-- 以 UUID 作為 storage key 前綴 → 即使檔名相同，上傳也不會衝突，
-  `path` 欄位無須應用層加鎖即可保持唯一。
-"""
-
-from datetime import datetime
-from uuid import uuid4
-
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.core.storage import storage
 from app.models import Asset
+from app.models.asset import AssetType, AssetStatus
 
+from app.api.deps import require_role, get_current_user
+
+admin_required = require_role("ADMIN")
 router = APIRouter()
 
-
-class AssetOut(BaseModel):
-    id: int
+class AssetCreate(BaseModel):
+    asset_code: str
     name: str
-    path: str
-    content_type: str | None
-    size_bytes: int
-    url: str
-    created_at: datetime
-    updated_at: datetime
+    type: AssetType
+    model: str
+    specification: str
+    vendor: str
+    purchase_date: date
+    purchase_price: int
+    storage_location: str | None = None
+    owner_id: int | None = None
+    activation_date: date
+    warranty_expiry: date
+    status: AssetStatus = AssetStatus.AVAILABLE
 
+class AssetOut(AssetCreate):
+    id: int
+    created_at: datetime
+    version: int
 
 def _to_out(asset: Asset) -> AssetOut:
     return AssetOut(
         id=asset.id,
+        asset_code=asset.asset_code,
         name=asset.name,
-        path=asset.path,
-        content_type=asset.content_type,
-        size_bytes=asset.size_bytes,
-        url=storage.get_url(asset.path),
+        type=asset.type,
+        model=asset.model,
+        specification=asset.specification,
+        vendor=asset.vendor,
+        purchase_date=asset.purchase_date,
+        purchase_price=asset.purchase_price,
+        storage_location=asset.storage_location,
+        owner_id=asset.owner_id,
+        activation_date=asset.activation_date,
+        warranty_expiry=asset.warranty_expiry,
+        status=asset.status,
         created_at=asset.created_at,
-        updated_at=asset.updated_at,
+        version=asset.version,
     )
 
-
 @router.get("/assets", response_model=list[AssetOut])
-async def list_assets(db: AsyncSession = Depends(get_db)) -> list[AssetOut]:
+async def list_assets(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> list[AssetOut]:
     rows = (await db.scalars(select(Asset).order_by(Asset.id.desc()))).all()
     return [_to_out(a) for a in rows]
 
-
 @router.get("/assets/{asset_id}", response_model=AssetOut)
-async def get_asset(asset_id: int, db: AsyncSession = Depends(get_db)) -> AssetOut:
+async def get_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> AssetOut:
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
-    return _to_out(asset)
 
+    # 權限判斷：ADMIN 可讀取所有資產，USER 只能讀取自己的資產
+    if user.get("role") != "ADMIN" and asset.owner_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return _to_out(asset)
 
 @router.post("/assets", response_model=AssetOut, status_code=201)
 async def create_asset(
-    file: UploadFile = File(...),
-    name: str | None = Form(default=None),
+    payload: AssetCreate,
     db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required),
 ) -> AssetOut:
-    data = await file.read()
-    display_name = name or file.filename or "unnamed"
-    key = f"assets/{uuid4().hex}/{display_name}"
-
-    await storage.upload(key, data)
+    asset = Asset(**payload.model_dump())
+    db.add(asset)
     try:
-        asset = Asset(
-            name=display_name,
-            path=key,
-            content_type=file.content_type,
-            size_bytes=len(data),
-        )
-        db.add(asset)
         await db.commit()
         await db.refresh(asset)
-    except Exception:
-        # DB 寫入失敗 → 剛上傳的檔案變成孤兒，須刪除避免殘留。
-        await storage.delete(key)
-        raise
-
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="該資產編號已存在 (Asset code already exists)")
     return _to_out(asset)
 
-
 @router.delete("/assets/{asset_id}", status_code=204)
-async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> None:
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
-    await storage.delete(asset.path)
+    
     await db.delete(asset)
     await db.commit()

@@ -1,6 +1,6 @@
 # Cloud-Native Asset Management System
 
-一個全端資產管理應用。本 README 聚焦於 **本機開發**——雲端部署（GKE、GCS、MariaDB 主從、Prometheus/Grafana）雖然已透過設定接入 codebase，但不在本文件涵蓋範圍內。
+一個全端資產管理應用。本 README 聚焦於 **本機開發**——雲端部署（GKE、GCS、MySQL 主從、Prometheus/Grafana）雖然已透過設定接入 codebase，但不在本文件涵蓋範圍內。
 
 - 環境建置：請見 [SETUP.md](./SETUP.md)
 - 日常開發與新增功能：請見 [DEVELOPMENT.md](./DEVELOPMENT.md)
@@ -12,7 +12,7 @@
 ```bash
 make doctor          # 檢查 docker / uv / node / npm
 make setup           # 安裝後端與前端相依套件，並複製 .env
-make infra-up        # 以 Docker 啟動 MariaDB + Redis
+make infra-up        # 以 Docker 啟動 MySQL + Redis
 make migrate         # 建立資料表
 make seed            # 載入範例資料
 
@@ -45,7 +45,7 @@ make frontend-dev    # Vite   跑在 http://localhost:5173
 │       │   ├── App.tsx
 │       │   └── main.tsx
 │       └── public/config.js      # window.__CONFIG__（執行期注入）
-├── infra/local/                  # docker-compose + MariaDB/Redis 設定
+├── infra/local/                  # docker-compose + MySQL/Redis 設定
 ├── .env.example                  # 複製為 .env
 └── Makefile                      # 所有開發任務
 ```
@@ -70,6 +70,7 @@ make frontend-dev    # Vite   跑在 http://localhost:5173
 - GitHub Actions workflows（計畫中）
 - Prometheus + Grafana stack（雲端）
 - GCS bucket 初始化／IAM（雲端）
-- MariaDB 主從拓撲（雲端；本機以單節點 + 唯讀使用者模擬）
+- MySQL (GCP Cloud SQL / Local Docker)
+- Redis (GCP MemoryStore / Local Docker)
 
 程式碼的組織方式讓這些東西日後要補上時，不需要動到商業邏輯——只會影響 `core/` 層與 infra manifests。

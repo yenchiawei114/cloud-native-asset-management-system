@@ -33,6 +33,7 @@ class AssetCreate(BaseModel):
 
 
 class AssetUpdate(BaseModel):
+    # asset_code 為唯一鍵，不允許修改
     name: str | None = None
     type: AssetType | None = None
     model: str | None = None
@@ -51,6 +52,7 @@ class AssetOut(AssetCreate):
     id: int
     created_at: datetime
     version: int
+
 
 def _to_out(asset: Asset) -> AssetOut:
     return AssetOut(
@@ -80,16 +82,28 @@ async def list_assets(
 ) -> list[AssetOut]:
     stmt = select(Asset).order_by(Asset.id.desc())
 
-    if owner_employee_id is not None:
-        # JOIN users 以找到 employee_id 對應的 owner_id
-        stmt = (
-            stmt
-            .join(User, Asset.owner_id == User.id)
-            .where(User.employee_id == owner_employee_id)
-        )
+    is_admin = user.get("role") == "ADMIN"
+    my_employee_id = user.get("employee_id")
+    my_user_id = user.get("user_id")
+
+    if not is_admin:
+        # 一般用戶只能查自己的資產
+        if owner_employee_id is not None and owner_employee_id != my_employee_id:
+            raise HTTPException(status_code=403, detail="Forbidden: You can only query your own assets")
+        stmt = stmt.where(Asset.owner_id == my_user_id)
+    else:
+        # 管理員可依 employee_id 篩選，查無此員工則回傳 404
+        if owner_employee_id is not None:
+            target_user = (await db.execute(
+                select(User).where(User.employee_id == owner_employee_id)
+            )).scalar_one_or_none()
+            if target_user is None:
+                raise HTTPException(status_code=404, detail="user not found")
+            stmt = stmt.where(Asset.owner_id == target_user.id)
 
     rows = (await db.scalars(stmt)).all()
     return [_to_out(a) for a in rows]
+
 
 @router.get("/assets/{asset_id}", response_model=AssetOut)
 async def get_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> AssetOut:
@@ -130,30 +144,10 @@ async def update_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
-    if payload.name is not None:
-        asset.name = payload.name
-    if payload.type is not None:
-        asset.type = payload.type
-    if payload.model is not None:
-        asset.model = payload.model
-    if payload.specification is not None:
-        asset.specification = payload.specification
-    if payload.vendor is not None:
-        asset.vendor = payload.vendor
-    if payload.purchase_date is not None:
-        asset.purchase_date = payload.purchase_date
-    if payload.purchase_price is not None:
-        asset.purchase_price = payload.purchase_price
-    if payload.storage_location is not None:
-        asset.storage_location = payload.storage_location
-    if payload.owner_id is not None:
-        asset.owner_id = payload.owner_id
-    if payload.activation_date is not None:
-        asset.activation_date = payload.activation_date
-    if payload.warranty_expiry is not None:
-        asset.warranty_expiry = payload.warranty_expiry
-    if payload.status is not None:
-        asset.status = payload.status
+    # 使用 model_fields_set 確保明確傳入 null 時能清除欄位
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(asset, field, value)
 
     asset.version += 1
     await db.commit()

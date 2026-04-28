@@ -6,9 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import log_action
 from app.core.db import get_db
 from app.models import Asset
 from app.models.asset import AssetType, AssetStatus
+from app.models.audit_log import Action, TargetType
 from app.models.user import User
 
 from app.api.deps import require_role, get_current_user
@@ -126,11 +128,22 @@ async def create_asset(
     asset = Asset(**payload.model_dump())
     db.add(asset)
     try:
-        await db.commit()
-        await db.refresh(asset)
+        await db.flush()
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=409, detail="該資產編號已存在 (Asset code already exists)")
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.CREATE,
+        target_type=TargetType.ASSET,
+        target_id=asset.id,
+        target_name=f"{asset.name} ({asset.asset_code})",
+        detail={"after": payload.model_dump(mode="json")},
+    )
+    await db.commit()
+    await db.refresh(asset)
     return _to_out(asset)
 
 @router.put("/assets/{asset_id}", response_model=AssetOut)
@@ -161,5 +174,17 @@ async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=D
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
+    before = _to_out(asset).model_dump(mode="json")
+    target_name = f"{asset.name} ({asset.asset_code})"
     await db.delete(asset)
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.DELETE,
+        target_type=TargetType.ASSET,
+        target_id=asset_id,
+        target_name=target_name,
+        detail={"before": before},
+    )
     await db.commit()

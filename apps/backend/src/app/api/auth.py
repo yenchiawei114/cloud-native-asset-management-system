@@ -28,6 +28,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         "user_id": user.id,
         "role": user.role.name,
         "employee_id": user.employee_id,
+        "name": user.name,
     })
 
     return {

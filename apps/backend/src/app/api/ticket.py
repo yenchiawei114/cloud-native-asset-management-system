@@ -8,9 +8,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import log_action
 from app.core.storage import storage
 from app.core.db import get_db
 from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment
+from app.models.audit_log import Action, TargetType
 from app.core.cache import redis
 
 from app.api.deps import require_role, get_current_user
@@ -289,7 +291,11 @@ async def get_ticket(
 
 
 @router.post("/tickets", response_model=RepairRequestOut, status_code=201)
-async def create_ticket(payload: RepairRequestCreate, db: AsyncSession = Depends(get_db)) -> RepairRequestOut:
+async def create_ticket(
+    payload: RepairRequestCreate,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+) -> RepairRequestOut:
     row = RepairRequest(
         asset_id=payload.asset_id,
         requester_id=payload.requester_id,
@@ -300,6 +306,17 @@ async def create_ticket(payload: RepairRequestCreate, db: AsyncSession = Depends
         pickup_location=payload.pickup_location,
     )
     db.add(row)
+    await db.flush()
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.CREATE,
+        target_type=TargetType.TICKET,
+        target_id=row.id,
+        target_name=f"報修單 #{row.id}",
+        detail={"after": payload.model_dump(mode="json")},
+    )
     await db.commit()
     await db.refresh(row)
 
@@ -320,6 +337,8 @@ async def update_ticket(
     if row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    before = _request_to_out(row).model_dump(mode="json")
+
     row.asset_id = payload.asset_id
     row.requester_id = payload.requester_id
     row.description = payload.description
@@ -330,6 +349,17 @@ async def update_ticket(
     row.pickup_location = payload.pickup_location
     row.version += 1
 
+    after = _request_to_out(row).model_dump(mode="json")
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.TICKET,
+        target_id=ticket_id,
+        target_name=f"報修單 #{ticket_id}",
+        detail={"before": before, "after": after},
+    )
     await db.commit()
     await db.refresh(row)
 
@@ -348,8 +378,20 @@ async def update_ticket_status(
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+
+    old_status = row.status
     row.status = payload.status
     row.version += 1
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.TICKET,
+        target_id=ticket_id,
+        target_name=f"報修單 #{ticket_id}",
+        detail={"field": "status", "before": old_status, "after": payload.status},
+    )
     await db.commit()
     await db.refresh(row)
 
@@ -368,7 +410,18 @@ async def delete_ticket(ticket_id: int, db: AsyncSession = Depends(get_db), user
     if row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    before = _request_to_out(row).model_dump(mode="json")
     await db.delete(row)
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.DELETE,
+        target_type=TargetType.TICKET,
+        target_id=ticket_id,
+        target_name=f"報修單 #{ticket_id}",
+        detail={"before": before},
+    )
     await db.commit()
     await redis.delete(_ticket_cache_key(ticket_id))
 
@@ -402,6 +455,17 @@ async def create_ticket_inspection(
         checked_by=payload.checked_by,
     )
     db.add(row)
+    await db.flush()
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.CREATE,
+        target_type=TargetType.INSPECTION,
+        target_id=row.id,
+        target_name=f"驗收單 #{row.id} (報修單 #{ticket_id})",
+        detail={"after": payload.model_dump(mode="json")},
+    )
     await db.commit()
     await db.refresh(row)
     return _inspection_to_out(row)
@@ -415,10 +479,23 @@ async def update_ticket_inspection(
     if row is None:
         raise HTTPException(status_code=404, detail="inspection not found")
 
+    before = _inspection_to_out(row).model_dump(mode="json")
+
     row.status = payload.status
     row.note = payload.note
     row.checked_by = payload.checked_by
 
+    after = _inspection_to_out(row).model_dump(mode="json")
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.INSPECTION,
+        target_id=row.id,
+        target_name=f"驗收單 #{row.id} (報修單 #{ticket_id})",
+        detail={"before": before, "after": after},
+    )
     await db.commit()
     await db.refresh(row)
     return _inspection_to_out(row)
@@ -432,7 +509,19 @@ async def delete_ticket_inspection(
     if row is None:
         raise HTTPException(status_code=404, detail="inspection not found")
 
+    before = _inspection_to_out(row).model_dump(mode="json")
+    inspection_id = row.id
     await db.delete(row)
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.DELETE,
+        target_type=TargetType.INSPECTION,
+        target_id=inspection_id,
+        target_name=f"驗收單 #{inspection_id} (報修單 #{ticket_id})",
+        detail={"before": before},
+    )
     await db.commit()
 
 
@@ -472,6 +561,17 @@ async def create_ticket_record(
         vendor=payload.vendor,
     )
     db.add(row)
+    await db.flush()
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.CREATE,
+        target_type=TargetType.RECORD,
+        target_id=row.id,
+        target_name=f"維修記錄 #{row.id} (報修單 #{ticket_id})",
+        detail={"after": payload.model_dump(mode="json")},
+    )
     await db.commit()
     await db.refresh(row)
     return _record_to_out(row)
@@ -485,12 +585,25 @@ async def update_ticket_record(
     if row is None:
         raise HTTPException(status_code=404, detail="repair record not found")
 
+    before = _record_to_out(row).model_dump(mode="json")
+
     row.repair_date = payload.repair_date
     row.issue_description = payload.issue_description
     row.solution = payload.solution
     row.cost = payload.cost
     row.vendor = payload.vendor
 
+    after = _record_to_out(row).model_dump(mode="json")
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.RECORD,
+        target_id=row.id,
+        target_name=f"維修記錄 #{row.id} (報修單 #{ticket_id})",
+        detail={"before": before, "after": after},
+    )
     await db.commit()
     await db.refresh(row)
     return _record_to_out(row)
@@ -504,7 +617,19 @@ async def delete_ticket_record(
     if row is None:
         raise HTTPException(status_code=404, detail="repair record not found")
 
+    before = _record_to_out(row).model_dump(mode="json")
+    record_id = row.id
     await db.delete(row)
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.DELETE,
+        target_type=TargetType.RECORD,
+        target_id=record_id,
+        target_name=f"維修記錄 #{record_id} (報修單 #{ticket_id})",
+        detail={"before": before},
+    )
     await db.commit()
 
 
@@ -628,5 +753,16 @@ async def delete_attachment(
     if not _is_remote_url(row.file_url):
         await storage.delete(row.file_url)
 
+    before = {"file_name": row.file_name, "file_type": row.file_type, "attachable_type": row.attachable_type, "attachable_id": row.attachable_id}
     await db.delete(row)
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.DELETE,
+        target_type=TargetType.ATTACHMENT,
+        target_id=attachment_id,
+        target_name=row.file_name,
+        detail={"before": before},
+    )
     await db.commit()

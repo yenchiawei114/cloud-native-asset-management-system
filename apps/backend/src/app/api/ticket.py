@@ -247,7 +247,7 @@ async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_re
     return [_request_to_out(r) for r in rows]
 
 
-@router.get("/tickets/{employee_id}", response_model=list[RepairRequestOut])
+@router.get("/tickets/list/{employee_id}", response_model=list[RepairRequestOut])
 async def list_user_tickets(
     employee_id: int,
     db: AsyncSession = Depends(get_db),

@@ -117,15 +117,15 @@ class RepairRecordOut(BaseModel):
 
 
 AttachmentAttachableType = Literal["REPAIR_REQUEST", "REPAIR_INSPECTION", "REPAIR_RECORD"]
-AttachmentFileType = Literal["IMAGE", "VIDEO", "DOCUMENT", "OTHER"]
+AttachmentFileType = Literal["IMAGE"]
 
 
-class AttachmentCreate(BaseModel):
-    attachable_type: AttachmentAttachableType
-    attachable_id: int
-    file_url: str
-    file_type: AttachmentFileType
-    file_name: str
+# class AttachmentCreate(BaseModel):
+#     attachable_type: AttachmentAttachableType
+#     attachable_id: int
+#     file_url: str
+#     file_type: AttachmentFileType
+#     file_name: str
 
 
 class AttachmentUpdate(BaseModel):
@@ -655,29 +655,30 @@ async def get_attachment(
     return _attachment_to_out(row)
 
 
+# @router.post("/attachments", response_model=AttachmentOut, status_code=201)
+# async def create_attachment(payload: AttachmentCreate, db: AsyncSession = Depends(get_db)) -> AttachmentOut:
+#     await _ensure_attachable_exists(db, payload.attachable_type, payload.attachable_id)
+
+#     row = Attachment(
+#         attachable_type=payload.attachable_type,
+#         attachable_id=payload.attachable_id,
+#         file_url=payload.file_url,
+#         file_type=payload.file_type,
+#         file_name=payload.file_name,
+#     )
+#     db.add(row)
+#     await db.commit()
+#     await db.refresh(row)
+#     return _attachment_to_out(row)
+
+
 @router.post("/attachments", response_model=AttachmentOut, status_code=201)
-async def create_attachment(payload: AttachmentCreate, db: AsyncSession = Depends(get_db)) -> AttachmentOut:
-    await _ensure_attachable_exists(db, payload.attachable_type, payload.attachable_id)
-
-    row = Attachment(
-        attachable_type=payload.attachable_type,
-        attachable_id=payload.attachable_id,
-        file_url=payload.file_url,
-        file_type=payload.file_type,
-        file_name=payload.file_name,
-    )
-    db.add(row)
-    await db.commit()
-    await db.refresh(row)
-    return _attachment_to_out(row)
-
-
-@router.post("/attachments/upload", response_model=AttachmentOut, status_code=201)
-async def upload_attachment_image(
+async def create_and_upload_attachment(
     attachable_type: AttachmentAttachableType = Form(...),
     attachable_id: int = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    _ = Depends(get_current_user)
 ) -> AttachmentOut:
     await _ensure_attachable_exists(db, attachable_type, attachable_id)
 

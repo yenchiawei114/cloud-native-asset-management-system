@@ -268,26 +268,30 @@ async def admin_list_users(
 	return [_user_to_out(r) for r in rows]
 
 
-@router.get("/users/{target_user_id}", response_model=UserOut)
+@router.get("/users/{target_employee_id}", response_model=UserOut)
 async def admin_get_user(
-	target_user_id: int,
+	target_employee_id: str,
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-	row = await db.get(User, target_user_id)
+	row = (
+		await db.execute(select(User).where(User.employee_id == target_employee_id))
+	).scalar_one_or_none()
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 	return _user_to_out(row)
 
 
-@router.put("/users/{target_user_id}", response_model=UserOut)
+@router.put("/users/{target_employee_id}", response_model=UserOut)
 async def admin_update_user(
-	target_user_id: int,
+	target_employee_id: str,
 	payload: UserUpdateByAdmin,
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-	row = await db.get(User, target_user_id)
+	row = (
+		await db.execute(select(User).where(User.employee_id == target_employee_id))
+	).scalar_one_or_none()
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 
@@ -313,7 +317,7 @@ async def admin_update_user(
 		actor_name=user["name"],
 		action=Action.UPDATE,
 		target_type=TargetType.USER,
-		target_id=target_user_id,
+		target_id=row.id,
 		target_name=f"{row.name} ({row.employee_id})",
 		detail={"before": before, "after": after},
 	)
@@ -322,18 +326,20 @@ async def admin_update_user(
 	return _user_to_out(row)
 
 
-@router.delete("/users/{target_user_id}", status_code=204)
+@router.delete("/users/{target_employee_id}", status_code=204)
 async def admin_delete_user(
-	target_user_id: int,
+	target_employee_id: str,
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
 ) -> None:
-	if target_user_id == user["user_id"]:
-		raise HTTPException(status_code=400, detail="cannot delete yourself")
-
-	row = await db.get(User, target_user_id)
+	row = (
+		await db.execute(select(User).where(User.employee_id == target_employee_id))
+	).scalar_one_or_none()
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
+
+	if row.id == user["user_id"]:
+		raise HTTPException(status_code=400, detail="cannot delete yourself")
 
 	before = _user_to_out(row).model_dump(mode="json")
 	target_name = f"{row.name} ({row.employee_id})"
@@ -344,7 +350,7 @@ async def admin_delete_user(
 		actor_name=user["name"],
 		action=Action.DELETE,
 		target_type=TargetType.USER,
-		target_id=target_user_id,
+		target_id=row.id,
 		target_name=target_name,
 		detail={"before": before},
 	)

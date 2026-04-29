@@ -247,18 +247,18 @@ async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_re
     return [_request_to_out(r) for r in rows]
 
 
-@router.get("/tickets/{user_id}", response_model=list[RepairRequestOut])
+@router.get("/tickets/{employee_id}", response_model=list[RepairRequestOut])
 async def list_user_tickets(
-    user_id: int,
+    employee_id: int,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[RepairRequestOut]:
-    if user.get("role") != "ADMIN" and user_id != user.get("user_id"):
+    if user.get("role") != "ADMIN" and employee_id != user.get("employee_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     rows = (
         await db.scalars(
-            select(RepairRequest).where(RepairRequest.requester_id == user_id).order_by(RepairRequest.id.desc())
+            select(RepairRequest).where(RepairRequest.requester_id == employee_id).order_by(RepairRequest.id.desc())
         )
     ).all()
     return [_request_to_out(row) for row in rows]
@@ -753,7 +753,12 @@ async def delete_attachment(
     if not _is_remote_url(row.file_url):
         await storage.delete(row.file_url)
 
-    before = {"file_name": row.file_name, "file_type": row.file_type, "attachable_type": row.attachable_type, "attachable_id": row.attachable_id}
+    before = {
+        "file_name": row.file_name,
+        "file_type": row.file_type,
+        "attachable_type": row.attachable_type,
+        "attachable_id": row.attachable_id,
+    }
     await db.delete(row)
     await log_action(
         db,

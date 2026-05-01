@@ -7,7 +7,7 @@ from app.models.base import Base
 class Department(Base):
     __tablename__ = "departments"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     location: Mapped[str] = mapped_column(String(255), nullable=False)
 

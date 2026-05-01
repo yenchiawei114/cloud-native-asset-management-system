@@ -7,7 +7,7 @@ import { useAuth } from '../../auth/hooks/useAuth';
  * useAssets Hook：管理資產清單狀態
  */
 export const useAssets = () => {
-  const { user } = useAuth();
+  useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

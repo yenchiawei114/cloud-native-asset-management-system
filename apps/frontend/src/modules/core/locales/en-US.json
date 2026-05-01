@@ -1,0 +1,43 @@
+{
+  "auth": {
+    "loginError": "An error occurred during login. Please try again later.",
+    "loginInvalid": "Invalid employee ID or password. Please try again.",
+    "title": "Welcome Back",
+    "subtitle": "Please authenticate to enter your workspace.",
+    "loginTab": "Login",
+    "registerTab": "Register",
+    "idEmail": "Employee ID / Email",
+    "idEmailPlaceholder": "e.g., EMP-10293",
+    "password": "Password",
+    "passwordPlaceholder": "••••••••",
+    "forgotPassword": "Forgot Password?",
+    "rememberMe": "Keep me logged in on this device",
+    "enterControlCenter": "Enter Control Center",
+    "version": "Asset Control System v4.2.0",
+    "authorizedOnly": "Authorized Personnel Only",
+    "registerTitle": "Create Account",
+    "registerSubtitle": "Fill in the details to request system access.",
+    "fullName": "Full Name",
+    "fullNamePlaceholder": "Enter your full name",
+    "employeeId": "Employee ID",
+    "employeeIdPlaceholder": "Enter 9-digit ID",
+    "departmentId": "Dept ID",
+    "createAccount": "Submit Request",
+    "layout": {
+      "brand": "Executive Architect",
+      "headline": "Smart Command Center for Enterprise Assets",
+      "description": "Providing precise tracking and lifecycle management for high-value organizational infrastructure.",
+      "availability": "--",
+      "availabilityLabel": "System Availability",
+      "audit": "--",
+      "auditLabel": "Active Auditing",
+      "securityLevel": "Security Level",
+      "enterpriseAuth": "Enterprise Auth"
+    }
+  },
+  "errors": {
+    "unauthorized": "Authentication failed",
+    "forbidden": "You do not have permission to access this content",
+    "network": "Network error. Please check your connection."
+  }
+}

@@ -1,0 +1,70 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "on-secondary-container": "#415382",
+        "on-primary": "#ffffff",
+        "inverse-on-surface": "#f0f1f3",
+        "on-error": "#ffffff",
+        "on-tertiary-fixed": "#380d00",
+        "on-error-container": "#93000a",
+        "surface-container-lowest": "#ffffff",
+        "surface-tint": "#0c56d0",
+        "surface": "#f8f9fb",
+        "tertiary-container": "#a33500",
+        "secondary-fixed-dim": "#b4c5fb",
+        "background": "#f8f9fb",
+        "primary-fixed": "#dae2ff",
+        "error": "#ba1a1a",
+        "on-surface": "#191c1e",
+        "surface-container-high": "#e7e8ea",
+        "on-tertiary-container": "#ffc6b2",
+        "on-secondary-fixed-variant": "#344573",
+        "error-container": "#ffdad6",
+        "surface-container": "#edeef0",
+        "on-primary-container": "#c4d2ff",
+        "tertiary": "#7b2600",
+        "tertiary-fixed": "#ffdbcf",
+        "outline": "#737685",
+        "on-primary-fixed-variant": "#0040a2",
+        "on-background": "#191c1e",
+        "inverse-surface": "#2e3132",
+        "primary-fixed-dim": "#b2c5ff",
+        "surface-variant": "#e1e2e4",
+        "primary": "#003d9b",
+        "secondary-container": "#b6c8fe",
+        "secondary": "#4c5d8d",
+        "surface-container-low": "#f3f4f6",
+        "on-secondary": "#ffffff",
+        "secondary-fixed": "#dae2ff",
+        "surface-dim": "#d9dadc",
+        "inverse-primary": "#b2c5ff",
+        "primary-container": "#0052cc",
+        "on-secondary-fixed": "#021945",
+        "on-surface-variant": "#434654",
+        "on-primary-fixed": "#001848",
+        "outline-variant": "#c3c6d6",
+        "surface-bright": "#f8f9fb",
+        "tertiary-fixed-dim": "#ffb59b",
+        "on-tertiary-fixed-variant": "#812800",
+        "surface-container-highest": "#e1e2e4",
+        "on-tertiary": "#ffffff"
+      },
+      fontFamily: {
+        "headline": ["Manrope"],
+        "body": ["Inter"],
+        "label": ["Inter"]
+      }
+    },
+  },
+  plugins: [
+    require('@tailwindcss/forms'),
+    require('@tailwindcss/container-queries')
+  ],
+}

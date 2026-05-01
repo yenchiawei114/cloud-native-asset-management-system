@@ -33,6 +33,20 @@
       "auditLabel": "主動稽核中",
       "securityLevel": "安全層級",
       "enterpriseAuth": "企業級驗證"
+    },
+    "nav": {
+      "myAssets": "我的資產",
+      "repairHistory": "維修紀錄",
+      "profile": "個人檔案",
+      "dashboard": "管理儀表板",
+      "allAssets": "所有資產",
+      "ticketReview": "維修審核",
+      "auditLogs": "稽核日誌",
+      "userManagement": "使用者管理",
+      "addNewRequest": "新增請求",
+      "addNewAsset": "新增資產",
+      "searchMyAssets": "搜尋您的資產...",
+      "searchAllAssets": "搜尋全庫存資產..."
     }
   },
   "errors": {

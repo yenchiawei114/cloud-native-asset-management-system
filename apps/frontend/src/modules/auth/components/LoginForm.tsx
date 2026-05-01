@@ -33,7 +33,7 @@ export const LoginForm: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="bg-error/10 text-error text-sm p-4 rounded-lg border border-error/20">
-            {error}
+            {t(`apiErrors.${error}`) !== `apiErrors.${error}` ? t(`apiErrors.${error}`) : error}
           </div>
         )}
 

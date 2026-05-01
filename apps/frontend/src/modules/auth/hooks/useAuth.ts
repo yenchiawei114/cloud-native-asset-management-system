@@ -34,17 +34,22 @@ export const useAuth = () => {
       setUser(profile);
       
       if (profile.role === 'admin') {
-        window.location.href = '/status';
+        window.location.href = '/dashboard';
       } else {
         window.location.href = '/dashboard';
       }
     } catch (err: any) {
       // 根據錯誤類型顯示友善提示
-      let message = t('auth.loginError');
-      if (err.message?.includes('401')) {
-        message = t('auth.loginInvalid');
-      } else if (err.message?.includes('Failed to fetch')) {
-        message = t('errors.network');
+      let message = t(`apiErrors.${err.message}`);
+      if (message === `apiErrors.${err.message}`) {
+        // Fallback for codes or unknown errors
+        if (err.message?.includes('401')) {
+          message = t('auth.loginInvalid');
+        } else if (err.message?.includes('Failed to fetch')) {
+          message = t('errors.network');
+        } else {
+          message = t('auth.loginError');
+        }
       }
       
       setError(message);

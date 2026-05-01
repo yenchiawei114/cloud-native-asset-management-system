@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import log_action
 from app.core.storage import storage
 from app.core.db import get_db
-from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment
+from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment, User
 from app.models.audit_log import Action, TargetType
 from app.core.cache import redis
 
@@ -66,6 +66,12 @@ class RepairRequestOut(BaseModel):
     pickup_location: str | None
     created_at: datetime
     version: int
+
+
+class RepairRequestWithAttachments(BaseModel):
+    request: RepairRequestOut
+    # 每個 repair request 只會對應到一個 attachment
+    attachment: AttachmentOut | None
 
 
 class RepairInspectionCreate(BaseModel):
@@ -247,21 +253,53 @@ async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_re
     return [_request_to_out(r) for r in rows]
 
 
-@router.get("/tickets/list/{employee_id}", response_model=list[RepairRequestOut])
+@router.get("/tickets/list/{employee_id}", response_model=list[RepairRequestWithAttachments])
 async def list_user_tickets(
     employee_id: int,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
-) -> list[RepairRequestOut]:
+) -> list[RepairRequestWithAttachments]:
     if user.get("role") != "ADMIN" and employee_id != user.get("employee_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    # 找employee_id對應的user_id，前提是employee_id不會重複
+    requester_user_id = (await db.scalars(select(User.id).where(User.employee_id == employee_id))).first()
+    if requester_user_id is None:
+        raise HTTPException(status_code=404, detail="user not found")
+
     rows = (
         await db.scalars(
-            select(RepairRequest).where(RepairRequest.requester_id == employee_id).order_by(RepairRequest.id.desc())
+            select(RepairRequest)
+            .where(RepairRequest.requester_id == requester_user_id)
+            .order_by(RepairRequest.id.desc())
         )
     ).all()
-    return [_request_to_out(row) for row in rows]
+
+    # fetch attachments for all found requests
+    request_ids = [r.id for r in rows]
+    attachments_rows: list[Attachment] = []
+    if request_ids:
+        attachments_rows = (
+            await db.scalars(
+                select(Attachment)
+                .where(
+                    Attachment.attachable_type == "REPAIR_REQUEST",
+                    Attachment.attachable_id.in_(request_ids),
+                )
+                .order_by(Attachment.id.desc())
+            )
+        ).all()
+
+    # map to single attachment per request (take the latest if multiple exist)
+    attachments_map: dict[int, AttachmentOut] = {}
+    for a in attachments_rows:
+        attachments_map.setdefault(a.attachable_id, _attachment_to_out(a))
+
+    result: list[RepairRequestWithAttachments] = []
+    for r in rows:
+        result.append(RepairRequestWithAttachments(request=_request_to_out(r), attachment=attachments_map.get(r.id)))
+
+    return result
 
 
 @router.get("/tickets/{ticket_id}", response_model=RepairRequestOut)
@@ -678,7 +716,7 @@ async def create_and_upload_attachment(
     attachable_id: int = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    _ = Depends(get_current_user)
+    _=Depends(get_current_user),
 ) -> AttachmentOut:
     await _ensure_attachable_exists(db, attachable_type, attachable_id)
 

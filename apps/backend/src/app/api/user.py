@@ -188,6 +188,16 @@ async def change_my_password(
 	row.password = payload.new_password
 	row.must_change_password = False
 	row.last_password_changed_at = datetime.now(timezone.utc)
+	await log_action(
+		db,
+		user_id=user_id,
+		actor_name=user.get("name"),
+		action=Action.UPDATE,
+		target_type=TargetType.USER,
+		target_id=user_id,
+		target_name=row.name,
+		detail={"action": "password_changed"},
+	)
 	await db.commit()
 
 	return {"message": "password updated"}
@@ -230,9 +240,23 @@ async def upsert_my_notification_preference(
 	if row is None:
 		row = NotificationPreference(user_id=user_id, type=note_type, value=payload.value)
 		db.add(row)
+		audit_action = Action.CREATE
+		audit_detail: dict = {"type": note_type.value, "after": payload.value}
 	else:
+		audit_detail = {"type": note_type.value, "before": row.value, "after": payload.value}
 		row.value = payload.value
+		audit_action = Action.UPDATE
 
+	await log_action(
+		db,
+		user_id=user_id,
+		actor_name=user.get("name"),
+		action=audit_action,
+		target_type=TargetType.USER,
+		target_id=user_id,
+		target_name=user.get("name"),
+		detail=audit_detail,
+	)
 	await db.commit()
 	await db.refresh(row)
 	return _pref_to_out(row)

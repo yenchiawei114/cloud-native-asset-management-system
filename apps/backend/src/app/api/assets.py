@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,6 +79,9 @@ def _to_out(asset: Asset) -> AssetOut:
 @router.get("/assets", response_model=list[AssetOut])
 async def list_assets(
     owner_employee_id: str | None = None,
+    keyword: str | None = None,
+    asset_type: AssetType | None = None,
+    status: AssetStatus | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[AssetOut]:
@@ -103,6 +106,30 @@ async def list_assets(
                 raise HTTPException(status_code=404, detail="user not found")
             stmt = stmt.where(Asset.owner_id == target_user.id)
 
+    if asset_type:
+        stmt = stmt.where(Asset.type == asset_type)
+    if status:
+        stmt = stmt.where(Asset.status == status)
+    if keyword:
+        stmt = stmt.where(
+            or_(
+                Asset.name.ilike(f"%{keyword}%"),
+                Asset.asset_code.ilike(f"%{keyword}%"),
+                Asset.model.ilike(f"%{keyword}%"),
+                Asset.vendor.ilike(f"%{keyword}%"),
+            )
+        )
+
+    rows = (await db.scalars(stmt)).all()
+    return [_to_out(a) for a in rows]
+
+@router.get("/assets/idle", response_model=list[AssetOut])
+async def list_idle_assets(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+) -> list[AssetOut]:
+    # 所有人皆可查看閒置設備清單，以便進行後續的調撥或申請
+    stmt = select(Asset).where(Asset.status == AssetStatus.AVAILABLE).order_by(Asset.id.desc())
     rows = (await db.scalars(stmt)).all()
     return [_to_out(a) for a in rows]
 

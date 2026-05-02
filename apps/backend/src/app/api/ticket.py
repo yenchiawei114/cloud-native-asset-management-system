@@ -68,12 +68,6 @@ class RepairRequestOut(BaseModel):
     version: int
 
 
-class RepairRequestWithAttachments(BaseModel):
-    request: RepairRequestOut
-    # 每個 repair request 只會對應到一個 attachment
-    attachment: AttachmentOut | None
-
-
 class RepairInspectionCreate(BaseModel):
     status: bool
     note: str | None = None
@@ -148,6 +142,12 @@ class AttachmentOut(BaseModel):
     file_type: AttachmentFileType
     file_name: str
     created_at: datetime
+
+
+class RepairRequestWithAttachments(BaseModel):
+    request: RepairRequestOut
+    # 每個 repair request 只會對應到一個 attachment
+    attachment: AttachmentOut | None
 
 
 def _request_to_out(row: RepairRequest) -> RepairRequestOut:

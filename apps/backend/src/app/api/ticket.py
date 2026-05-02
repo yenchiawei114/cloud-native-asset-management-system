@@ -716,7 +716,7 @@ async def create_and_upload_attachment(
     attachable_id: int = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    user=Depends(get_current_user),
 ) -> AttachmentOut:
     await _ensure_attachable_exists(db, attachable_type, attachable_id)
 
@@ -745,6 +745,17 @@ async def create_and_upload_attachment(
             file_name=file_name,
         )
         db.add(row)
+        await db.flush()
+        await log_action(
+            db,
+            user_id=user["user_id"],
+            actor_name=user["name"],
+            action=Action.CREATE,
+            target_type=TargetType.ATTACHMENT,
+            target_id=row.id,
+            target_name=row.file_name,
+            detail={"after": {"file_name": row.file_name, "file_type": row.file_type, "attachable_type": row.attachable_type, "attachable_id": row.attachable_id}},
+        )
         await db.commit()
         await db.refresh(row)
     except Exception:
@@ -767,10 +778,21 @@ async def update_attachment(
     if owner_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    before = {"file_name": row.file_name, "file_type": row.file_type, "file_url": row.file_url}
     row.file_url = payload.file_url
     row.file_type = payload.file_type
     row.file_name = payload.file_name
 
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.ATTACHMENT,
+        target_id=attachment_id,
+        target_name=row.file_name,
+        detail={"before": before, "after": {"file_name": payload.file_name, "file_type": payload.file_type, "file_url": payload.file_url}},
+    )
     await db.commit()
     await db.refresh(row)
     return _attachment_to_out(row)

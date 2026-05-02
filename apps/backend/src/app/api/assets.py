@@ -184,12 +184,23 @@ async def update_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
+    before = _to_out(asset).model_dump(mode="json")
     # 使用 model_fields_set 確保明確傳入 null 時能清除欄位
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(asset, field, value)
 
     asset.version += 1
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.ASSET,
+        target_id=asset_id,
+        target_name=f"{asset.name} ({asset.asset_code})",
+        detail={"before": before, "after": update_data},
+    )
     await db.commit()
     await db.refresh(asset)
     return _to_out(asset)

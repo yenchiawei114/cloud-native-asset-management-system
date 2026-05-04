@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from enum import Enum as PyEnum
-from sqlalchemy import BigInteger, Integer, CHAR, String, DateTime, Date, Enum, ForeignKey, func
+from sqlalchemy import Index, BigInteger, Integer, CHAR, String, DateTime, Date, Enum, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
@@ -24,6 +24,10 @@ class AssetStatus(PyEnum):
 
 class Asset(Base):
     __tablename__ = "assets"
+
+    __table_args__ = (
+        Index("ix_assets_status_id", "status", "id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     asset_code: Mapped[str] = mapped_column(CHAR(10), unique=True, nullable=False)

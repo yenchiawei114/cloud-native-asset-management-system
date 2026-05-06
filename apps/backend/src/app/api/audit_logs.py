@@ -46,6 +46,18 @@ def _to_out(row: AuditLog) -> AuditLogOut:
     )
 
 
+@router.get("/audit-logs/{log_id}", response_model=AuditLogOut)
+async def get_audit_log(
+    log_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(admin_required),
+) -> AuditLogOut:
+    row = await db.get(AuditLog, log_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="audit log not found")
+    return _to_out(row)
+
+
 @router.get("/audit-logs", response_model=AuditLogListOut)
 async def list_audit_logs(
     target_type: str | None = None,

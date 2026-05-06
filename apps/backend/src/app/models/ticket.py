@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Index, BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 from app.models.asset import Asset
@@ -8,7 +8,7 @@ from app.models.user import User
 class RepairRequest(Base):
     __tablename__ = "repair_requests"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), nullable=False)
     requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -37,7 +37,7 @@ class RepairRequest(Base):
 class RepairInspection(Base):
     __tablename__ = "repair_inspections"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     request_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("repair_requests.id"), nullable=False, unique=True)
 
     status: Mapped[bool] = mapped_column(Boolean, nullable=False)
@@ -52,7 +52,7 @@ class RepairInspection(Base):
 class RepairRecord(Base):
     __tablename__ = "repair_records"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     request_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("repair_requests.id"), nullable=False, unique=True)
     repair_date: Mapped[Date] = mapped_column(Date, nullable=False)
     issue_description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -67,12 +67,16 @@ class RepairRecord(Base):
 class Attachment(Base):
     __tablename__ = "attachments"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    __table_args__ = (
+        Index("ix_attachments_attachable_type_id", "attachable_type", "attachable_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     attachable_type: Mapped[str] = mapped_column(
         Enum("REPAIR_REQUEST", "REPAIR_INSPECTION", name="attachment_attachable_type"),
         nullable=False,
     )
-    attachable_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    attachable_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     file_url: Mapped[str] = mapped_column(String(1024), nullable=False)
     file_type: Mapped[str] = mapped_column(
         Enum("IMAGE", "VIDEO", "DOCUMENT", "OTHER", name="attachment_file_type"),

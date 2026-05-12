@@ -255,7 +255,7 @@ async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_re
 
 @router.get("/tickets/list/{employee_id}", response_model=list[RepairRequestWithAttachments])
 async def list_user_tickets(
-    employee_id: int,
+    employee_id: str,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[RepairRequestWithAttachments]:

@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAssets } from '../../assets/hooks/useAssets';
 import { ticketService } from '../services/ticketService';
 import { useAuth } from '../../auth/hooks/useAuth';
+import { useFeedback } from '../../../modules/core/hooks/useFeedback';
+import { FeedbackDialog } from '../../../modules/core/components/FeedbackDialog';
 
 interface NewRepairRequestFormProps {
   onCancel: () => void;
@@ -9,6 +12,7 @@ interface NewRepairRequestFormProps {
 }
 
 export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCancel, onSuccess }) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { assets, loading: assetsLoading } = useAssets();
   
@@ -17,8 +21,8 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
   const [needBackup, setNeedBackup] = useState(false);
   const [backupSpec, setBackupSpec] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const { feedbackState, showFeedback, closeFeedback } = useFeedback();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -32,11 +36,11 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
 
   const handleSubmit = async () => {
     if (!selectedAssetId) {
-      setError('請選擇要維修的設備');
+      showFeedback({ title: '請選擇設備', message: '請選擇要維修的設備', type: 'error', onConfirm: closeFeedback });
       return;
     }
     if (!description.trim()) {
-      setError('請填寫故障描述');
+      showFeedback({ title: '請填寫描述', message: '請填寫故障描述', type: 'error', onConfirm: closeFeedback });
       return;
     }
 
@@ -58,9 +62,17 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
         await ticketService.uploadAttachment(ticket.id, file);
       }
 
-      onSuccess();
+      showFeedback({ 
+        title: '提交成功', 
+        message: '您的維修申請已成功送出，工作人員將儘速處理。', 
+        type: 'success', 
+        onConfirm: () => {
+          closeFeedback();
+          onSuccess();
+        }
+      });
     } catch (err: any) {
-      setError(err.message || '提交失敗，請重試');
+      showFeedback({ title: '提交失敗', message: err.message || '提交失敗，請重試', type: 'error', onConfirm: closeFeedback });
     } finally {
       setSubmitting(false);
     }
@@ -73,12 +85,6 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
         <p className="text-on-surface-variant mt-1">請填寫以下資訊，我們將儘速為您安排維修服務。</p>
       </div>
 
-      {error && (
-        <div className="mb-6 p-4 bg-error/10 border border-error/20 text-error rounded-xl flex items-center gap-3">
-          <span className="material-symbols-outlined">error</span>
-          <p className="text-sm font-medium">{error}</p>
-        </div>
-      )}
 
       <div className="space-y-8">
         {/* Section 1: Asset Selection */}
@@ -116,7 +122,7 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
                       <div className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                         asset.status === 'in_use' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
                       }`}>
-                        {asset.status === 'in_use' ? '使用中' : asset.status}
+                        {t(`assets.status.${asset.status}`)}
                       </div>
                     </div>
                     {selectedAssetId === asset.id && (
@@ -235,7 +241,15 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
             {submitting ? '提交中...' : '送出維修申請'}
           </button>
         </div>
-      </div>
+        <FeedbackDialog 
+        {...feedbackState} 
+        onConfirm={() => {
+          feedbackState.onConfirm?.();
+          closeFeedback();
+        }}
+        onCancel={closeFeedback}
+      />
+    </div>
     </div>
   );
 };

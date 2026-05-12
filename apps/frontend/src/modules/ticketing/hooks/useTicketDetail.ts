@@ -16,43 +16,45 @@ export const useTicketDetail = (ticketId: string | undefined) => {
     setError(null);
 
     try {
-      // 1. 抓取報修單基本資訊
-      const ticketData = await api.getTicket(parseInt(ticketId));
+      const tidNum = parseInt(ticketId);
+
+      // 1. 基本資訊
+      const ticketData = await api.getTicket(tidNum);
       setTicket(ticketData);
 
-      // 2. 抓取關聯資產資訊
+      // 2. 資產資訊
       const assetData = await api.getAsset(ticketData.asset_id);
       setAsset(assetData);
 
-      // 3. 抓取維修紀錄 (可能為 404，代表尚未開始維修)
+      // 3. 維修紀錄
+      let recordData = null;
       try {
-        const recordData = await api.getTicketRecord(parseInt(ticketId));
+        recordData = await api.getTicketRecord(tidNum);
         setRecord(recordData);
       } catch (e: any) {
-        if (!e.message.includes('404')) {
-          console.warn('Failed to fetch repair record:', e);
-        }
+        // Normal if not exists
       }
 
-      // 4. 抓取驗收結果 (可能為 404)
+      // 4. 驗收結果
+      let inspectionData = null;
       try {
-        const inspectionData = await api.getTicketInspection(parseInt(ticketId));
+        inspectionData = await api.getTicketInspection(tidNum);
         setInspection(inspectionData);
       } catch (e: any) {
-        // 只有管理員能看驗收，員工看會 403，目前我們先忽略員工端權限錯誤
-        if (!e.message.includes('404') && !e.message.includes('403')) {
-          console.warn('Failed to fetch inspection:', e);
-        }
+        // Normal if not exists
       }
 
-      // 5. 抓取附件
+      // 5. 附件過濾
       try {
-        const attachs = await api.getTicketAttachments(parseInt(ticketId));
-        setAttachments(attachs);
+        const allAttachs = await api.getTicketAttachments(tidNum);
+        const filtered = allAttachs.filter((a: any) => 
+          (a.attachable_type === 'REPAIR_REQUEST' && a.attachable_id === tidNum) ||
+          (recordData && a.attachable_type === 'REPAIR_RECORD' && a.attachable_id === recordData.id) ||
+          (inspectionData && a.attachable_type === 'REPAIR_INSPECTION' && a.attachable_id === inspectionData.id)
+        );
+        setAttachments(filtered);
       } catch (e: any) {
-        if (!e.message.includes('403')) { // 忽略目前員工權限不足的問題
-          console.warn('Failed to fetch attachments:', e);
-        }
+        console.warn('Failed to fetch attachments:', e);
       }
 
     } catch (err: any) {

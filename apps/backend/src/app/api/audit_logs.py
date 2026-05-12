@@ -104,3 +104,15 @@ async def list_audit_logs(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/audit-logs/{log_id}", response_model=AuditLogOut)
+async def get_audit_log(
+    log_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(admin_required),
+) -> AuditLogOut:
+    log = await db.get(AuditLog, log_id)
+    if log is None:
+        raise HTTPException(status_code=404, detail="audit log not found")
+    return _to_out(log)

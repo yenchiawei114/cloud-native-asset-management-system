@@ -184,9 +184,12 @@ async def update_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
-    before = _to_out(asset).model_dump(mode="json")
+    before_data = _to_out(asset).model_dump(mode="json")
     # 使用 model_fields_set 確保明確傳入 null 時能清除欄位
     update_data = payload.model_dump(exclude_unset=True)
+    # 建立日誌專用的序列化數據
+    after_data = payload.model_dump(exclude_unset=True, mode="json")
+
     for field, value in update_data.items():
         setattr(asset, field, value)
 
@@ -199,7 +202,7 @@ async def update_asset(
         target_type=TargetType.ASSET,
         target_id=asset_id,
         target_name=f"{asset.name} ({asset.asset_code})",
-        detail={"before": before, "after": update_data},
+        detail={"before": before_data, "after": after_data},
     )
     await db.commit()
     await db.refresh(asset)

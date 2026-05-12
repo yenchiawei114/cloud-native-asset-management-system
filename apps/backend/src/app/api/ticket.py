@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_action
@@ -255,7 +255,7 @@ async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_re
 
 @router.get("/tickets/list/{employee_id}", response_model=list[RepairRequestWithAttachments])
 async def list_user_tickets(
-    employee_id: int,
+    employee_id: str,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[RepairRequestWithAttachments]:
@@ -466,8 +466,14 @@ async def delete_ticket(ticket_id: int, db: AsyncSession = Depends(get_db), user
 
 @router.get("/tickets/{ticket_id}/inspection", response_model=RepairInspectionOut)
 async def get_ticket_inspection(
-    ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)
+    ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)
 ) -> RepairInspectionOut:
+    request_row = await db.get(RepairRequest, ticket_id)
+    if request_row is None:
+        raise HTTPException(status_code=404, detail="ticket not found")
+    # 權限判斷：ADMIN 可讀取所有，USER 只能讀取自己的票單
+    if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
     if row is None:
         raise HTTPException(status_code=404, detail="inspection not found")
@@ -669,6 +675,33 @@ async def delete_ticket_record(
         detail={"before": before},
     )
     await db.commit()
+
+
+@router.get("/tickets/{ticket_id}/attachments", response_model=list[AttachmentOut])
+async def list_ticket_attachments(
+    ticket_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)
+) -> list[AttachmentOut]:
+    request_row = await db.get(RepairRequest, ticket_id)
+    if request_row is None:
+        raise HTTPException(status_code=404, detail="ticket not found")
+    # 權限判斷：ADMIN 可讀取所有，USER 只能讀取自己的票單
+    if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # 取得該票單對應的驗收單 ID（若有）
+    inspection_row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
+    inspection_id = inspection_row.id if inspection_row else None
+
+    conditions = [
+        (Attachment.attachable_type == "REPAIR_REQUEST") & (Attachment.attachable_id == ticket_id)
+    ]
+    if inspection_id is not None:
+        conditions.append(
+            (Attachment.attachable_type == "REPAIR_INSPECTION") & (Attachment.attachable_id == inspection_id)
+        )
+
+    rows = (await db.scalars(select(Attachment).where(or_(*conditions)).order_by(Attachment.id.desc()))).all()
+    return [_attachment_to_out(row) for row in rows]
 
 
 @router.get("/attachments", response_model=list[AttachmentOut])

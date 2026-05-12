@@ -146,7 +146,7 @@ export const EmployeeDashboard: React.FC = () => {
                     className="p-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-all border border-transparent hover:border-slate-100 group"
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-[10px] font-mono font-bold text-slate-400">#TK-{ticket.id.toString().padStart(4, '0')}</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-400">#TK-{(ticket.id ?? 0).toString().padStart(4, '0')}</span>
                       <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
                         ticket.status === 'DONE' ? 'bg-green-500 text-white' :
                         ticket.status === 'IN_PROGRESS' ? 'bg-blue-500 text-white' :

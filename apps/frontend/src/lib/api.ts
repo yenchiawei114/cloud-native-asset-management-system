@@ -200,8 +200,10 @@ export const api = {
 
   listTickets: (status?: string) =>
     http<RepairRequest[]>(`/api/tickets${status && status !== 'ALL' ? `?status=${status}` : ''}`),
-  listMyTickets: (employeeId: string) =>
-    http<RepairRequest[]>(`/api/tickets/list/${employeeId}`),
+  listMyTickets: async (employeeId: string): Promise<RepairRequest[]> => {
+    const items = await http<{ request: RepairRequest; attachment: unknown }[]>(`/api/tickets/list/${employeeId}`);
+    return items.map(item => item.request);
+  },
   getTicket: (id: number) =>
     http<RepairRequest>(`/api/tickets/${id}`),
   createTicket: (payload: any) =>
@@ -226,8 +228,8 @@ export const api = {
     http<any>(`/api/tickets/${ticketId}/record`),
   getTicketInspection: (ticketId: number) =>
     http<any>(`/api/tickets/${ticketId}/inspection`),
-  getTicketAttachments: (_ticketId: number) =>
-    http<any[]>(`/api/attachments`),
+  getTicketAttachments: (ticketId: number) =>
+    http<any[]>(`/api/tickets/${ticketId}/attachments`),
   getTicketStats: () => {
     return Promise.resolve({ pending_count: 0, completed_last_7_days: 0 });
   },

@@ -26,22 +26,26 @@ export const useTicketDetail = (ticketId: string | undefined) => {
       const assetData = await api.getAsset(ticketData.asset_id);
       setAsset(assetData);
 
-      // 3. 維修紀錄
+      // 3. 維修紀錄（OPEN / CANCELLED 一定不存在，跳過請求）
       let recordData = null;
-      try {
-        recordData = await api.getTicketRecord(tidNum);
-        setRecord(recordData);
-      } catch (e: any) {
-        // Normal if not exists
+      if (ticketData.status === 'IN_PROGRESS' || ticketData.status === 'DONE') {
+        try {
+          recordData = await api.getTicketRecord(tidNum);
+          setRecord(recordData);
+        } catch (e: any) {
+          // 尚未建立維修紀錄時為正常狀況
+        }
       }
 
-      // 4. 驗收結果
+      // 4. 驗收結果（只有 DONE 狀態才可能存在）
       let inspectionData = null;
-      try {
-        inspectionData = await api.getTicketInspection(tidNum);
-        setInspection(inspectionData);
-      } catch (e: any) {
-        // Normal if not exists
+      if (ticketData.status === 'DONE') {
+        try {
+          inspectionData = await api.getTicketInspection(tidNum);
+          setInspection(inspectionData);
+        } catch (e: any) {
+          // 尚未建立驗收記錄時為正常狀況
+        }
       }
 
       // 5. 附件過濾

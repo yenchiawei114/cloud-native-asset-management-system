@@ -13,7 +13,7 @@ export const useTickets = () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const data = await ticketService.getMyTickets(user.id.toString());
+      const data = await ticketService.getMyTickets(user.employee_id);
       setTickets(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load tickets');

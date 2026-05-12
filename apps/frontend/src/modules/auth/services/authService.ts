@@ -19,7 +19,12 @@ export const authService = {
   /**
    * 登出並清除憑證
    */
-  logout() {
+  async logout() {
+    try {
+      await api.logout();
+    } catch (err) {
+      console.error('Logout API failed', err);
+    }
     localStorage.removeItem('token');
     window.location.href = '/login';
   },

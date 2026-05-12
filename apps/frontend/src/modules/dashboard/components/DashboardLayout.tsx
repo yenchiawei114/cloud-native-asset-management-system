@@ -13,7 +13,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
   const { t } = useTranslation();
   const { logout, user } = useAuth();
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
 
   const employeeNav = [
     { id: 'assets', label: t('auth.nav.myAssets'), icon: 'inventory_2', path: '/dashboard' },
@@ -24,9 +24,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
   const adminNav = [
     { id: 'dashboard', label: t('auth.nav.dashboard'), icon: 'dashboard', path: '/dashboard' },
     { id: 'all', label: t('auth.nav.allAssets'), icon: 'database', path: '/all-assets' },
-    { id: 'tickets', label: t('auth.nav.ticketReview'), icon: 'assignment_late', path: '/ticket-review' },
+    { id: 'tickets', label: t('auth.nav.ticketReview'), icon: 'assignment_turned_in', path: '/ticket-review' },
     { id: 'audit', label: t('auth.nav.auditLogs'), icon: 'analytics', path: '/audit-logs' },
-    { id: 'users', label: t('auth.nav.userManagement'), icon: 'group', path: '/user-management' },
+    { id: 'users', label: t('auth.nav.userManagement'), icon: 'manage_accounts', path: '/users' },
   ];
 
   const navItems = isAdmin ? adminNav : employeeNav;
@@ -41,8 +41,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
               <span className="material-symbols-outlined text-on-primary-fixed" style={{ fontVariationSettings: "'FILL' 1" }}>architecture</span>
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tighter text-blue-800 dark:text-blue-200">資產管理</h2>
-              <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">企業版</p>
+              <h2 className="text-lg font-black tracking-tighter text-blue-800 dark:text-blue-200">Executive Architect</h2>
+              <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Enterprise Asset Control</p>
             </div>
           </div>
         </div>
@@ -77,7 +77,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
             className="w-full text-slate-500 hover:text-error hover:bg-error/5 py-2 px-4 rounded-lg font-medium text-xs transition-colors flex items-center justify-center gap-2"
           >
             <span className="material-symbols-outlined text-sm">logout</span>
-            登出系統
+            {t('profile.logout')}
           </button>
         </div>
       </aside>
@@ -116,7 +116,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-bold text-on-surface">{user?.name || 'Loading...'}</p>
-                <p className="text-[10px] text-slate-500 font-medium uppercase">{isAdmin ? '系統管理員' : '一般員工'}</p>
+                <p className="text-[10px] text-slate-500 font-medium uppercase">{isAdmin ? t('profile.admin') : t('profile.employee')}</p>
               </div>
               <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold border-2 border-white shadow-sm uppercase">
                 {user?.name?.substring(0, 2) || '??'}

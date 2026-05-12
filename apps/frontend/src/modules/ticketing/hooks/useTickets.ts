@@ -10,17 +10,17 @@ export const useTickets = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchTickets = useCallback(async () => {
-    if (!user?.employee_id) return;
+    if (!user?.id) return;
     setLoading(true);
     try {
-      const data = await ticketService.getMyTickets(user.employee_id);
+      const data = await ticketService.getMyTickets(user.id.toString());
       setTickets(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load tickets');
     } finally {
       setLoading(false);
     }
-  }, [user?.employee_id]);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchTickets();

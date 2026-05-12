@@ -17,10 +17,10 @@ export const ticketService = {
     return await api.createTicket(payload);
   },
 
-  async uploadAttachment(ticketId: number, file: File) {
+  async uploadAttachment(id: number, file: File, type: string = 'REPAIR_REQUEST') {
     const formData = new FormData();
-    formData.append('attachable_type', 'REPAIR_REQUEST');
-    formData.append('attachable_id', ticketId.toString());
+    formData.append('attachable_type', type);
+    formData.append('attachable_id', id.toString());
     formData.append('file', file);
     return await api.uploadAttachment(formData);
   }

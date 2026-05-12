@@ -76,6 +76,7 @@ export const RepairHistory: React.FC = () => {
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">工單編號</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">設備資訊</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">申請日期</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">預計完工</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">目前狀態</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">操作</th>
                       </tr>
@@ -84,16 +85,21 @@ export const RepairHistory: React.FC = () => {
                       {tickets.map((ticket) => (
                         <tr key={ticket.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4">
-                            <span className="text-sm font-mono font-bold text-slate-700">#TK-{ticket.id.toString().padStart(6, '0')}</span>
+                            <Link to={`/repair-history/${ticket.id}`} className="text-sm font-mono font-bold text-primary hover:underline">
+                              #TK-{ticket.id.toString().padStart(6, '0')}
+                            </Link>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-bold text-on-surface">Asset #{ticket.asset_id}</span>
+                            <Link to={`/repair-history/${ticket.id}`} className="flex flex-col group/info hover:opacity-80 transition-opacity">
+                              <span className="text-sm font-bold text-on-surface group-hover/info:text-primary transition-colors">Asset #{ticket.asset_id}</span>
                               <span className="text-[10px] text-slate-400 truncate max-w-[200px]">{ticket.description}</span>
-                            </div>
+                            </Link>
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-500">
                             {new Date(ticket.created_at).toLocaleDateString('zh-TW')}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-500">
+                            {ticket.expected_completion_date ? new Date(ticket.expected_completion_date).toLocaleDateString('zh-TW') : '未設定'}
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${

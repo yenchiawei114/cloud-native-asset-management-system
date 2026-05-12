@@ -428,7 +428,7 @@ async def update_ticket_status(
         target_type=TargetType.TICKET,
         target_id=ticket_id,
         target_name=f"報修單 #{ticket_id}",
-        detail={"field": "status", "before": old_status, "after": payload.status},
+        detail={"before": {"status": old_status}, "after": {"status": payload.status}},
     )
     await db.commit()
     await db.refresh(row)

@@ -32,7 +32,7 @@ export const ProfileInfo: React.FC<ProfileInfoProps> = ({ user }) => {
         <div className="space-y-1">
           <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline font-label">{t('profile.role')}</label>
           <p className="text-lg font-medium text-on-surface uppercase">
-            {user?.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')}
+            {user?.role === 'admin' ? t('profile.admin') : t('profile.employee')}
           </p>
         </div>
       </div>

@@ -53,12 +53,13 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({
             </button>
           )}
           <div className="flex-1">
-            <Button 
-              label={confirmText} 
+            <Button
               onClick={onConfirm}
-              fullWidth
-              variant={type === 'error' ? 'primary' : 'primary'} // Can add 'danger' variant to Button later
-            />
+              className="w-full"
+              variant="primary"
+            >
+              {confirmText}
+            </Button>
           </div>
         </div>
       </div>

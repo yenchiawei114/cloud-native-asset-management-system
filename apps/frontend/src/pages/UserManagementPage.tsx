@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useUsers } from '../modules/users/hooks/useUsers';
-import { User } from '../lib/api';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
 

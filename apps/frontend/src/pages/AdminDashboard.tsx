@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
-import { Asset } from '../lib/api';
 import { useAuth } from '../modules/auth/hooks/useAuth';
 import { useAssets } from '../modules/assets/hooks/useAssets';
 
 export const AdminDashboard: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const { assets, loading } = useAssets({ keyword: searchTerm, status: statusFilter === 'ALL' ? undefined : statusFilter });

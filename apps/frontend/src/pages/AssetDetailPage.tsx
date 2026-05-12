@@ -324,7 +324,7 @@ export const AssetDetailPage: React.FC = () => {
                 </h3>
               </div>
               <div className="space-y-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-px before:bg-slate-100">
-                {history.length > 0 ? history.map((h, idx) => (
+                {history.length > 0 ? history.map((h) => (
                   <div key={h.id} className="relative pl-8">
                     <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full flex items-center justify-center border-2 border-white ring-1 ${h.status === 'DONE' ? 'bg-green-50 ring-green-100' : 'bg-blue-50 ring-blue-100'
                       }`}>

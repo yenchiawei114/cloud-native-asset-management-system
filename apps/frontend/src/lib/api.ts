@@ -226,7 +226,7 @@ export const api = {
     http<any>(`/api/tickets/${ticketId}/record`),
   getTicketInspection: (ticketId: number) =>
     http<any>(`/api/tickets/${ticketId}/inspection`),
-  getTicketAttachments: (ticketId: number) =>
+  getTicketAttachments: (_ticketId: number) =>
     http<any[]>(`/api/attachments`),
   getTicketStats: () => {
     return Promise.resolve({ pending_count: 0, completed_last_7_days: 0 });

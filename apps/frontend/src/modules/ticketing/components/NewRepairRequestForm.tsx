@@ -45,7 +45,6 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
     }
 
     setSubmitting(true);
-    setError(null);
 
     try {
       const ticket = await ticketService.createTicket({

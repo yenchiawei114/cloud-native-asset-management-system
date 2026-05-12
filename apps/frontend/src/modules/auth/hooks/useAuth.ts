@@ -33,7 +33,7 @@ export const useAuth = () => {
       const profile = await api.getMe();
       setUser(profile);
       
-      if (profile.role === 'ADMIN') {
+      if (profile.role === 'admin') {
         window.location.href = '/dashboard';
       } else {
         window.location.href = '/dashboard';

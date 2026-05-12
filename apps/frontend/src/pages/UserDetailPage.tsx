@@ -18,7 +18,7 @@ export const UserDetailPage: React.FC = () => {
   
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<User>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (employeeId) {

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAdminTickets } from '../modules/ticketing/hooks/useAdminTickets';
-import { Ticket } from '../lib/api';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
 
@@ -12,7 +11,7 @@ export const TicketReviewPage: React.FC = () => {
   const navigate = useNavigate();
   const [filter, setFilter] = useState('ALL');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
-  const { tickets: rawTickets, allTickets, stats, loading, approveTicket } = useAdminTickets(filter);
+  const { tickets: rawTickets, allTickets, loading, approveTicket } = useAdminTickets(filter);
   
   const tickets = React.useMemo(() => {
     if (priorityFilter === 'ALL') return rawTickets;

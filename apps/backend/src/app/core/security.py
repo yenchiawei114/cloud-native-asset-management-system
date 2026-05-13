@@ -8,7 +8,7 @@ from app.core.config import settings
 
 SECRET_KEY = settings.secret_key
 ALGORITHM = settings.algorithm
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def create_access_token(data: dict):
@@ -23,8 +23,13 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    if hashed_password.startswith("$2"):
+    if hashed_password.startswith("$pbkdf2-sha256$"):
         return pwd_context.verify(plain_password, hashed_password)
+    if hashed_password.startswith("$2"):
+        # Backward-compatible check for any older bcrypt-based hashes that may already exist.
+        from passlib.hash import bcrypt
+
+        return bcrypt.verify(plain_password, hashed_password)
     return plain_password == hashed_password
 
 

@@ -12,6 +12,7 @@ from app.core.audit import log_action
 from app.core.storage import storage
 from app.core.db import get_db
 from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment, User
+from app.models.asset import Asset, AssetStatus
 from app.models.audit_log import Action, TargetType
 from app.core.cache import redis
 
@@ -66,6 +67,7 @@ class RepairRequestOut(BaseModel):
     pickup_location: str | None
     created_at: datetime
     version: int
+    requester_name: str | None = None
 
 
 class RepairInspectionCreate(BaseModel):
@@ -150,7 +152,7 @@ class RepairRequestWithAttachments(BaseModel):
     attachment: AttachmentOut | None
 
 
-def _request_to_out(row: RepairRequest) -> RepairRequestOut:
+def _request_to_out(row: RepairRequest, requester_name: str | None = None) -> RepairRequestOut:
     return RepairRequestOut(
         id=row.id,
         asset_id=row.asset_id,
@@ -163,6 +165,7 @@ def _request_to_out(row: RepairRequest) -> RepairRequestOut:
         pickup_location=row.pickup_location,
         created_at=row.created_at,
         version=row.version,
+        requester_name=requester_name,
     )
 
 
@@ -263,9 +266,12 @@ async def list_user_tickets(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     # 找employee_id對應的user_id，前提是employee_id不會重複
-    requester_user_id = (await db.scalars(select(User.id).where(User.employee_id == employee_id))).first()
-    if requester_user_id is None:
+    requester_row = (await db.execute(select(User).where(User.employee_id == employee_id))).scalar_one_or_none()
+    if requester_row is None:
         raise HTTPException(status_code=404, detail="user not found")
+
+    requester_user_id = requester_row.id
+    requester_name = requester_row.name
 
     rows = (
         await db.scalars(
@@ -297,7 +303,7 @@ async def list_user_tickets(
 
     result: list[RepairRequestWithAttachments] = []
     for r in rows:
-        result.append(RepairRequestWithAttachments(request=_request_to_out(r), attachment=attachments_map.get(r.id)))
+        result.append(RepairRequestWithAttachments(request=_request_to_out(r, requester_name=requester_name), attachment=attachments_map.get(r.id)))
 
     return result
 
@@ -313,6 +319,9 @@ async def get_ticket(
         # 權限判斷：ADMIN 可讀取所有表單，USER 只能讀取自己的表單
         if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
             raise HTTPException(status_code=403, detail="Forbidden")
+        if request_row.requester_name is None:
+            requester = await db.get(User, request_row.requester_id)
+            request_row.requester_name = requester.name if requester else None
         return request_row
 
     row = await db.get(RepairRequest, ticket_id)
@@ -323,7 +332,8 @@ async def get_ticket(
     if user.get("role") != "ADMIN" and row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    result = _request_to_out(row)
+    requester = await db.get(User, row.requester_id)
+    result = _request_to_out(row, requester_name=requester.name if requester else None)
     await redis.setex(cache_key, CACHE_TTL_SECONDS, result.model_dump_json())
     return result
 
@@ -420,6 +430,17 @@ async def update_ticket_status(
     old_status = row.status
     row.status = payload.status
     row.version += 1
+
+    # 同步資產狀態：進入維修中→MAINTENANCE；完成或取消→恢復 IN_USE / AVAILABLE
+    asset_row = await db.get(Asset, row.asset_id)
+    if asset_row is not None:
+        if payload.status == "IN_PROGRESS":
+            asset_row.status = AssetStatus.MAINTENANCE
+            asset_row.version += 1
+        elif payload.status in ("DONE", "CANCELLED"):
+            asset_row.status = AssetStatus.IN_USE if asset_row.owner_id is not None else AssetStatus.AVAILABLE
+            asset_row.version += 1
+
     await log_action(
         db,
         user_id=user["user_id"],
@@ -433,7 +454,8 @@ async def update_ticket_status(
     await db.commit()
     await db.refresh(row)
 
-    result = _request_to_out(row)
+    requester = await db.get(User, row.requester_id)
+    result = _request_to_out(row, requester_name=requester.name if requester else None)
     await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
     return result
 

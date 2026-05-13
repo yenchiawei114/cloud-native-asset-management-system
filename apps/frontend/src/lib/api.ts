@@ -166,6 +166,13 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
+  updateMyEmail: (email: string) =>
+    http<User>("/api/users/me/email", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    }),
+
   getNotificationPreferences: () =>
     http<NotificationPreference[]>("/api/users/me/notification-preferences"),
 

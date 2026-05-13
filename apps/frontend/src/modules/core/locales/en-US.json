@@ -66,10 +66,14 @@
     "table": {
       "assetCode": "Asset Code",
       "assetName": "Asset Name",
-      "type": "Type",
+      "type": "Category",
+      "model": "Model",
+      "specs": "Specs",
       "status": "Status",
-      "location": "Location",
-      "lastUpdate": "Last Update"
+      "custodian": "Custodian",
+      "location": "Office Location",
+      "lastUpdate": "Last Update",
+      "actions": "Actions"
     },
     "employee": {
       "portfolio": "Personal Portfolio",
@@ -80,6 +84,9 @@
       "assetList": "Asset List",
       "noAssignedAssets": "No Assigned Assets",
       "noAssignedAssetsDesc": "There are currently no assets assigned to your account. Please contact IT if you have questions.",
+      "noMatchingAssets": "No assets match your search",
+      "searchPlaceholder": "Search asset code, model, or specs...",
+      "allCategories": "All Categories",
       "recentRequests": "Recent Repair Requests",
       "noRequests": "No active repair requests at the moment.",
       "noAssets": "No asset data available",
@@ -234,6 +241,7 @@
   "common": {
     "save": "Save Changes",
     "cancel": "Cancel",
+    "search": "Search",
     "edit": "Edit Profile",
     "delete": "Delete",
     "back": "Back",

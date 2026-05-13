@@ -54,6 +54,10 @@ class ChangePasswordPayload(BaseModel):
 	new_password: str = Field(min_length=1)
 
 
+class ChangeEmailPayload(BaseModel):
+	email: str = Field(min_length=1)
+
+
 class NotificationPreferencePayload(BaseModel):
 	type: Literal["EMAIL", "SLACK", "TEAMS"]
 	value: str
@@ -202,6 +206,34 @@ async def change_my_password(
 	await db.commit()
 
 	return {"message": "password updated"}
+
+
+@router.put("/users/me/email", response_model=UserOut)
+async def change_my_email(
+	payload: ChangeEmailPayload,
+	user=Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> UserOut:
+	user_id = user.get("user_id")
+	row = await db.get(User, user_id)
+	if row is None:
+		raise HTTPException(status_code=404, detail="user not found")
+
+	before_email = row.email
+	row.email = payload.email
+	await log_action(
+		db,
+		user_id=user_id,
+		actor_name=user.get("name"),
+		action=Action.UPDATE,
+		target_type=TargetType.USER,
+		target_id=user_id,
+		target_name=row.name,
+		detail={"before": {"email": before_email}, "after": {"email": payload.email}},
+	)
+	await db.commit()
+	await db.refresh(row)
+	return _user_to_out(row)
 
 
 @router.get("/users/me/notification-preferences", response_model=list[NotificationPreferenceOut])

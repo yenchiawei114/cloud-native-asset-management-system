@@ -17,7 +17,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
 
   const employeeNav = [
     { id: 'assets', label: t('auth.nav.myAssets'), icon: 'inventory_2', path: '/dashboard' },
-    { id: 'repair', label: t('auth.nav.repairHistory'), icon: 'history_edu', path: '/repair-history' },
     { id: 'profile', label: t('auth.nav.profile'), icon: 'person', path: '/profile' },
   ];
 
@@ -32,7 +31,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
   const navItems = isAdmin ? adminNav : employeeNav;
 
   return (
-    <div className="min-h-screen bg-surface flex">
+    <div className="h-screen bg-surface flex overflow-hidden">
       {/* Side Navigation */}
       <aside className="h-screen w-64 fixed left-0 top-0 bg-slate-100 dark:bg-slate-950 flex flex-col py-6 px-4 gap-2 z-50">
         <div className="mb-8 px-2">
@@ -65,13 +64,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
         </nav>
 
         <div className="mt-auto space-y-2">
-          <Link 
-            to={isAdmin ? "/all-assets/new" : "/repair-history?view=new"}
-            className="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary py-3 px-4 rounded-xl font-headline font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
-          >
-            <span className="material-symbols-outlined text-sm">{isAdmin ? 'add_circle' : 'add'}</span>
-            {isAdmin ? t('auth.nav.addNewAsset') : t('auth.nav.addNewRequest')}
-          </Link>
+          {isAdmin && (
+            <Link
+              to="/all-assets/new"
+              className="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary py-3 px-4 rounded-xl font-headline font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-sm">add_circle</span>
+              {t('auth.nav.addNewAsset')}
+            </Link>
+          )}
           <button 
             onClick={logout}
             className="w-full text-slate-500 hover:text-error hover:bg-error/5 py-2 px-4 rounded-lg font-medium text-xs transition-colors flex items-center justify-center gap-2"
@@ -83,21 +84,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
       </aside>
 
       {/* Main Content Wrapper */}
-      <div className="ml-64 flex-1 flex flex-col">
+      <div className="ml-64 flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header Navigation */}
         <header className="bg-slate-50/85 dark:bg-slate-900/85 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm flex justify-between items-center w-full px-8 py-3">
-          <div className="flex items-center gap-8">
-            <div className="relative group">
-              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
-                <span className="material-symbols-outlined text-lg">search</span>
-              </span>
-              <input 
-                className="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-sm w-64 focus:ring-2 focus:ring-primary/20 transition-all outline-none" 
-                placeholder={isAdmin ? t('auth.nav.searchAllAssets') : t('auth.nav.searchMyAssets')} 
-                type="text"
-              />
-            </div>
-          </div>
+          <div />
           <div className="flex items-center gap-4">
             <button 
               onClick={() => {
@@ -126,7 +116,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
         </header>
 
         {/* Content Canvas */}
-        <main className="p-8 bg-surface flex-1">
+        <main className="p-8 bg-surface flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
       </div>

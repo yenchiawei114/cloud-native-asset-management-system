@@ -66,10 +66,14 @@
     "table": {
       "assetCode": "資產編號",
       "assetName": "資產名稱",
-      "type": "類別",
+      "type": "分類",
+      "model": "型號",
+      "specs": "規格",
       "status": "當前狀態",
-      "location": "存放地點",
-      "lastUpdate": "最後更新"
+      "custodian": "保管人",
+      "location": "辦公地點",
+      "lastUpdate": "最後更新",
+      "actions": "操作"
     },
     "employee": {
       "portfolio": "個人資產組合",
@@ -80,6 +84,9 @@
       "assetList": "資產清單",
       "noAssignedAssets": "尚無指派資產",
       "noAssignedAssetsDesc": "目前您的帳號下沒有任何已領用的資產。如有疑問請洽 IT 部門。",
+      "noMatchingAssets": "沒有符合條件的資產",
+      "searchPlaceholder": "搜尋資產編號、型號、規格...",
+      "allCategories": "全部分類",
       "recentRequests": "最近維修申請",
       "noRequests": "目前沒有申請中的維修工單。",
       "noAssets": "目前無資產資料",
@@ -234,6 +241,7 @@
   "common": {
     "save": "儲存變更",
     "cancel": "取消",
+    "search": "搜尋",
     "edit": "編輯資料",
     "delete": "刪除",
     "back": "返回",

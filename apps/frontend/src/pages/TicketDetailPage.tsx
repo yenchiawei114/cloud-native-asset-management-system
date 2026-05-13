@@ -9,6 +9,13 @@ import { ticketService } from '../modules/ticketing/services/ticketService';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
 
+const EMPLOYEE_STATUS_BADGE: Record<string, string> = {
+  OPEN: 'bg-amber-100 text-amber-700',
+  IN_PROGRESS: 'bg-blue-100 text-blue-700',
+  DONE: 'bg-green-100 text-green-700',
+  CANCELLED: 'bg-slate-100 text-slate-500',
+};
+
 export const TicketDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -37,6 +44,7 @@ export const TicketDetailPage: React.FC = () => {
   const [selectedRecordFiles, setSelectedRecordFiles] = useState<File[]>([]);
   const [selectedInspectionFiles, setSelectedInspectionFiles] = useState<File[]>([]);
   const [isEditingRecord, setIsEditingRecord] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'ADMIN';
   const backPath = isAdmin ? '/ticket-review' : '/repair-history';
@@ -231,13 +239,116 @@ export const TicketDetailPage: React.FC = () => {
     );
   }
 
+  /* ── Employee simplified view ── */
+  if (!isAdmin) {
+    const requestAttachments = attachments.filter(a => a.attachable_type === 'REPAIR_REQUEST');
+    return (
+      <DashboardLayout activeTab="assets">
+        <div className="max-w-2xl mx-auto space-y-5 pb-12 animate-in fade-in duration-300">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center text-primary font-semibold text-sm gap-1 hover:gap-1.5 transition-all group"
+          >
+            <span className="material-symbols-outlined text-sm">arrow_back</span>
+            返回
+          </button>
+
+          {/* Ticket header */}
+          <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">維修工單</p>
+                <h2 className="text-2xl font-black font-headline text-on-surface">
+                  #TK-{ticket.id.toString().padStart(5, '0')}
+                </h2>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold ${EMPLOYEE_STATUS_BADGE[ticket.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                {t(`ticketing.status.${ticket.status}`)}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-x-8 gap-y-3 pt-3 border-t border-slate-100">
+              <InfoItem label="申請人" value={ticket.requester_name ?? '—'} />
+              <InfoItem label="申請日期" value={new Date(ticket.created_at).toLocaleDateString()} />
+              <InfoItem label="資產" value={asset ? `${asset.name}（${asset.asset_code}）` : '—'} />
+            </div>
+          </div>
+
+          {/* Fault description */}
+          <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-2">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">故障描述</p>
+            <p className="text-sm text-on-surface leading-relaxed">{ticket.description}</p>
+          </div>
+
+          {/* Backup need */}
+          <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-2">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">備用機需求</p>
+            {ticket.need_backup ? (
+              <div className="space-y-1">
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                  <span className="material-symbols-outlined text-sm">check_circle</span>
+                  需要備用機
+                </span>
+                {ticket.backup_spec && (
+                  <p className="text-sm text-on-surface-variant">{ticket.backup_spec}</p>
+                )}
+              </div>
+            ) : (
+              <span className="text-sm text-on-surface-variant">不需要備用機</span>
+            )}
+          </div>
+
+          {/* Attachments with lightbox */}
+          <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-3">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">附件照片</p>
+            {requestAttachments.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">無附件</p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {requestAttachments.map(file => (
+                  <button
+                    key={file.id}
+                    onClick={() => setLightboxUrl(file.file_url)}
+                    className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 hover:scale-105 transition-all shadow-sm"
+                  >
+                    <img src={file.file_url} alt={file.file_name} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Lightbox */}
+        {lightboxUrl && (
+          <div
+            className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <img
+              src={lightboxUrl}
+              alt="attachment"
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl"
+            />
+            <button
+              className="absolute top-5 right-5 text-white/80 hover:text-white transition-colors"
+              onClick={() => setLightboxUrl(null)}
+            >
+              <span className="material-symbols-outlined text-3xl">close</span>
+            </button>
+          </div>
+        )}
+      </DashboardLayout>
+    );
+  }
+
+  /* ── Admin full view ── */
   return (
     <DashboardLayout activeTab="tickets">
       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
         {/* Top Header */}
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-1">
-            <button 
+            <button
               onClick={() => navigate(backPath)}
               className="flex items-center text-primary font-semibold text-sm gap-1 hover:gap-2 transition-all mb-4 group"
             >
@@ -776,8 +887,8 @@ export const TicketDetailPage: React.FC = () => {
         </div>
       )}
       {/* Feedback Dialog */}
-      <FeedbackDialog 
-        {...feedbackState} 
+      <FeedbackDialog
+        {...feedbackState}
         onConfirm={() => {
           feedbackState.onConfirm?.();
           closeFeedback();
@@ -787,3 +898,12 @@ export const TicketDetailPage: React.FC = () => {
     </DashboardLayout>
   );
 };
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+      <p className="text-sm font-semibold text-on-surface">{value}</p>
+    </div>
+  );
+}

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
 from app.core.db import get_db
+from app.core.security import hash_password, verify_password
 from app.models import NotificationPreference, User
 from app.models.audit_log import Action, TargetType
 from app.models.notification_preference import NoteType
@@ -124,7 +125,7 @@ async def _register_with_role(
 
 	row = User(
 		employee_id=payload.employee_id,
-		password=payload.password,
+		password=hash_password(payload.password),
 		name=payload.name,
 		sex=Sex[payload.sex],
 		department_id=payload.department_id,
@@ -180,12 +181,12 @@ async def change_my_password(
 	row = await db.get(User, user_id)
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
-	if row.password != payload.current_password:
+	if not verify_password(payload.current_password, row.password):
 		raise HTTPException(status_code=401, detail="invalid current password")
 	if payload.current_password == payload.new_password:
 		raise HTTPException(status_code=422, detail="new password must be different")
 
-	row.password = payload.new_password
+	row.password = hash_password(payload.new_password)
 	row.must_change_password = False
 	row.last_password_changed_at = datetime.now(timezone.utc)
 	await log_action(
@@ -332,7 +333,7 @@ async def admin_update_user(
 	if payload.email is not None:
 		row.email = payload.email
 	if payload.password is not None:
-		row.password = payload.password
+		row.password = hash_password(payload.password)
 
 	after = _user_to_out(row).model_dump(mode="json")
 	await log_action(

@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import get_db
-from app.models.user import User
 from app.core.security import create_access_token
+from app.core.security import verify_password
+from app.core.db import get_db
 from app.api.deps import get_current_user
+from app.models.user import User
 
 from pydantic import BaseModel
 
@@ -21,7 +22,7 @@ router = APIRouter()
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.employee_id == data.employee_id))).scalar_one_or_none()
 
-    if not user or (data.password != user.password):
+    if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({

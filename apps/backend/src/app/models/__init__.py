@@ -1,4 +1,4 @@
-from app.models.asset import Asset
+from app.models.asset import Asset, AssetTransfer
 from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.department import Department
@@ -8,6 +8,7 @@ from app.models.ticket import RepairRequest, RepairRecord, RepairInspection, Att
 
 __all__ = [
     "Asset",
+    "AssetTransfer",
     "AuditLog",
     "Base",
     "Department",

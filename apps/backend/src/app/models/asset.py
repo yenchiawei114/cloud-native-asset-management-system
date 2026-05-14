@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from enum import Enum as PyEnum
-from sqlalchemy import Index, BigInteger, Integer, CHAR, String, DateTime, Date, Enum, ForeignKey, func
+from sqlalchemy import Index, BigInteger, Boolean, Integer, CHAR, String, DateTime, Date, Enum, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
@@ -65,3 +65,33 @@ class Asset(Base):
 
     owner: Mapped["User"] = relationship("User", back_populates="assets")
     repair_requests: Mapped[list["RepairRequest"]] = relationship("RepairRequest", back_populates="target_asset")
+    transfers: Mapped[list["AssetTransfer"]] = relationship("AssetTransfer", back_populates="asset", foreign_keys="AssetTransfer.asset_id")
+
+
+class AssetTransferStatus(PyEnum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class AssetTransfer(Base):
+    __tablename__ = "asset_transfers"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), nullable=False)
+    initiator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    from_owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    to_owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum("PENDING", "COMPLETED", "CANCELLED", name="asset_transfer_status"),
+        nullable=False,
+        default="PENDING",
+    )
+    from_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    to_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    asset: Mapped["Asset"] = relationship("Asset", back_populates="transfers", foreign_keys=[asset_id])
+    initiator: Mapped["User"] = relationship("User", foreign_keys=[initiator_id])
+    from_owner: Mapped["User"] = relationship("User", foreign_keys=[from_owner_id])
+    to_owner: Mapped["User"] = relationship("User", foreign_keys=[to_owner_id])

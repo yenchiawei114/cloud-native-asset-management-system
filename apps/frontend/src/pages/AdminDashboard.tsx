@@ -2,153 +2,391 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
-import { useAuth } from '../modules/auth/hooks/useAuth';
 import { useAssets } from '../modules/assets/hooks/useAssets';
+import { AddAssetDialog } from '../modules/assets/components/AddAssetDialog';
+import { AssetTransferDialog } from '../modules/assets/components/AssetTransferDialog';
+import { api, Asset } from '../lib/api';
+import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
+
+const ASSET_TYPES = [
+  { value: '', label: '所有類別' },
+  { value: 'laptop', label: '筆電' },
+  { value: 'desktop', label: '桌機' },
+  { value: 'phone', label: '手機' },
+  { value: 'tablet', label: '平板' },
+  { value: 'server', label: '伺服器' },
+  { value: 'network', label: '網路設備' },
+  { value: 'other', label: '其他' },
+];
+
+const ASSET_TYPE_OPTIONS = ASSET_TYPES.filter(t => t.value);
+
+const ASSET_STATUSES = [
+  { value: '', label: '所有狀態' },
+  { value: 'in_use', label: '使用中' },
+  { value: 'available', label: '閒置' },
+  { value: 'maintenance', label: '維修中' },
+  { value: 'borrowed', label: '已借出' },
+];
+
+const ASSET_STATUS_OPTIONS = ASSET_STATUSES.filter(s => s.value);
+
+interface SearchState {
+  asset_code_q: string;
+  name_q: string;
+  model_q: string;
+  spec_q: string;
+  owner_q: string;
+  asset_type: string;
+  status: string;
+}
+
+const EMPTY_SEARCH: SearchState = {
+  asset_code_q: '', name_q: '', model_q: '', spec_q: '', owner_q: '',
+  asset_type: '', status: '',
+};
 
 export const AdminDashboard: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const { assets, loading } = useAssets({ keyword: searchTerm, status: statusFilter === 'ALL' ? undefined : statusFilter });
 
-  // 加入空值保護的統計計算，對齊後端枚舉值
-  const stats = {
-    total: assets.length,
-    available: assets.filter(a => a?.status === 'available').length,
-    inUse: assets.filter(a => a?.status === 'in_use').length,
-    maintenance: assets.filter(a => a?.status === 'maintenance').length,
+  const [draft, setDraft] = useState<SearchState>(EMPTY_SEARCH);
+  const [submitted, setSubmitted] = useState<SearchState>(EMPTY_SEARCH);
+
+  const { assets, loading, refresh } = useAssets({
+    asset_code_q: submitted.asset_code_q || undefined,
+    name_q: submitted.name_q || undefined,
+    model_q: submitted.model_q || undefined,
+    spec_q: submitted.spec_q || undefined,
+    owner_q: submitted.owner_q || undefined,
+    asset_type: submitted.asset_type || undefined,
+    status: submitted.status || undefined,
+  });
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [transferAsset, setTransferAsset] = useState<Asset | null>(null);
+
+  const [editMode, setEditMode] = useState(false);
+  const [markedForDelete, setMarkedForDelete] = useState<Set<number>>(new Set());
+  const [pendingEdits, setPendingEdits] = useState<Record<number, Record<string, string>>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  const handleSearch = () => setSubmitted({ ...draft });
+  const handleClear = () => { setDraft(EMPTY_SEARCH); setSubmitted(EMPTY_SEARCH); };
+  const draftField = (key: keyof SearchState, value: string) =>
+    setDraft(prev => ({ ...prev, [key]: value }));
+
+  const toggleDelete = (id: number) =>
+    setMarkedForDelete(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const setFieldEdit = (assetId: number, field: string, value: string) =>
+    setPendingEdits(prev => ({
+      ...prev,
+      [assetId]: { ...(prev[assetId] ?? {}), [field]: value },
+    }));
+
+  const getFieldValue = (asset: Asset, field: keyof Asset) =>
+    (pendingEdits[asset.id]?.[field as string] ?? String(asset[field] ?? '')) as string;
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError('');
+    try {
+      const deleteResults = await Promise.allSettled(
+        [...markedForDelete].map(id => api.deleteAsset(id))
+      );
+      const deleteFailed = deleteResults.filter(r => r.status === 'rejected').length;
+
+      const updateTargets = Object.entries(pendingEdits).filter(
+        ([id]) => !markedForDelete.has(Number(id))
+      );
+      const updateResults = await Promise.allSettled(
+        updateTargets.map(([id, edits]) => api.updateAsset(Number(id), edits as any))
+      );
+      const updateFailed = updateResults.filter(r => r.status === 'rejected').length;
+
+      if (deleteFailed > 0 || updateFailed > 0) {
+        setSaveError(`部分操作失敗：${deleteFailed > 0 ? `${deleteFailed} 筆刪除失敗` : ''}${updateFailed > 0 ? `${updateFailed} 筆更新失敗` : ''}`);
+      }
+
+      setMarkedForDelete(new Set());
+      setPendingEdits({});
+      setEditMode(false);
+      refresh();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditMode(false);
+    setMarkedForDelete(new Set());
+    setPendingEdits({});
+    setSaveError('');
   };
 
   if (loading) {
     return (
       <DashboardLayout activeTab="all">
         <div className="flex items-center justify-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
         </div>
       </DashboardLayout>
     );
   }
 
+  const deleteCount = markedForDelete.size;
+  const editCount = Object.keys(pendingEdits).filter(id => !markedForDelete.has(Number(id))).length;
+
   return (
     <DashboardLayout activeTab="all">
-      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {/* Page Header */}
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-on-surface">
-              {t('auth.nav.allAssets')}
-            </h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-on-surface">{t('auth.nav.allAssets')}</h1>
             <p className="text-on-surface-variant mt-1 font-medium">{t('dashboard.employee.assetManagementDesc')}</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="px-4 py-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-sm font-semibold rounded-md flex items-center gap-2 transition-colors">
-              <span className="material-symbols-outlined text-lg">file_download</span>
-              {t('auth.nav.exportData')}
-            </button>
-            <button 
-              onClick={() => navigate('/all-assets/new')}
-              className="px-4 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary text-sm font-bold rounded-md flex items-center gap-2 transition-transform active:scale-95"
-            >
-              <span className="material-symbols-outlined text-lg">add_circle</span>
-              {t('auth.nav.addNewAsset')}
-            </button>
+            {editMode ? (
+              <>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-4 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">save</span>
+                  {saving ? '儲存中...' : `存檔${deleteCount > 0 || editCount > 0 ? `（${[deleteCount > 0 && `刪除 ${deleteCount}`, editCount > 0 && `更新 ${editCount}`].filter(Boolean).join('、')}）` : ''}`}
+                </button>
+                <button onClick={cancelEdit} className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors">
+                  取消
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setEditMode(true)} className="px-4 py-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors">
+                  <span className="material-symbols-outlined text-sm">edit</span>編輯
+                </button>
+                <button onClick={() => setAddOpen(true)} className="px-4 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary text-sm font-bold rounded-lg flex items-center gap-2 transition-transform active:scale-95">
+                  <span className="material-symbols-outlined text-sm">add_circle</span>{t('auth.nav.addNewAsset')}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Bento Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title={t('dashboard.stats.total')} value={stats.total} icon="inventory" colorScheme="primary" />
-          <StatCard title={t('dashboard.stats.available')} value={stats.available} icon="timer" colorScheme="secondary" />
-          <StatCard title={t('dashboard.stats.inUse')} value={stats.inUse} icon="person" colorScheme="tertiary" />
-          <StatCard title={t('dashboard.stats.maintenance')} value={stats.maintenance} icon="build" colorScheme="error" />
-        </div>
+        {saveError && (
+          <div className="bg-error-container/20 border border-error/30 rounded-lg px-4 py-2 text-sm text-error font-medium">
+            {saveError}
+          </div>
+        )}
 
-        {/* Filters */}
-        <section className="bg-surface-container-low rounded-xl p-6 relative overflow-hidden border border-outline-variant/10">
-          <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-1">{t('dashboard.filters.search')}</label>
-              <input 
-                className="w-full bg-surface-container-highest border-none rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" 
-                placeholder={t('dashboard.filters.searchPlaceholder')} 
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-1">{t('dashboard.filters.status')}</label>
-              <select 
-                className="w-full bg-surface-container-highest border-none rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary appearance-none outline-none"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+        <PendingTransfersBanner />
+
+        {/* Search */}
+        <section className="bg-surface-container-low rounded-xl p-5 border border-outline-variant/10">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+            <SearchInput label="資產編號" value={draft.asset_code_q} onChange={v => draftField('asset_code_q', v)} placeholder="A0000001" />
+            <SearchInput label="資產名稱" value={draft.name_q} onChange={v => draftField('name_q', v)} placeholder="MacBook Pro" />
+            <SearchInput label="型號" value={draft.model_q} onChange={v => draftField('model_q', v)} placeholder="MBP14-M3" />
+            <SearchInput label="規格" value={draft.spec_q} onChange={v => draftField('spec_q', v)} placeholder="16GB 512GB" />
+            <SearchInput label="保管人（姓名/工號）" value={draft.owner_q} onChange={v => draftField('owner_q', v)} placeholder="王小明 / A12345678" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">分類</label>
+              <select
+                value={draft.asset_type}
+                onChange={e => draftField('asset_type', e.target.value)}
+                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
-                <option value="ALL">{t('dashboard.filters.allStatus')}</option>
-                <option value="in_use">{t('assets.status.in_use')}</option>
-                <option value="available">{t('assets.status.available')}</option>
-                <option value="maintenance">{t('assets.status.maintenance')}</option>
-                <option value="borrowed">{t('assets.status.borrowed')}</option>
+                {ASSET_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">狀態</label>
+              <select
+                value={draft.status}
+                onChange={e => draftField('status', e.target.value)}
+                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
+              >
+                {ASSET_STATUSES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div className="flex items-end gap-2">
+              <button onClick={handleSearch} className="flex-1 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-1">
+                <span className="material-symbols-outlined text-sm">search</span>搜尋
+              </button>
+              <button onClick={handleClear} className="flex-1 py-2 bg-surface-container-highest text-on-surface-variant text-sm font-semibold rounded-lg hover:bg-surface-container transition-colors flex items-center justify-center gap-1">
+                <span className="material-symbols-outlined text-sm">clear_all</span>清空
+              </button>
             </div>
           </div>
         </section>
 
-        {/* Data Table */}
-        <div className="bg-surface-container-lowest rounded-xl overflow-hidden flex flex-col shadow-sm border border-outline-variant/10">
+        {/* Table */}
+        <div className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/10">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-separate border-spacing-y-2 px-6 pb-4">
+            <table className="w-full text-left text-sm">
               <thead>
-                <tr className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-                  <th className="px-4 py-3">{t('dashboard.table.assetCode')}</th>
-                  <th className="px-4 py-3">{t('dashboard.table.assetName')}</th>
-                  <th className="px-4 py-3 text-center">{t('dashboard.table.status')}</th>
-                  <th className="px-4 py-3 text-right">Action</th>
+                <tr className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
+                  {editMode && <th className="px-3 py-3 w-10" />}
+                  <th className="px-4 py-3">資產編號</th>
+                  <th className="px-4 py-3">資產名稱</th>
+                  <th className="px-4 py-3 text-center">狀態</th>
+                  <th className="px-4 py-3">分類</th>
+                  <th className="px-4 py-3">型號</th>
+                  <th className="px-4 py-3">規格</th>
+                  <th className="px-4 py-3">保管人</th>
+                  <th className="px-4 py-3">辦公地點</th>
+                  <th className="px-4 py-3 text-right">操作</th>
                 </tr>
               </thead>
-              <tbody className="text-sm">
-                {assets.length > 0 ? assets.map((asset) => (
-                  <tr 
-                    key={asset.id} 
-                    onClick={() => navigate(`/assets/${asset.id}`)}
-                    className="group hover:bg-surface-container-low transition-colors duration-200 cursor-pointer"
-                  >
-                    <td className="px-4 py-4 font-mono font-bold text-primary rounded-l-xl border-y border-l border-transparent group-hover:border-outline-variant/10">
-                      {asset?.asset_code || 'N/A'}
-                    </td>
-                    <td className="px-4 py-4 border-y border-transparent group-hover:border-outline-variant/10">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-outline shadow-inner">
-                          <span className="material-symbols-outlined">laptop_mac</span>
-                        </div>
-                        <div>
-                          <p className="font-bold text-on-surface">{asset?.name || 'Unknown Asset'}</p>
-                          <p className="text-[10px] text-on-surface-variant uppercase font-medium">
-                            {t(`assets.type.${asset?.type?.toLowerCase() || 'other'}`)} • {asset?.model || 'Generic'}
+              <tbody className="divide-y divide-outline-variant/5">
+                {assets.map(asset => {
+                  const marked = markedForDelete.has(asset.id);
+                  const val = (f: keyof Asset) => getFieldValue(asset, f);
+                  const set = (f: string, v: string) => setFieldEdit(asset.id, f, v);
+
+                  return (
+                    <tr
+                      key={asset.id}
+                      className={`transition-colors ${marked ? 'bg-error-container/10 opacity-50' : 'hover:bg-surface-container-low'}`}
+                    >
+                      {editMode && (
+                        <td className="px-3 py-3">
+                          <button
+                            onClick={() => toggleDelete(asset.id)}
+                            title={marked ? '取消刪除' : '刪除'}
+                            className={`p-1 rounded-lg transition-colors ${marked ? 'text-error bg-error/10' : 'text-on-surface-variant hover:text-error hover:bg-error/10'}`}
+                          >
+                            <span className="material-symbols-outlined text-sm">
+                              {marked ? 'restore_from_trash' : 'delete'}
+                            </span>
+                          </button>
+                        </td>
+                      )}
+
+                      {/* 資產編號 */}
+                      <td className="px-4 py-3">
+                        {editMode && !marked ? (
+                          <input value={val('asset_code')} onChange={e => set('asset_code', e.target.value)}
+                            className={inlineCls} maxLength={10} />
+                        ) : (
+                          <span className={`font-mono font-bold text-primary text-xs ${marked ? 'line-through' : ''}`}>
+                            {asset.asset_code}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 資產名稱 */}
+                      <td className="px-4 py-3">
+                        {editMode && !marked ? (
+                          <input value={val('name')} onChange={e => set('name', e.target.value)}
+                            className={inlineCls} />
+                        ) : (
+                          <p className={`font-semibold text-on-surface ${marked ? 'line-through' : ''}`}>
+                            {asset.name}
                           </p>
+                        )}
+                      </td>
+
+                      {/* 狀態 */}
+                      <td className="px-4 py-3 text-center">
+                        {editMode && !marked ? (
+                          <select value={val('status')} onChange={e => set('status', e.target.value)} className={inlineCls}>
+                            {ASSET_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                          </select>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyle(asset.status)} ${marked ? 'opacity-60' : ''}`}>
+                            {ASSET_STATUS_OPTIONS.find(s => s.value === asset.status)?.label ?? asset.status}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 分類 */}
+                      <td className="px-4 py-3 text-on-surface-variant text-xs">
+                        {editMode && !marked ? (
+                          <select value={val('type')} onChange={e => set('type', e.target.value)} className={inlineCls}>
+                            {ASSET_TYPE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                        ) : (
+                          ASSET_TYPE_OPTIONS.find(t => t.value === asset.type)?.label ?? asset.type
+                        )}
+                      </td>
+
+                      {/* 型號 */}
+                      <td className="px-4 py-3 text-on-surface-variant max-w-[120px]">
+                        {editMode && !marked ? (
+                          <input value={val('model')} onChange={e => set('model', e.target.value)}
+                            className={inlineCls} placeholder="型號" />
+                        ) : (
+                          <span className="truncate block">{asset.model || '—'}</span>
+                        )}
+                      </td>
+
+                      {/* 規格 */}
+                      <td className="px-4 py-3 text-on-surface-variant max-w-[150px]">
+                        {editMode && !marked ? (
+                          <input value={val('specification')} onChange={e => set('specification', e.target.value)}
+                            className={inlineCls} placeholder="規格" />
+                        ) : (
+                          <span className="truncate block">{asset.specification || '—'}</span>
+                        )}
+                      </td>
+
+                      {/* 保管人（鎖定） */}
+                      <td className="px-4 py-3 text-on-surface-variant">
+                        {asset.owner_name ? (
+                          <div>
+                            <p className="font-medium text-on-surface">{asset.owner_name}</p>
+                            <p className="text-[10px] font-mono">{asset.owner_employee_id}</p>
+                          </div>
+                        ) : '—'}
+                      </td>
+
+                      {/* 辦公地點 */}
+                      <td className="px-4 py-3 text-on-surface-variant">
+                        {editMode && !marked ? (
+                          <input value={val('storage_location')} onChange={e => set('storage_location', e.target.value)}
+                            className={inlineCls} placeholder="辦公地點" />
+                        ) : (
+                          asset.storage_location || '—'
+                        )}
+                      </td>
+
+                      {/* 操作 */}
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-1">
+                          <ActionBtn
+                            icon="build"
+                            label="維修紀錄"
+                            onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
+                            disabled={marked}
+                          />
+                          {!editMode && (
+                            <ActionBtn
+                              icon="swap_horiz"
+                              label="資產轉移"
+                              onClick={() => setTransferAsset(asset)}
+                            />
+                          )}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 border-y border-transparent group-hover:border-outline-variant/10 text-center">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusStyle(asset?.status)}`}>
-                        {t(`assets.status.${asset?.status || 'unknown'}`)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-right rounded-r-xl border-y border-r border-transparent group-hover:border-outline-variant/10">
-                      <button className="p-2 hover:bg-surface-container-highest rounded-full transition-colors text-outline">
-                        <span className="material-symbols-outlined">more_vert</span>
-                      </button>
-                    </td>
-                  </tr>
-                )) : (
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {assets.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-20 text-center">
-                      <div className="flex flex-col items-center opacity-40">
-                        <span className="material-symbols-outlined text-7xl mb-4">database_off</span>
-                        <h3 className="text-lg font-bold">{t('dashboard.employee.noAssets')}</h3>
-                        <p className="text-xs">{t('dashboard.adjustFilters')}</p>
-                      </div>
+                    <td colSpan={editMode ? 10 : 9} className="py-20 text-center opacity-40">
+                      <span className="material-symbols-outlined text-6xl mb-4 block">database_off</span>
+                      <p className="font-bold">{t('dashboard.employee.noAssets')}</p>
                     </td>
                   </tr>
                 )}
@@ -157,50 +395,49 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <AddAssetDialog open={addOpen} onClose={() => setAddOpen(false)} onCreated={refresh} />
+      <AssetTransferDialog
+        asset={transferAsset}
+        onClose={() => setTransferAsset(null)}
+        onTransferInitiated={refresh}
+      />
     </DashboardLayout>
   );
 };
 
-interface StatCardProps {
-  title: string;
-  value: number;
-  icon: string;
-  colorScheme: 'primary' | 'error' | 'secondary' | 'tertiary';
-  fillIcon?: boolean;
-}
+const inlineCls = "w-full bg-surface-container-highest rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary min-w-[80px]";
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, colorScheme, fillIcon }) => {
-  const colorMap = {
-    primary: 'border-primary text-primary bg-primary-container/10',
-    error: 'border-error text-error bg-error-container/10',
-    secondary: 'border-secondary text-secondary bg-secondary-container/10',
-    tertiary: 'border-tertiary text-tertiary bg-tertiary-fixed/10',
-  };
-
-  const scheme = colorMap[colorScheme] || colorMap.primary;
-
-  return (
-    <div className={`bg-surface-container-lowest p-6 rounded-xl shadow-sm border-b-4 ${scheme.split(' ')[0]} transition-all hover:-translate-y-1 hover:shadow-md`}>
-      <div className="flex justify-between items-start mb-4">
-        <div className={`p-2 rounded-lg ${scheme.split(' ').slice(1).join(' ')}`}>
-          <span className="material-symbols-outlined" style={{ fontVariationSettings: fillIcon ? "'FILL' 1" : "" }}>{icon}</span>
-        </div>
-        <span className="text-[10px] font-bold text-on-surface-variant tracking-widest uppercase">{title}</span>
-      </div>
-      <div className="flex items-end gap-2">
-        <span className="text-4xl font-black text-on-surface tracking-tight">{value.toLocaleString()}</span>
-      </div>
-    </div>
-  );
-};
-
-const getStatusStyle = (status: string | undefined) => {
-  const s = status?.toLowerCase() || 'unknown';
-  switch (s) {
-    case 'available': return 'bg-green-100 text-green-700 border border-green-200';
-    case 'in_use': return 'bg-blue-100 text-blue-700 border border-blue-200';
-    case 'maintenance': return 'bg-amber-100 text-amber-700 border border-amber-200';
-    case 'borrowed': return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
-    default: return 'bg-slate-100 text-slate-600 border border-slate-200';
+const getStatusStyle = (status: string) => {
+  switch (status) {
+    case 'available': return 'bg-green-100 text-green-700 border-green-200';
+    case 'in_use': return 'bg-blue-100 text-blue-700 border-blue-200';
+    case 'maintenance': return 'bg-amber-100 text-amber-700 border-amber-200';
+    case 'borrowed': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+    default: return 'bg-slate-100 text-slate-600 border-slate-200';
   }
 };
+
+const ActionBtn: React.FC<{ icon: string; label: string; onClick: () => void; disabled?: boolean }> = ({ icon, label, onClick, disabled }) => (
+  <button
+    onClick={onClick}
+    title={label}
+    disabled={disabled}
+    className="p-1.5 rounded-lg hover:bg-surface-container transition-colors text-on-surface-variant flex items-center gap-1 disabled:opacity-30 disabled:pointer-events-none"
+  >
+    <span className="material-symbols-outlined text-base">{icon}</span>
+    <span className="text-xs font-medium hidden xl:inline">{label}</span>
+  </button>
+);
+
+const SearchInput: React.FC<{ label: string; value: string; onChange: (v: string) => void; placeholder?: string }> = ({ label, value, onChange, placeholder }) => (
+  <div className="space-y-1">
+    <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{label}</label>
+    <input
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+    />
+  </div>
+);

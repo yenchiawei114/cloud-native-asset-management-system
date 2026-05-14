@@ -63,6 +63,8 @@ export interface Asset {
   status: string;
   created_at: string;
   version: number;
+  owner_name?: string | null;
+  owner_employee_id?: string | null;
 }
 
 export interface AssetCreatePayload {
@@ -89,6 +91,7 @@ export interface RepairRequest {
   need_backup: boolean;
   backup_spec: string | null;
   status: string;
+  reject_reason?: string | null;
   expected_completion_date: string | null;
   pickup_location: string | null;
   created_at: string;
@@ -101,6 +104,22 @@ export interface RepairRequest {
 }
 
 export type Ticket = RepairRequest;
+
+export interface AssetTransfer {
+  id: number;
+  asset_id: number;
+  initiator_id: number;
+  from_owner_id: number;
+  to_owner_id: number;
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  from_confirmed: boolean;
+  to_confirmed: boolean;
+  created_at: string;
+  asset_name?: string | null;
+  asset_code?: string | null;
+  from_owner_name?: string | null;
+  to_owner_name?: string | null;
+}
 
 export interface NotificationPreference {
   id: number;
@@ -183,7 +202,17 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
-  listAssets: (params?: { keyword?: string; status?: string; owner_employee_id?: string }) => {
+  listAssets: (params?: {
+    keyword?: string;
+    status?: string;
+    owner_employee_id?: string;
+    asset_code_q?: string;
+    name_q?: string;
+    model_q?: string;
+    spec_q?: string;
+    owner_q?: string;
+    asset_type?: string;
+  }) => {
     const cleanParams = Object.fromEntries(
       Object.entries(params || {}).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "undefined")
     );
@@ -205,6 +234,8 @@ export const api = {
     }),
   deleteAsset: (id: number) => http<void>(`/api/assets/${id}`, { method: "DELETE" }),
 
+  getAssetTickets: (assetId: number) =>
+    http<{ request: RepairRequest; attachment: { id: number; file_url: string; file_name: string } | null }[]>(`/api/assets/${assetId}/tickets`),
   listTickets: (status?: string) =>
     http<RepairRequest[]>(`/api/tickets${status && status !== 'ALL' ? `?status=${status}` : ''}`),
   listMyTickets: async (employeeId: string): Promise<RepairRequest[]> => {
@@ -219,11 +250,17 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }),
-  approveTicket: (ticketId: number, status: string = 'DONE') =>
+  approveTicket: (ticketId: number, expectedCompletionDate?: string) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status: 'IN_PROGRESS', expected_completion_date: expectedCompletionDate || null })
+    }),
+  returnTicket: (ticketId: number, reason: string) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: 'RETURNED', reject_reason: reason })
     }),
   rejectTicket: (ticketId: number, reason?: string) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
@@ -231,6 +268,34 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: 'CANCELLED', note: reason })
     }),
+  updateTicket: (ticketId: number, payload: { asset_id: number; requester_id: number; description: string; need_backup: boolean; backup_spec?: string | null; pickup_location?: string | null }) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, status: 'OPEN' })
+    }),
+  closeTicket: (ticketId: number, payload: { issue_description: string; solution: string; vendor: string; cost: number }) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }),
+  initiateTransfer: (assetId: number, toOwnerId: number) =>
+    http<AssetTransfer>(`/api/assets/${assetId}/transfers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to_owner_id: toOwnerId })
+    }),
+  getPendingTransfers: () =>
+    http<AssetTransfer[]>('/api/transfers/pending'),
+  confirmTransfer: (transferId: number) =>
+    http<AssetTransfer>(`/api/transfers/${transferId}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    }),
+  cancelTransfer: (transferId: number) =>
+    http<void>(`/api/transfers/${transferId}`, { method: "DELETE" }),
   getTicketRecord: (ticketId: number) =>
     http<any>(`/api/tickets/${ticketId}/record`),
   getTicketInspection: (ticketId: number) =>
@@ -245,6 +310,8 @@ export const api = {
       method: "POST",
       body: formData
     }),
+  deleteAttachment: (attachmentId: number) =>
+    http<void>(`/api/attachments/${attachmentId}`, { method: "DELETE" }),
   createTicketRecord: (ticketId: number, payload: any) =>
     http<any>(`/api/tickets/${ticketId}/record`, {
       method: "POST",

@@ -16,6 +16,8 @@ from app.models.asset import Asset, AssetStatus
 from app.models.audit_log import Action, TargetType
 from app.core.cache import redis
 
+from app.core.email import send_email
+from app.models.asset import Asset, AssetStatus
 from app.api.deps import require_role, get_current_user
 
 admin_required = require_role("ADMIN")
@@ -41,7 +43,16 @@ class RepairRequestCreate(BaseModel):
 
 
 class RepairRequestStatusUpdate(BaseModel):
-    status: Literal["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"]
+    status: Literal["OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "RETURNED"]
+    expected_completion_date: date | None = None
+    reject_reason: str | None = None
+
+
+class CloseTicketPayload(BaseModel):
+    issue_description: str
+    solution: str
+    vendor: str
+    cost: int = 0
 
 
 class RepairRequestUpdate(BaseModel):
@@ -63,6 +74,7 @@ class RepairRequestOut(BaseModel):
     need_backup: bool
     backup_spec: str | None
     status: str
+    reject_reason: str | None = None
     expected_completion_date: date | None
     pickup_location: str | None
     created_at: datetime
@@ -161,6 +173,7 @@ def _request_to_out(row: RepairRequest, requester_name: str | None = None) -> Re
         need_backup=row.need_backup,
         backup_spec=row.backup_spec,
         status=row.status,
+        reject_reason=row.reject_reason,
         expected_completion_date=row.expected_completion_date,
         pickup_location=row.pickup_location,
         created_at=row.created_at,
@@ -254,6 +267,55 @@ async def _extract_attachment_owner(db: AsyncSession, row: Attachment, user: dic
 async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> list[RepairRequestOut]:
     rows = (await db.scalars(select(RepairRequest).order_by(RepairRequest.id.desc()))).all()
     return [_request_to_out(r) for r in rows]
+
+
+@router.get("/assets/{asset_id}/tickets", response_model=list[RepairRequestWithAttachments])
+async def list_asset_tickets(
+    asset_id: int,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+) -> list[RepairRequestWithAttachments]:
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+
+    if user.get("role") != "ADMIN" and asset.owner_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    rows = (await db.scalars(
+        select(RepairRequest)
+        .where(RepairRequest.asset_id == asset_id)
+        .order_by(RepairRequest.created_at.desc())
+    )).all()
+
+    request_ids = [r.id for r in rows]
+    attachments_map: dict[int, AttachmentOut] = {}
+    if request_ids:
+        att_rows = (await db.scalars(
+            select(Attachment)
+            .where(
+                Attachment.attachable_type == "REPAIR_REQUEST",
+                Attachment.attachable_id.in_(request_ids),
+            )
+            .order_by(Attachment.id.desc())
+        )).all()
+        for a in att_rows:
+            attachments_map.setdefault(a.attachable_id, _attachment_to_out(a))
+
+    requester_ids = {r.requester_id for r in rows}
+    requester_map: dict[int, User] = {}
+    if requester_ids:
+        requesters = (await db.scalars(select(User).where(User.id.in_(requester_ids)))).all()
+        requester_map = {u.id: u for u in requesters}
+
+    result = []
+    for r in rows:
+        requester = requester_map.get(r.requester_id)
+        result.append(RepairRequestWithAttachments(
+            request=_request_to_out(r, requester_name=requester.name if requester else None),
+            attachment=attachments_map.get(r.id),
+        ))
+    return result
 
 
 @router.get("/tickets/list/{employee_id}", response_model=list[RepairRequestWithAttachments])
@@ -392,10 +454,16 @@ async def update_ticket(
     row.description = payload.description
     row.need_backup = payload.need_backup
     row.backup_spec = payload.backup_spec
-    row.status = payload.status
     row.expected_completion_date = payload.expected_completion_date
     row.pickup_location = payload.pickup_location
     row.version += 1
+
+    # 若工單是「已退回」狀態，重送後自動重設為「待審核」並清除退回原因
+    if row.status == "RETURNED":
+        row.status = "OPEN"
+        row.reject_reason = None
+    else:
+        row.status = payload.status
 
     after = _request_to_out(row).model_dump(mode="json")
     await log_action(
@@ -431,15 +499,39 @@ async def update_ticket_status(
     row.status = payload.status
     row.version += 1
 
-    # 同步資產狀態：進入維修中→MAINTENANCE；完成或取消→恢復 IN_USE / AVAILABLE
+    # 同步資產狀態
     asset_row = await db.get(Asset, row.asset_id)
     if asset_row is not None:
         if payload.status == "IN_PROGRESS":
             asset_row.status = AssetStatus.MAINTENANCE
             asset_row.version += 1
+            if payload.expected_completion_date:
+                row.expected_completion_date = payload.expected_completion_date
         elif payload.status in ("DONE", "CANCELLED"):
             asset_row.status = AssetStatus.IN_USE if asset_row.owner_id is not None else AssetStatus.AVAILABLE
             asset_row.version += 1
+
+    if payload.status == "RETURNED":
+        row.reject_reason = payload.reject_reason
+
+    requester = await db.get(User, row.requester_id)
+
+    # Email 通知
+    if requester:
+        asset_label = f"{asset_row.name}（{asset_row.asset_code}）" if asset_row else f"資產 #{row.asset_id}"
+        if payload.status == "IN_PROGRESS":
+            backup_note = "，<b>備用機已備妥，請至服務台領取</b>" if row.need_backup else ""
+            send_email(
+                subject=f"【維修申請核准】{asset_label} 維修工單已核准",
+                body=f"<p>您好 {requester.name}，</p><p>您的維修申請（工單 #{ticket_id}）已核准。</p><p>請繳回資產 <b>{asset_label}</b>{backup_note}。</p><p>預計完成時間：{payload.expected_completion_date or '待定'}</p>",
+                receiver=requester.email,
+            )
+        elif payload.status == "RETURNED":
+            send_email(
+                subject=f"【維修申請退回】{asset_label} 維修工單已退回",
+                body=f"<p>您好 {requester.name}，</p><p>您的維修申請（工單 #{ticket_id}）已被退回。</p><p>退回原因：{payload.reject_reason or '無說明'}</p><p>您可登入系統修改後重新送出。</p>",
+                receiver=requester.email,
+            )
 
     await log_action(
         db,
@@ -454,7 +546,78 @@ async def update_ticket_status(
     await db.commit()
     await db.refresh(row)
 
+    result = _request_to_out(row, requester_name=requester.name if requester else None)
+    await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
+    return result
+
+
+@router.post("/tickets/{ticket_id}/close", response_model=RepairRequestOut)
+async def close_ticket(
+    ticket_id: int,
+    payload: CloseTicketPayload,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required),
+) -> RepairRequestOut:
+    row = await db.get(RepairRequest, ticket_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="ticket not found")
+    if row.status != "IN_PROGRESS":
+        raise HTTPException(status_code=400, detail="只有「維修中」的工單才能結案")
+
+    # 建立或更新維修紀錄
+    existing_record = (await db.scalars(
+        select(RepairRecord).where(RepairRecord.request_id == ticket_id)
+    )).first()
+    if existing_record:
+        existing_record.issue_description = payload.issue_description
+        existing_record.solution = payload.solution
+        existing_record.vendor = payload.vendor
+        existing_record.cost = payload.cost
+        existing_record.repair_date = date.today()
+    else:
+        record = RepairRecord(
+            request_id=ticket_id,
+            repair_date=date.today(),
+            issue_description=payload.issue_description,
+            solution=payload.solution,
+            cost=payload.cost,
+            vendor=payload.vendor,
+        )
+        db.add(record)
+
+    # 更新工單狀態
+    row.status = "DONE"
+    row.version += 1
+
+    # 更新資產狀態為使用中
+    asset_row = await db.get(Asset, row.asset_id)
+    if asset_row:
+        asset_row.status = AssetStatus.IN_USE if asset_row.owner_id else AssetStatus.AVAILABLE
+        asset_row.version += 1
+
     requester = await db.get(User, row.requester_id)
+    if requester and asset_row:
+        asset_label = f"{asset_row.name}（{asset_row.asset_code}）"
+        backup_note = "，<b>請繳回備用機</b>" if row.need_backup else ""
+        send_email(
+            subject=f"【維修完成】{asset_label} 維修已結案",
+            body=f"<p>您好 {requester.name}，</p><p>您的資產 <b>{asset_label}</b> 維修已完成，請前往領取{backup_note}。</p><p>維修摘要：{payload.solution}</p>",
+            receiver=requester.email,
+        )
+
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.TICKET,
+        target_id=ticket_id,
+        target_name=f"報修單 #{ticket_id}",
+        detail={"before": {"status": "IN_PROGRESS"}, "after": {"status": "DONE"}},
+    )
+    await db.commit()
+    await db.refresh(row)
+
     result = _request_to_out(row, requester_name=requester.name if requester else None)
     await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
     return result

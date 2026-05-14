@@ -146,7 +146,8 @@
       "OPEN": "Pending Review",
       "IN_PROGRESS": "In Progress",
       "DONE": "Completed",
-      "CANCELLED": "Cancelled"
+      "CANCELLED": "Cancelled",
+      "RETURNED": "Returned"
     },
     "backToList": "Back to List",
     "repairRequestDetail": "Repair Request Detail",

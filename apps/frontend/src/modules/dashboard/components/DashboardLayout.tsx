@@ -21,9 +21,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
   ];
 
   const adminNav = [
-    { id: 'dashboard', label: t('auth.nav.dashboard'), icon: 'dashboard', path: '/dashboard' },
     { id: 'all', label: t('auth.nav.allAssets'), icon: 'database', path: '/all-assets' },
-    { id: 'tickets', label: t('auth.nav.ticketReview'), icon: 'assignment_turned_in', path: '/ticket-review' },
     { id: 'audit', label: t('auth.nav.auditLogs'), icon: 'analytics', path: '/audit-logs' },
     { id: 'users', label: t('auth.nav.userManagement'), icon: 'manage_accounts', path: '/users' },
   ];
@@ -64,16 +62,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
         </nav>
 
         <div className="mt-auto space-y-2">
-          {isAdmin && (
-            <Link
-              to="/all-assets/new"
-              className="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary py-3 px-4 rounded-xl font-headline font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
-            >
-              <span className="material-symbols-outlined text-sm">add_circle</span>
-              {t('auth.nav.addNewAsset')}
-            </Link>
-          )}
-          <button 
+          <button
             onClick={logout}
             className="w-full text-slate-500 hover:text-error hover:bg-error/5 py-2 px-4 rounded-lg font-medium text-xs transition-colors flex items-center justify-center gap-2"
           >

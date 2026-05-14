@@ -146,7 +146,8 @@
       "OPEN": "待審核",
       "IN_PROGRESS": "維修中",
       "DONE": "已完成",
-      "CANCELLED": "已取消"
+      "CANCELLED": "已取消",
+      "RETURNED": "已退回"
     },
     "backToList": "返回列表",
     "repairRequestDetail": "維修申請詳情",

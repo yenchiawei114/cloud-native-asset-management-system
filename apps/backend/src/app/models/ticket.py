@@ -15,10 +15,11 @@ class RepairRequest(Base):
     need_backup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     backup_spec: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
-        Enum("OPEN", "IN_PROGRESS", "DONE", "CANCELLED", name="repair_request_status"),
+        Enum("OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "RETURNED", name="repair_request_status"),
         nullable=False,
         default="OPEN",
     )
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     expected_completion_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     pickup_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
@@ -73,7 +74,7 @@ class Attachment(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     attachable_type: Mapped[str] = mapped_column(
-        Enum("REPAIR_REQUEST", "REPAIR_INSPECTION", name="attachment_attachable_type"),
+        Enum("REPAIR_REQUEST", "REPAIR_INSPECTION", "REPAIR_RECORD", name="attachment_attachable_type"),
         nullable=False,
     )
     attachable_id: Mapped[int] = mapped_column(BigInteger, nullable=False)

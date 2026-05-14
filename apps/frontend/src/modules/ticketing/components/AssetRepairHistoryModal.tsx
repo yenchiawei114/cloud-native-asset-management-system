@@ -16,6 +16,7 @@ const STATUS_STYLES: Record<string, string> = {
   IN_PROGRESS: 'bg-blue-100 text-blue-700',
   DONE: 'bg-green-100 text-green-700',
   CANCELLED: 'bg-slate-100 text-slate-500',
+  RETURNED: 'bg-red-100 text-red-700',
 };
 
 export const AssetRepairHistoryModal: React.FC<Props> = ({

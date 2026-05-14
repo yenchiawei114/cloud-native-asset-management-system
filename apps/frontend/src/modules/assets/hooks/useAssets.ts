@@ -1,16 +1,36 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api, Asset, AssetCreatePayload } from '../../../lib/api';
 
-export const useAssets = (params?: { keyword?: string; status?: string }) => {
+interface UseAssetsParams {
+  keyword?: string;
+  status?: string;
+  asset_code_q?: string;
+  name_q?: string;
+  model_q?: string;
+  spec_q?: string;
+  owner_q?: string;
+  asset_type?: string;
+}
+
+export const useAssets = (params?: UseAssetsParams) => {
   const [allAssets, setAllAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const paramsKey = JSON.stringify(params);
+
   const fetchAssets = async () => {
     setLoading(true);
     try {
-      // 後端目前僅支援按員工 ID 篩選，不支援 keyword/status 篩選
-      const data = await api.listAssets();
+      const data = await api.listAssets({
+        asset_code_q: params?.asset_code_q,
+        name_q: params?.name_q,
+        model_q: params?.model_q,
+        spec_q: params?.spec_q,
+        owner_q: params?.owner_q,
+        asset_type: params?.asset_type,
+        status: params?.status !== 'ALL' ? params?.status : undefined,
+      });
       setAllAssets(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err: any) {
@@ -22,21 +42,17 @@ export const useAssets = (params?: { keyword?: string; status?: string }) => {
 
   useEffect(() => {
     fetchAssets();
-  }, []); // 初始載入一次
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
 
-  // 客戶端篩選
   const assets = useMemo(() => {
-    return allAssets.filter(asset => {
-      const matchesKeyword = !params?.keyword || 
-        asset.name.toLowerCase().includes(params.keyword.toLowerCase()) ||
-        asset.asset_code.toLowerCase().includes(params.keyword.toLowerCase());
-      
-      const matchesStatus = !params?.status || params.status === 'ALL' || 
-        asset.status === params.status;
-        
-      return matchesKeyword && matchesStatus;
-    });
-  }, [allAssets, params?.keyword, params?.status]);
+    if (!params?.keyword) return allAssets;
+    const kw = params.keyword.toLowerCase();
+    return allAssets.filter(a =>
+      a.name.toLowerCase().includes(kw) ||
+      a.asset_code.toLowerCase().includes(kw)
+    );
+  }, [allAssets, params?.keyword]);
 
   const createAsset = async (payload: AssetCreatePayload) => {
     try {
@@ -58,15 +74,12 @@ export const useAssets = (params?: { keyword?: string; status?: string }) => {
     }
   };
 
-  // 動態計算統計
-  const stats = useMemo(() => {
-    return {
-      total: allAssets.length,
-      inRepair: allAssets.filter(a => a.status === 'maintenance').length,
-      available: allAssets.filter(a => a.status === 'available').length,
-      inUse: allAssets.filter(a => a.status === 'in_use').length,
-    };
-  }, [allAssets]);
+  const stats = useMemo(() => ({
+    total: allAssets.length,
+    inRepair: allAssets.filter(a => a.status === 'maintenance').length,
+    available: allAssets.filter(a => a.status === 'available').length,
+    inUse: allAssets.filter(a => a.status === 'in_use').length,
+  }), [allAssets]);
 
   return { assets, loading, error, stats, refresh: fetchAssets, createAsset, deleteAsset };
 };

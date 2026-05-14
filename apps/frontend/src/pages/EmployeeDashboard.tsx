@@ -7,6 +7,7 @@ import { useAuth } from '../modules/auth/hooks/useAuth';
 import { NewRepairRequestModal } from '../modules/ticketing/components/NewRepairRequestModal';
 import { AssetRepairHistoryModal } from '../modules/ticketing/components/AssetRepairHistoryModal';
 import type { Asset } from '../lib/api';
+import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
 
 const STATUS_BADGE: Record<string, string> = {
   available: 'bg-green-100 text-green-700',
@@ -86,6 +87,8 @@ export const EmployeeDashboard: React.FC = () => {
         <h1 className="text-2xl font-extrabold tracking-tight text-on-surface font-headline">
           {t('dashboard.employee.myAssets')}
         </h1>
+
+        <PendingTransfersBanner />
 
         {/* Search Toolbar */}
         <div className="bg-surface-container-lowest rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">

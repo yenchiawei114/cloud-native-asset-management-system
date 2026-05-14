@@ -14,6 +14,7 @@ const EMPLOYEE_STATUS_BADGE: Record<string, string> = {
   IN_PROGRESS: 'bg-blue-100 text-blue-700',
   DONE: 'bg-green-100 text-green-700',
   CANCELLED: 'bg-slate-100 text-slate-500',
+  RETURNED: 'bg-red-100 text-red-700',
 };
 
 export const TicketDetailPage: React.FC = () => {
@@ -46,8 +47,32 @@ export const TicketDetailPage: React.FC = () => {
   const [isEditingRecord, setIsEditingRecord] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  const [resubmitForm, setResubmitForm] = useState<{ description: string; need_backup: boolean; backup_spec: string } | null>(null);
+
   const isAdmin = user?.role === 'ADMIN';
   const backPath = isAdmin ? '/ticket-review' : '/repair-history';
+
+  const handleResubmit = async () => {
+    if (!ticket || !resubmitForm || !user) return;
+    setIsSubmitting(true);
+    try {
+      await api.updateTicket(ticket.id, {
+        asset_id: ticket.asset_id,
+        requester_id: user.id,
+        description: resubmitForm.description,
+        need_backup: resubmitForm.need_backup,
+        backup_spec: resubmitForm.backup_spec || null,
+        pickup_location: ticket.pickup_location || null,
+      });
+      setResubmitForm(null);
+      await refresh();
+      showFeedback({ title: '重新送出成功', message: '工單已重新送出，等待管理員審核。', type: 'success', onConfirm: closeFeedback });
+    } catch (err: any) {
+      showFeedback({ title: '送出失敗', message: err.message, type: 'error', onConfirm: closeFeedback });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleApprove = async () => {
     if (!ticket) return;
@@ -242,16 +267,39 @@ export const TicketDetailPage: React.FC = () => {
   /* ── Employee simplified view ── */
   if (!isAdmin) {
     const requestAttachments = attachments.filter(a => a.attachable_type === 'REPAIR_REQUEST');
+    const isEditing = ticket.status === 'RETURNED' && resubmitForm !== null;
+
+    const handleDeleteAttachment = async (attachmentId: number) => {
+      try {
+        await api.deleteAttachment(attachmentId);
+        await refresh();
+      } catch (err: any) {
+        showFeedback({ title: '刪除失敗', message: err.message, type: 'error', onConfirm: closeFeedback });
+      }
+    };
+
     return (
       <DashboardLayout activeTab="assets">
         <div className="max-w-2xl mx-auto space-y-5 pb-12 animate-in fade-in duration-300">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center text-primary font-semibold text-sm gap-1 hover:gap-1.5 transition-all group"
-          >
-            <span className="material-symbols-outlined text-sm">arrow_back</span>
-            返回
-          </button>
+          {/* Top bar: 返回 (left) + 修改並重新送出 (right) */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center text-primary font-semibold text-sm gap-1 hover:gap-1.5 transition-all"
+            >
+              <span className="material-symbols-outlined text-sm">arrow_back</span>
+              返回
+            </button>
+            {ticket.status === 'RETURNED' && !isEditing && (
+              <button
+                onClick={() => setResubmitForm({ description: ticket.description, need_backup: ticket.need_backup, backup_spec: ticket.backup_spec || '' })}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity shadow-sm"
+              >
+                <span className="material-symbols-outlined text-[16px]">edit</span>
+                修改並重新送出
+              </button>
+            )}
+          </div>
 
           {/* Ticket header */}
           <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
@@ -273,16 +321,56 @@ export const TicketDetailPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Reject reason banner */}
+          {ticket.status === 'RETURNED' && ticket.reject_reason && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+              <span className="material-symbols-outlined text-red-500 mt-0.5">undo</span>
+              <div>
+                <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-1">退回原因</p>
+                <p className="text-sm text-red-700 leading-relaxed">{ticket.reject_reason}</p>
+              </div>
+            </div>
+          )}
+
           {/* Fault description */}
           <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-2">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">故障描述</p>
-            <p className="text-sm text-on-surface leading-relaxed">{ticket.description}</p>
+            {isEditing ? (
+              <textarea
+                className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none resize-none h-24"
+                value={resubmitForm!.description}
+                onChange={e => setResubmitForm(f => f && { ...f, description: e.target.value })}
+              />
+            ) : (
+              <p className="text-sm text-on-surface leading-relaxed">{ticket.description}</p>
+            )}
           </div>
 
           {/* Backup need */}
           <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-2">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">備用機需求</p>
-            {ticket.need_backup ? (
+            {isEditing ? (
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-on-surface cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={resubmitForm!.need_backup}
+                    onChange={e => setResubmitForm(f => f && { ...f, need_backup: e.target.checked })}
+                    className="w-4 h-4 rounded"
+                  />
+                  需要備用機
+                </label>
+                {resubmitForm!.need_backup && (
+                  <input
+                    type="text"
+                    className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+                    value={resubmitForm!.backup_spec}
+                    onChange={e => setResubmitForm(f => f && { ...f, backup_spec: e.target.value })}
+                    placeholder="例：14吋筆電，Windows"
+                  />
+                )}
+              </div>
+            ) : ticket.need_backup ? (
               <div className="space-y-1">
                 <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
                   <span className="material-symbols-outlined text-sm">check_circle</span>
@@ -297,25 +385,74 @@ export const TicketDetailPage: React.FC = () => {
             )}
           </div>
 
-          {/* Attachments with lightbox */}
+          {/* Attachments */}
           <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-3">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">附件照片</p>
-            {requestAttachments.length === 0 ? (
+            {requestAttachments.length === 0 && !isEditing ? (
               <p className="text-sm text-on-surface-variant">無附件</p>
             ) : (
               <div className="flex flex-wrap gap-3">
                 {requestAttachments.map(file => (
-                  <button
-                    key={file.id}
-                    onClick={() => setLightboxUrl(file.file_url)}
-                    className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 hover:scale-105 transition-all shadow-sm"
-                  >
-                    <img src={file.file_url} alt={file.file_name} className="w-full h-full object-cover" />
-                  </button>
+                  isEditing ? (
+                    <div key={file.id} className="relative w-20 h-20 group">
+                      <img
+                        src={file.file_url}
+                        alt={file.file_name}
+                        className="w-full h-full object-cover rounded-xl border border-slate-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAttachment(file.id)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-error text-white rounded-full flex items-center justify-center shadow-sm hover:scale-110 transition-transform"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">close</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      key={file.id}
+                      onClick={() => setLightboxUrl(file.file_url)}
+                      className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 hover:scale-105 transition-all shadow-sm"
+                    >
+                      <img src={file.file_url} alt={file.file_name} className="w-full h-full object-cover" />
+                    </button>
+                  )
                 ))}
+                {isEditing && (
+                  <div className="w-20 h-20 rounded-xl bg-surface-container-low flex items-center justify-center text-slate-400 group relative cursor-pointer border-2 border-dashed border-slate-200 hover:border-primary/50 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      onChange={e => handleFileUpload(e, 'REPAIR_REQUEST', ticket.id)}
+                    />
+                    <span className="material-symbols-outlined group-hover:text-primary transition-colors">add_a_photo</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
+
+          {/* Submit / Cancel bar (editing mode only) */}
+          {isEditing && (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setResubmitForm(null)}
+                className="px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleResubmit}
+                disabled={isSubmitting || !resubmitForm!.description.trim()}
+                className="flex-1 px-5 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {isSubmitting ? '送出中...' : '確認重新送出'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Lightbox */}

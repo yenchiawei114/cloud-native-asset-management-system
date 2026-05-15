@@ -186,7 +186,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        <PendingTransfersBanner />
+        <PendingTransfersBanner onConfirmed={refresh} />
 
         {/* Search */}
         <section className="bg-surface-container-low rounded-xl p-5 border border-outline-variant/10">

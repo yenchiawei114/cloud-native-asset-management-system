@@ -88,7 +88,7 @@ export const EmployeeDashboard: React.FC = () => {
           {t('dashboard.employee.myAssets')}
         </h1>
 
-        <PendingTransfersBanner />
+        <PendingTransfersBanner onConfirmed={refreshAssets} />
 
         {/* Search Toolbar */}
         <div className="bg-surface-container-lowest rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">

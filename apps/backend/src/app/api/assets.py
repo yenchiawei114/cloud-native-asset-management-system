@@ -460,5 +460,7 @@ async def cancel_transfer(
         raise HTTPException(status_code=404, detail="transfer not found")
     if transfer.status != "PENDING":
         raise HTTPException(status_code=400, detail="此轉移已結束")
+    if transfer.initiator_id != user["user_id"]:
+        raise HTTPException(status_code=403, detail="只有發起者可以撤銷此轉移")
     transfer.status = "CANCELLED"
     await db.commit()

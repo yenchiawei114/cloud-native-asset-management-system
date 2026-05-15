@@ -17,6 +17,7 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
 
   const [transfers, setTransfers] = useState<AssetTransfer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
   const [confirming, setConfirming] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState<number | null>(null);
   const [bannerMsg, setBannerMsg] = useState<BannerMsg | null>(null);
@@ -70,8 +71,7 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
       onConfirmed?.();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('已結束') || msg.includes('400')) {
-        // 先顯示 dialog，刷新延後到使用者關閉 dialog 時才執行
+      if (msg.includes('已結束') || msg.includes('400') || msg.includes('403') || msg.includes('只有發起者')) {
         setCancelErrorDialog(true);
       } else {
         showMsg({ type: 'error', text: '操作失敗，請稍後再試。' });
@@ -94,14 +94,22 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
   return (
     <>
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-amber-600 text-lg">swap_horiz</span>
-          <p className="text-sm font-bold text-amber-800">
-            待確認資產轉移（{transfers.length} 筆）
-          </p>
-        </div>
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-amber-600 text-lg">swap_horiz</span>
+            <p className="text-sm font-bold text-amber-800">
+              待確認資產轉移（{transfers.length} 筆）
+            </p>
+          </div>
+          <span className={`material-symbols-outlined text-amber-600 text-lg transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}>
+            expand_more
+          </span>
+        </button>
 
-        {bannerMsg && (
+        {!collapsed && bannerMsg && (
           <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${
             bannerMsg.type === 'error'
               ? 'bg-red-100 text-red-700 border border-red-200'
@@ -114,7 +122,7 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
           </div>
         )}
 
-        {transfers.length > 0 && (
+        {!collapsed && transfers.length > 0 && (
           <div className="space-y-2">
             {transfers.map(t => {
               const myId = user?.id;
@@ -154,7 +162,7 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
                       </button>
                     )}
 
-                    {isAdmin && (
+                    {isAdmin && user?.id === t.initiator_id && (
                       <button
                         onClick={() => handleCancel(t.id)}
                         disabled={cancelling === t.id}
@@ -180,7 +188,7 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
                 <div>
                   <p className="font-bold text-on-surface">無法撤銷此資產轉移</p>
                   <p className="text-sm text-on-surface-variant mt-1">
-                    雙方皆已確認，此筆資產轉移已完成，無法再撤銷。
+                    此轉移已完成，無法撤銷。
                   </p>
                 </div>
               </div>

@@ -64,16 +64,6 @@ export const useAssets = (params?: UseAssetsParams) => {
     }
   };
 
-  const deleteAsset = async (id: number) => {
-    try {
-      await api.deleteAsset(id);
-      await fetchAssets();
-      return true;
-    } catch (err: any) {
-      throw new Error(err.message || 'Failed to delete asset');
-    }
-  };
-
   const stats = useMemo(() => ({
     total: allAssets.length,
     inRepair: allAssets.filter(a => a.status === 'maintenance').length,
@@ -81,5 +71,5 @@ export const useAssets = (params?: UseAssetsParams) => {
     inUse: allAssets.filter(a => a.status === 'in_use').length,
   }), [allAssets]);
 
-  return { assets, loading, error, stats, refresh: fetchAssets, createAsset, deleteAsset };
+  return { assets, loading, error, stats, refresh: fetchAssets, createAsset };
 };

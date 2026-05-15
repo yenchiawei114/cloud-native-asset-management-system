@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import log_action
 from app.core.db import get_db
 from app.core.email import send_email
-from app.models import Asset, AssetTransfer
+from app.models import Asset, AssetTransfer, Department
 from app.models.asset import AssetType, AssetStatus
 from app.models.audit_log import Action, TargetType
-from app.models.user import User
+from app.models.user import User, Role
 
 from app.api.deps import require_role, get_current_user
 
@@ -38,7 +38,7 @@ class AssetCreate(BaseModel):
 
 class AssetUpdate(BaseModel):
     version: int
-    # asset_code 為唯一鍵，不允許修改
+    # asset_code 為唯一鍵，不允許修改；status 由業務流程控制，不允許直接更改
     name: str | None = None
     type: AssetType | None = None
     model: str | None = None
@@ -47,16 +47,15 @@ class AssetUpdate(BaseModel):
     purchase_date: date | None = None
     purchase_price: int | None = None
     storage_location: str | None = None
-    owner_id: int | None = None
     activation_date: date | None = None
     warranty_expiry: date | None = None
-    status: AssetStatus | None = None
 
 
 class AssetOut(AssetCreate):
     id: int
     created_at: datetime
     version: int
+    borrower_id: int | None = None
     owner_name: str | None = None
     owner_employee_id: str | None = None
 
@@ -94,6 +93,7 @@ def _to_out(asset: Asset, owner: User | None = None) -> AssetOut:
         purchase_price=asset.purchase_price,
         storage_location=asset.storage_location,
         owner_id=asset.owner_id,
+        borrower_id=asset.borrower_id,
         activation_date=asset.activation_date,
         warranty_expiry=asset.warranty_expiry,
         status=asset.status,
@@ -150,7 +150,9 @@ async def list_assets(
     if not is_admin:
         if owner_employee_id is not None and owner_employee_id != my_employee_id:
             raise HTTPException(status_code=403, detail="Forbidden: You can only query your own assets")
-        stmt = stmt.where(Asset.owner_id == my_user_id)
+        # 包含保管人是自己或借用者是自己（備用機借用）的資產
+        from sqlalchemy import or_ as _or
+        stmt = stmt.where(_or(Asset.owner_id == my_user_id, Asset.borrower_id == my_user_id))
     else:
         if owner_employee_id is not None:
             target_user = (await db.execute(
@@ -209,10 +211,14 @@ async def list_assets(
 
 @router.get("/assets/idle", response_model=list[AssetOut])
 async def list_idle_assets(
+    owner_only: bool = False,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[AssetOut]:
+    """列出閒置資產。owner_only=true 時只回傳當前用戶保管的閒置資產（供核准備用機時選擇）。"""
     stmt = select(Asset).where(Asset.status == AssetStatus.AVAILABLE).order_by(Asset.id.desc())
+    if owner_only:
+        stmt = stmt.where(Asset.owner_id == user["user_id"])
     rows = (await db.scalars(stmt)).all()
     return [_to_out(r) for r in rows]
 
@@ -308,26 +314,102 @@ async def update_asset(
     return _to_out(asset, owner)
 
 
-@router.delete("/assets/{asset_id}", status_code=204)
-async def delete_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> None:
+@router.post("/assets/{asset_id}/deactivate", response_model=AssetOut)
+async def deactivate_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> AssetOut:
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
+    if asset.status == AssetStatus.DEACTIVATED:
+        raise HTTPException(status_code=400, detail="資產已停用")
 
     before = _to_out(asset).model_dump(mode="json")
-    target_name = f"{asset.name} ({asset.asset_code})"
-    await db.delete(asset)
+    asset.status = AssetStatus.DEACTIVATED
+    asset.owner_id = None
+    asset.storage_location = None
+    asset.version += 1
+
     await log_action(
         db,
         user_id=user["user_id"],
         actor_name=user["name"],
-        action=Action.DELETE,
+        action=Action.UPDATE,
         target_type=TargetType.ASSET,
         target_id=asset_id,
-        target_name=target_name,
-        detail={"before": before},
+        target_name=f"{asset.name} ({asset.asset_code})",
+        detail={"before": before, "after": {"status": "deactivated", "owner_id": None}},
     )
     await db.commit()
+    await db.refresh(asset)
+    return _to_out(asset)
+
+
+@router.post("/assets/{asset_id}/toggle-status", response_model=AssetOut)
+async def toggle_asset_status(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> AssetOut:
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.owner_id != user["user_id"]:
+        raise HTTPException(status_code=403, detail="只能更改自己保管的資產狀態")
+
+    if asset.status == AssetStatus.AVAILABLE:
+        new_status = AssetStatus.IN_USE
+    elif asset.status == AssetStatus.IN_USE:
+        new_status = AssetStatus.AVAILABLE
+    else:
+        raise HTTPException(status_code=400, detail="只有閒置或使用中的資產可以切換狀態")
+
+    before = _to_out(asset).model_dump(mode="json")
+    asset.status = new_status
+    asset.version += 1
+
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.ASSET,
+        target_id=asset_id,
+        target_name=f"{asset.name} ({asset.asset_code})",
+        detail={"before": before, "after": {"status": new_status.value}},
+    )
+    await db.commit()
+    await db.refresh(asset)
+    owner = await db.get(User, asset.owner_id)
+    return _to_out(asset, owner)
+
+
+@router.post("/assets/{asset_id}/activate", response_model=AssetOut)
+async def activate_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> AssetOut:
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.status != AssetStatus.DEACTIVATED:
+        raise HTTPException(status_code=400, detail="只有已停用的資產可以重新啟用")
+
+    admin_user = await db.get(User, user["user_id"])
+    dept_location: str | None = None
+    if admin_user and admin_user.department_id:
+        dept = await db.get(Department, admin_user.department_id)
+        dept_location = dept.location if dept else None
+
+    asset.owner_id = user["user_id"]
+    asset.storage_location = dept_location
+    asset.status = AssetStatus.AVAILABLE
+    asset.version += 1
+
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.ASSET,
+        target_id=asset_id,
+        target_name=f"{asset.name} ({asset.asset_code})",
+        detail={"after": {"status": "available", "owner_id": user["user_id"]}},
+    )
+    await db.commit()
+    await db.refresh(asset)
+    return _to_out(asset, admin_user)
 
 
 # ── 資產轉移 ──────────────────────────────────────────────
@@ -435,9 +517,12 @@ async def confirm_transfer(
     # 雙方皆確認 → 完成轉移
     if transfer.from_confirmed and transfer.to_confirmed:
         asset = await db.get(Asset, transfer.asset_id)
+        to_user = await db.get(User, transfer.to_owner_id)
         if asset:
             asset.owner_id = transfer.to_owner_id
-            asset.status = AssetStatus.IN_USE
+            # 若新保管人為管理員，狀態設為閒置；否則設為使用中
+            is_admin_owner = to_user and to_user.role == Role.ADMIN
+            asset.status = AssetStatus.AVAILABLE if is_admin_owner else AssetStatus.IN_USE
             asset.version += 1
         transfer.status = "COMPLETED"
 

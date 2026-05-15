@@ -6,6 +6,7 @@ import { useAuth } from '../modules/auth/hooks/useAuth';
 import { useAssetDetail } from '../modules/assets/hooks/useAssetDetail';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
+import { api } from '../lib/api';
 
 export const AssetDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +20,7 @@ export const AssetDetailPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
 
   useEffect(() => {
     if (asset) {
@@ -30,13 +32,24 @@ export const AssetDetailPage: React.FC = () => {
         vendor: asset.vendor,
         purchase_date: asset.purchase_date,
         purchase_price: asset.purchase_price,
-        storage_location: asset.storage_location,
-        status: asset.status,
         warranty_expiry: (asset as any).warranty_expiry || '',
         activation_date: (asset as any).activation_date || ''
       });
     }
   }, [asset]);
+
+  const handleToggleStatus = async () => {
+    if (!asset) return;
+    setIsTogglingStatus(true);
+    try {
+      await api.toggleAssetStatus(asset.id);
+      await refresh();
+    } catch (err: any) {
+      showFeedback({ title: '切換失敗', message: err.message || '切換狀態失敗', type: 'error', onConfirm: closeFeedback });
+    } finally {
+      setIsTogglingStatus(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSubmitting(true);
@@ -127,6 +140,16 @@ export const AssetDetailPage: React.FC = () => {
                 }`}></span>
               {t(`assets.status.${asset.status}`)}
             </span>
+            {isAdmin && !isEditing && asset.owner_id === user?.id && (asset.status === 'available' || asset.status === 'in_use') && (
+              <button
+                onClick={handleToggleStatus}
+                disabled={isTogglingStatus}
+                className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-high text-on-surface rounded-lg font-bold shadow hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-sm">swap_vert</span>
+                {asset.status === 'available' ? '標記使用中' : '標記閒置'}
+              </button>
+            )}
             {isAdmin && !isEditing && (
               <button
                 onClick={() => setIsEditing(true)}
@@ -295,21 +318,11 @@ export const AssetDetailPage: React.FC = () => {
                     <span className="text-lg font-bold">User ID: {asset.owner_id || 'N/A'}</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-2">{t('assets.detail.location')}</label>
-                    {isEditing ? (
-                      <input
-                        className="w-full bg-surface-container-low border-none rounded-lg text-sm font-semibold p-3 focus:ring-2 focus:ring-primary/20"
-                        value={form.storage_location || ''}
-                        onChange={e => setForm({ ...form, storage_location: e.target.value })}
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2 px-4 py-3 bg-surface-container-low rounded-lg text-sm font-semibold">
-                        <span className="material-symbols-outlined text-primary text-sm">location_on</span>
-                        {asset.storage_location || 'N/A'}
-                      </div>
-                    )}
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-2">{t('assets.detail.location')}</label>
+                  <div className="flex items-center gap-2 px-4 py-3 bg-surface-container-low rounded-lg text-sm font-semibold">
+                    <span className="material-symbols-outlined text-primary text-sm">location_on</span>
+                    {asset.storage_location || 'N/A'}
                   </div>
                 </div>
               </div>

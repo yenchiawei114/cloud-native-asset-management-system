@@ -27,6 +27,7 @@ const ASSET_STATUSES = [
   { value: 'available', label: '閒置' },
   { value: 'maintenance', label: '維修中' },
   { value: 'borrowed', label: '已借出' },
+  { value: 'deactivated', label: '已停用' },
 ];
 
 const ASSET_STATUS_OPTIONS = ASSET_STATUSES.filter(s => s.value);
@@ -67,7 +68,6 @@ export const AdminDashboard: React.FC = () => {
   const [transferAsset, setTransferAsset] = useState<Asset | null>(null);
 
   const [editMode, setEditMode] = useState(false);
-  const [markedForDelete, setMarkedForDelete] = useState<Set<number>>(new Set());
   const [pendingEdits, setPendingEdits] = useState<Record<number, Record<string, string>>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -76,13 +76,6 @@ export const AdminDashboard: React.FC = () => {
   const handleClear = () => { setDraft(EMPTY_SEARCH); setSubmitted(EMPTY_SEARCH); };
   const draftField = (key: keyof SearchState, value: string) =>
     setDraft(prev => ({ ...prev, [key]: value }));
-
-  const toggleDelete = (id: number) =>
-    setMarkedForDelete(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
 
   const setFieldEdit = (assetId: number, field: string, value: string) =>
     setPendingEdits(prev => ({
@@ -97,24 +90,13 @@ export const AdminDashboard: React.FC = () => {
     setSaving(true);
     setSaveError('');
     try {
-      const deleteResults = await Promise.allSettled(
-        [...markedForDelete].map(id => api.deleteAsset(id))
-      );
-      const deleteFailed = deleteResults.filter(r => r.status === 'rejected').length;
-
-      const updateTargets = Object.entries(pendingEdits).filter(
-        ([id]) => !markedForDelete.has(Number(id))
-      );
       const updateResults = await Promise.allSettled(
-        updateTargets.map(([id, edits]) => api.updateAsset(Number(id), edits as any))
+        Object.entries(pendingEdits).map(([id, edits]) => api.updateAsset(Number(id), edits as any))
       );
       const updateFailed = updateResults.filter(r => r.status === 'rejected').length;
-
-      if (deleteFailed > 0 || updateFailed > 0) {
-        setSaveError(`部分操作失敗：${deleteFailed > 0 ? `${deleteFailed} 筆刪除失敗` : ''}${updateFailed > 0 ? `${updateFailed} 筆更新失敗` : ''}`);
+      if (updateFailed > 0) {
+        setSaveError(`${updateFailed} 筆更新失敗`);
       }
-
-      setMarkedForDelete(new Set());
       setPendingEdits({});
       setEditMode(false);
       refresh();
@@ -123,9 +105,27 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleDeactivate = async (id: number) => {
+    if (!confirm('確定要停用此資產？停用後將清除保管人與辦公地點資訊。')) return;
+    try {
+      await api.deactivateAsset(id);
+      refresh();
+    } catch (err: any) {
+      alert(`停用失敗：${err.message}`);
+    }
+  };
+
+  const handleActivate = async (id: number) => {
+    try {
+      await api.activateAsset(id);
+      refresh();
+    } catch (err: any) {
+      alert(`啟用失敗：${err.message}`);
+    }
+  };
+
   const cancelEdit = () => {
     setEditMode(false);
-    setMarkedForDelete(new Set());
     setPendingEdits({});
     setSaveError('');
   };
@@ -140,8 +140,7 @@ export const AdminDashboard: React.FC = () => {
     );
   }
 
-  const deleteCount = markedForDelete.size;
-  const editCount = Object.keys(pendingEdits).filter(id => !markedForDelete.has(Number(id))).length;
+  const editCount = Object.keys(pendingEdits).length;
 
   return (
     <DashboardLayout activeTab="all">
@@ -161,7 +160,7 @@ export const AdminDashboard: React.FC = () => {
                   className="px-4 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-sm">save</span>
-                  {saving ? '儲存中...' : `存檔${deleteCount > 0 || editCount > 0 ? `（${[deleteCount > 0 && `刪除 ${deleteCount}`, editCount > 0 && `更新 ${editCount}`].filter(Boolean).join('、')}）` : ''}`}
+                  {saving ? '儲存中...' : `存檔${editCount > 0 ? `（更新 ${editCount} 筆）` : ''}`}
                 </button>
                 <button onClick={cancelEdit} className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors">
                   取消
@@ -235,7 +234,6 @@ export const AdminDashboard: React.FC = () => {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
-                  {editMode && <th className="px-3 py-3 w-10" />}
                   <th className="px-4 py-3">資產編號</th>
                   <th className="px-4 py-3">資產名稱</th>
                   <th className="px-4 py-3 text-center">狀態</th>
@@ -249,36 +247,22 @@ export const AdminDashboard: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-outline-variant/5">
                 {assets.map(asset => {
-                  const marked = markedForDelete.has(asset.id);
+                  const isDeactivated = asset.status === 'deactivated';
                   const val = (f: keyof Asset) => getFieldValue(asset, f);
                   const set = (f: string, v: string) => setFieldEdit(asset.id, f, v);
 
                   return (
                     <tr
                       key={asset.id}
-                      className={`transition-colors ${marked ? 'bg-error-container/10 opacity-50' : 'hover:bg-surface-container-low'}`}
+                      className={`transition-colors ${isDeactivated ? 'opacity-50' : 'hover:bg-surface-container-low'}`}
                     >
-                      {editMode && (
-                        <td className="px-3 py-3">
-                          <button
-                            onClick={() => toggleDelete(asset.id)}
-                            title={marked ? '取消刪除' : '刪除'}
-                            className={`p-1 rounded-lg transition-colors ${marked ? 'text-error bg-error/10' : 'text-on-surface-variant hover:text-error hover:bg-error/10'}`}
-                          >
-                            <span className="material-symbols-outlined text-sm">
-                              {marked ? 'restore_from_trash' : 'delete'}
-                            </span>
-                          </button>
-                        </td>
-                      )}
-
                       {/* 資產編號 */}
                       <td className="px-4 py-3">
-                        {editMode && !marked ? (
+                        {editMode && !isDeactivated ? (
                           <input value={val('asset_code')} onChange={e => set('asset_code', e.target.value)}
                             className={inlineCls} maxLength={10} />
                         ) : (
-                          <span className={`font-mono font-bold text-primary text-xs ${marked ? 'line-through' : ''}`}>
+                          <span className="font-mono font-bold text-primary text-xs">
                             {asset.asset_code}
                           </span>
                         )}
@@ -286,32 +270,24 @@ export const AdminDashboard: React.FC = () => {
 
                       {/* 資產名稱 */}
                       <td className="px-4 py-3">
-                        {editMode && !marked ? (
+                        {editMode && !isDeactivated ? (
                           <input value={val('name')} onChange={e => set('name', e.target.value)}
                             className={inlineCls} />
                         ) : (
-                          <p className={`font-semibold text-on-surface ${marked ? 'line-through' : ''}`}>
-                            {asset.name}
-                          </p>
+                          <p className="font-semibold text-on-surface">{asset.name}</p>
                         )}
                       </td>
 
-                      {/* 狀態 */}
+                      {/* 狀態 — 唯讀，僅透過業務流程變更 */}
                       <td className="px-4 py-3 text-center">
-                        {editMode && !marked ? (
-                          <select value={val('status')} onChange={e => set('status', e.target.value)} className={inlineCls}>
-                            {ASSET_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                          </select>
-                        ) : (
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyle(asset.status)} ${marked ? 'opacity-60' : ''}`}>
-                            {ASSET_STATUS_OPTIONS.find(s => s.value === asset.status)?.label ?? asset.status}
-                          </span>
-                        )}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyle(asset.status)}`}>
+                          {ASSET_STATUS_OPTIONS.find(s => s.value === asset.status)?.label ?? asset.status}
+                        </span>
                       </td>
 
                       {/* 分類 */}
                       <td className="px-4 py-3 text-on-surface-variant text-xs">
-                        {editMode && !marked ? (
+                        {editMode && !isDeactivated ? (
                           <select value={val('type')} onChange={e => set('type', e.target.value)} className={inlineCls}>
                             {ASSET_TYPE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                           </select>
@@ -322,7 +298,7 @@ export const AdminDashboard: React.FC = () => {
 
                       {/* 型號 */}
                       <td className="px-4 py-3 text-on-surface-variant max-w-[120px]">
-                        {editMode && !marked ? (
+                        {editMode && !isDeactivated ? (
                           <input value={val('model')} onChange={e => set('model', e.target.value)}
                             className={inlineCls} placeholder="型號" />
                         ) : (
@@ -332,7 +308,7 @@ export const AdminDashboard: React.FC = () => {
 
                       {/* 規格 */}
                       <td className="px-4 py-3 text-on-surface-variant max-w-[150px]">
-                        {editMode && !marked ? (
+                        {editMode && !isDeactivated ? (
                           <input value={val('specification')} onChange={e => set('specification', e.target.value)}
                             className={inlineCls} placeholder="規格" />
                         ) : (
@@ -350,30 +326,40 @@ export const AdminDashboard: React.FC = () => {
                         ) : '—'}
                       </td>
 
-                      {/* 辦公地點 */}
+                      {/* 辦公地點（跟隨保管人，唯讀） */}
                       <td className="px-4 py-3 text-on-surface-variant">
-                        {editMode && !marked ? (
-                          <input value={val('storage_location')} onChange={e => set('storage_location', e.target.value)}
-                            className={inlineCls} placeholder="辦公地點" />
-                        ) : (
-                          asset.storage_location || '—'
-                        )}
+                        {asset.storage_location || '—'}
                       </td>
 
                       {/* 操作 */}
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
-                          <ActionBtn
-                            icon="build"
-                            label="維修紀錄"
-                            onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
-                            disabled={marked}
-                          />
-                          {!editMode && (
+                          {!isDeactivated && (
+                            <ActionBtn
+                              icon="build"
+                              label="維修紀錄"
+                              onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
+                            />
+                          )}
+                          {!editMode && !isDeactivated && (
                             <ActionBtn
                               icon="swap_horiz"
                               label="資產轉移"
                               onClick={() => setTransferAsset(asset)}
+                            />
+                          )}
+                          {!editMode && !isDeactivated && (
+                            <ActionBtn
+                              icon="power_off"
+                              label="停用"
+                              onClick={() => handleDeactivate(asset.id)}
+                            />
+                          )}
+                          {!editMode && isDeactivated && (
+                            <ActionBtn
+                              icon="power"
+                              label="啟用"
+                              onClick={() => handleActivate(asset.id)}
                             />
                           )}
                         </div>
@@ -384,7 +370,7 @@ export const AdminDashboard: React.FC = () => {
 
                 {assets.length === 0 && (
                   <tr>
-                    <td colSpan={editMode ? 10 : 9} className="py-20 text-center opacity-40">
+                    <td colSpan={9} className="py-20 text-center opacity-40">
                       <span className="material-symbols-outlined text-6xl mb-4 block">database_off</span>
                       <p className="font-bold">{t('dashboard.employee.noAssets')}</p>
                     </td>
@@ -414,6 +400,7 @@ const getStatusStyle = (status: string) => {
     case 'in_use': return 'bg-blue-100 text-blue-700 border-blue-200';
     case 'maintenance': return 'bg-amber-100 text-amber-700 border-amber-200';
     case 'borrowed': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+    case 'deactivated': return 'bg-slate-100 text-slate-400 border-slate-200';
     default: return 'bg-slate-100 text-slate-600 border-slate-200';
   }
 };

@@ -6,6 +6,7 @@ import { AdminTicketDetailModal } from '../modules/ticketing/components/AdminTic
 import { ApproveTicketDialog } from '../modules/ticketing/components/ApproveTicketDialog';
 import { ReturnTicketDialog } from '../modules/ticketing/components/ReturnTicketDialog';
 import { CloseTicketDialog } from '../modules/ticketing/components/CloseTicketDialog';
+import { NewRepairRequestModal } from '../modules/ticketing/components/NewRepairRequestModal';
 
 interface TicketWithAttachment {
   request: RepairRequest;
@@ -14,6 +15,7 @@ interface TicketWithAttachment {
 
 const STATUS_LABELS: Record<string, string> = {
   OPEN: '待審核', IN_PROGRESS: '維修中', DONE: '已完成', CANCELLED: '已取消', RETURNED: '已退回',
+  WAITING_LOANER_RETURN: '待備用機歸還',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -22,6 +24,12 @@ const STATUS_COLORS: Record<string, string> = {
   DONE: 'bg-green-100 text-green-700 border-green-200',
   CANCELLED: 'bg-slate-100 text-slate-600 border-slate-200',
   RETURNED: 'bg-red-100 text-red-700 border-red-200',
+  WAITING_LOANER_RETURN: 'bg-purple-100 text-purple-700 border-purple-200',
+};
+
+const ASSET_STATUS_LABELS: Record<string, string> = {
+  in_use: '使用中', available: '閒置', maintenance: '維修中',
+  borrowed: '已借出', deactivated: '已停用',
 };
 
 export const AdminAssetRepairsPage: React.FC = () => {
@@ -37,9 +45,10 @@ export const AdminAssetRepairsPage: React.FC = () => {
   const [detailAttachments, setDetailAttachments] = useState<any[]>([]);
   const [detailRecord, setDetailRecord] = useState<any | null>(null);
   const [detailInspection, setDetailInspection] = useState<any | null>(null);
-  const [approveId, setApproveId] = useState<number | null>(null);
+  const [approveTicket, setApproveTicket] = useState<RepairRequest | null>(null);
   const [returnId, setReturnId] = useState<number | null>(null);
   const [closeId, setCloseId] = useState<number | null>(null);
+  const [newRepairOpen, setNewRepairOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -51,7 +60,6 @@ export const AdminAssetRepairsPage: React.FC = () => {
       setAsset(assetData);
       setTickets(ticketsData);
     } catch {
-      // 若 404 導回列表
       navigate('/all-assets');
     } finally {
       setLoading(false);
@@ -67,10 +75,10 @@ export const AdminAssetRepairsPage: React.FC = () => {
 
     const [atts, record, inspection] = await Promise.all([
       api.getTicketAttachments(ticket.id).catch(() => []),
-      (ticket.status === 'IN_PROGRESS' || ticket.status === 'DONE')
+      (ticket.status === 'IN_PROGRESS' || ticket.status === 'DONE' || ticket.status === 'WAITING_LOANER_RETURN')
         ? api.getTicketRecord(ticket.id).catch(() => null)
         : Promise.resolve(null),
-      ticket.status === 'DONE'
+      (ticket.status === 'DONE' || ticket.status === 'WAITING_LOANER_RETURN')
         ? api.getTicketInspection(ticket.id).catch(() => null)
         : Promise.resolve(null),
     ]);
@@ -78,6 +86,16 @@ export const AdminAssetRepairsPage: React.FC = () => {
     setDetailAttachments(atts);
     setDetailRecord(record);
     setDetailInspection(inspection);
+  };
+
+  const handleConfirmLoanerReturn = async (ticketId: number) => {
+    if (!confirm('確認已收回備用機？')) return;
+    try {
+      await api.confirmLoanerReturn(ticketId);
+      fetchData();
+    } catch (err: any) {
+      alert(`確認失敗：${err.message}`);
+    }
   };
 
   if (loading) {
@@ -115,7 +133,7 @@ export const AdminAssetRepairsPage: React.FC = () => {
               </div>
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-bold border ${STATUS_COLORS[asset.status.toUpperCase()] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-              {asset.status === 'in_use' ? '使用中' : asset.status === 'available' ? '閒置' : asset.status === 'maintenance' ? '維修中' : asset.status === 'borrowed' ? '已借出' : asset.status}
+              {ASSET_STATUS_LABELS[asset.status] ?? asset.status}
             </span>
           </div>
         )}
@@ -124,7 +142,18 @@ export const AdminAssetRepairsPage: React.FC = () => {
         <div className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/10">
           <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between">
             <h2 className="font-bold text-on-surface">維修申請紀錄</h2>
-            <span className="text-xs text-on-surface-variant font-medium">{tickets.length} 筆</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-on-surface-variant font-medium">{tickets.length} 筆</span>
+              {asset && asset.status !== 'deactivated' && (
+                <button
+                  onClick={() => setNewRepairOpen(true)}
+                  className="px-3 py-1.5 bg-primary text-on-primary text-xs font-bold rounded-lg flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+                >
+                  <span className="material-symbols-outlined text-sm">add_circle</span>
+                  建立維修申請
+                </button>
+              )}
+            </div>
           </div>
 
           {tickets.length === 0 ? (
@@ -168,7 +197,11 @@ export const AdminAssetRepairsPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-center">
                         {t.need_backup ? (
-                          <span className="material-symbols-outlined text-amber-500 text-sm">check_circle</span>
+                          <span title={t.loaner_asset_id ? `備用機 #${t.loaner_asset_id}` : '需要備用機'}>
+                            <span className={`material-symbols-outlined text-sm ${t.loaner_asset_id ? 'text-green-500' : 'text-amber-500'}`}>
+                              {t.loaner_asset_id ? 'check_circle' : 'pending'}
+                            </span>
+                          </span>
                         ) : (
                           <span className="text-on-surface-variant/40 text-xs">—</span>
                         )}
@@ -178,12 +211,15 @@ export const AdminAssetRepairsPage: React.FC = () => {
                           <ActionBtn icon="info" label="詳細資訊" onClick={() => openDetail(t)} />
                           {t.status === 'OPEN' && (
                             <>
-                              <ActionBtn icon="check_circle" label="核准" color="text-green-600" onClick={() => setApproveId(t.id)} />
+                              <ActionBtn icon="check_circle" label="核准" color="text-green-600" onClick={() => setApproveTicket(t)} />
                               <ActionBtn icon="undo" label="退回" color="text-red-500" onClick={() => setReturnId(t.id)} />
                             </>
                           )}
                           {t.status === 'IN_PROGRESS' && (
                             <ActionBtn icon="task_alt" label="結案" color="text-primary" onClick={() => setCloseId(t.id)} />
+                          )}
+                          {t.status === 'WAITING_LOANER_RETURN' && !t.loaner_return_lender_confirmed && (
+                            <ActionBtn icon="keyboard_return" label="確認收回" color="text-purple-600" onClick={() => handleConfirmLoanerReturn(t.id)} />
                           )}
                         </div>
                       </td>
@@ -204,8 +240,8 @@ export const AdminAssetRepairsPage: React.FC = () => {
         onClose={() => { setDetailTicket(null); setDetailRecord(null); setDetailInspection(null); }}
       />
       <ApproveTicketDialog
-        ticketId={approveId}
-        onClose={() => setApproveId(null)}
+        ticket={approveTicket}
+        onClose={() => setApproveTicket(null)}
         onApproved={fetchData}
       />
       <ReturnTicketDialog
@@ -218,6 +254,14 @@ export const AdminAssetRepairsPage: React.FC = () => {
         onClose={() => setCloseId(null)}
         onClosed={fetchData}
       />
+      {asset && (
+        <NewRepairRequestModal
+          asset={asset}
+          open={newRepairOpen}
+          onClose={() => setNewRepairOpen(false)}
+          onSuccess={() => { setNewRepairOpen(false); fetchData(); }}
+        />
+      )}
     </DashboardLayout>
   );
 };

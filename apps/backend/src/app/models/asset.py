@@ -20,6 +20,7 @@ class AssetStatus(PyEnum):
     MAINTENANCE = "maintenance"    # 維修中
     BORROWED = "borrowed"          # 已借出
     AVAILABLE = "available"        # 閒置可調撥
+    DEACTIVATED = "deactivated"    # 已停用
 
 
 class Asset(Base):
@@ -37,12 +38,13 @@ class Asset(Base):
     specification: Mapped[str] = mapped_column(String(255), nullable=False)
     vendor: Mapped[str] = mapped_column(String(100), nullable=False)
     purchase_date: Mapped[date] = mapped_column(
-        Date, 
+        Date,
         nullable=False
     )
     purchase_price: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_location: Mapped[str | None] = mapped_column(String(255))
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    borrower_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     activation_date: Mapped[date] = mapped_column(
         Date,
         nullable=False
@@ -51,10 +53,10 @@ class Asset(Base):
         Date,
         nullable=False
     )
-    status: Mapped[AssetStatus] = mapped_column(Enum(AssetStatus), nullable=False, default=AssetStatus.AVAILABLE)
+    status: Mapped[AssetStatus] = mapped_column(Enum(AssetStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=AssetStatus.AVAILABLE)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
+        DateTime(timezone=True),
+        server_default=func.now(),
         nullable=False
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -63,8 +65,8 @@ class Asset(Base):
         "version_id_col": version
     }
 
-    owner: Mapped["User"] = relationship("User", back_populates="assets")
-    repair_requests: Mapped[list["RepairRequest"]] = relationship("RepairRequest", back_populates="target_asset")
+    owner: Mapped["User"] = relationship("User", back_populates="assets", foreign_keys=[owner_id])
+    repair_requests: Mapped[list["RepairRequest"]] = relationship("RepairRequest", back_populates="target_asset", foreign_keys="RepairRequest.asset_id")
     transfers: Mapped[list["AssetTransfer"]] = relationship("AssetTransfer", back_populates="asset", foreign_keys="AssetTransfer.asset_id")
 
 

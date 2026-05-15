@@ -44,8 +44,9 @@ class User(Base):
         back_populates="users"
     )
     assets: Mapped[list["Asset"]] = relationship(
-        "Asset", 
-        back_populates="owner"
+        "Asset",
+        back_populates="owner",
+        foreign_keys="Asset.owner_id"
     )
     notification_preferences: Mapped[list["NotificationPreference"]] = relationship(
         "NotificationPreference", 

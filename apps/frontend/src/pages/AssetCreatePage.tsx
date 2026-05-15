@@ -151,7 +151,12 @@ export const AssetCreatePage: React.FC = () => {
                   <input required type="date" className={inputStyles} value={formData.warranty_expiry} onChange={e => setFormData({...formData, warranty_expiry: e.target.value})} />
                 </InputGroup>
                 <InputGroup label="存放地點" required>
-                  <input required className={inputStyles} placeholder="例如：台北總部 - 庫房 A" value={formData.storage_location || ''} onChange={e => setFormData({...formData, storage_location: e.target.value})} />
+                  <select required className={inputStyles} value={formData.storage_location || ''} onChange={e => setFormData({...formData, storage_location: e.target.value})}>
+                    <option value="">請選擇存放地點</option>
+                    {STORAGE_LOCATIONS.map(loc => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
                 </InputGroup>
               </div>
             </section>
@@ -202,6 +207,14 @@ export const AssetCreatePage: React.FC = () => {
     </DashboardLayout>
   );
 };
+
+const STORAGE_LOCATIONS = [
+  'Taipei HQ - 4F Storage A',
+  'Taipei HQ - 4F Storage B',
+  'Taipei HQ - Testing Lab',
+  'Taipei HQ - Conference Room',
+  'Taipei HQ - Accessories Room',
+];
 
 const inputStyles = "w-full bg-surface-container-low border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline/40 placeholder:font-normal";
 

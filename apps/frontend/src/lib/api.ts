@@ -58,6 +58,7 @@ export interface Asset {
   purchase_price: number;
   storage_location: string | null;
   owner_id: number | null;
+  borrower_id?: number | null;
   activation_date: string;
   warranty_expiry: string;
   status: string;
@@ -94,6 +95,11 @@ export interface RepairRequest {
   reject_reason?: string | null;
   expected_completion_date: string | null;
   pickup_location: string | null;
+  loaner_asset_id?: number | null;
+  loaner_asset_code?: string | null;
+  loaner_asset_name?: string | null;
+  loaner_return_borrower_confirmed?: boolean;
+  loaner_return_lender_confirmed?: boolean;
   created_at: string;
   version: number;
   priority: string;
@@ -232,7 +238,16 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }),
-  deleteAsset: (id: number) => http<void>(`/api/assets/${id}`, { method: "DELETE" }),
+  deactivateAsset: (id: number) =>
+    http<Asset>(`/api/assets/${id}/deactivate`, { method: "POST" }),
+  activateAsset: (id: number) =>
+    http<Asset>(`/api/assets/${id}/activate`, { method: "POST" }),
+  toggleAssetStatus: (id: number) =>
+    http<Asset>(`/api/assets/${id}/toggle-status`, { method: "POST" }),
+  listIdleAssets: () => http<Asset[]>('/api/assets/idle'),
+  listMyIdleAssets: () => http<Asset[]>('/api/assets/idle?owner_only=true'),
+  confirmLoanerReturn: (ticketId: number) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}/confirm-loaner-return`, { method: "POST" }),
 
   getAssetTickets: (assetId: number) =>
     http<{ request: RepairRequest; attachment: { id: number; file_url: string; file_name: string } | null }[]>(`/api/assets/${assetId}/tickets`),
@@ -250,11 +265,15 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }),
-  approveTicket: (ticketId: number, expectedCompletionDate?: string) =>
+  approveTicket: (ticketId: number, expectedCompletionDate?: string, loanerAssetId?: number | null) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: 'IN_PROGRESS', expected_completion_date: expectedCompletionDate || null })
+      body: JSON.stringify({
+        status: 'IN_PROGRESS',
+        expected_completion_date: expectedCompletionDate || null,
+        loaner_asset_id: loanerAssetId ?? null,
+      })
     }),
   returnTicket: (ticketId: number, reason: string) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {

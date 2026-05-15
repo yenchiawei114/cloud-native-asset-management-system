@@ -6,6 +6,7 @@ import { useTickets } from '../modules/ticketing/hooks/useTickets';
 import { useAuth } from '../modules/auth/hooks/useAuth';
 import { NewRepairRequestModal } from '../modules/ticketing/components/NewRepairRequestModal';
 import { AssetRepairHistoryModal } from '../modules/ticketing/components/AssetRepairHistoryModal';
+import { api } from '../lib/api';
 import type { Asset } from '../lib/api';
 import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
 
@@ -82,6 +83,25 @@ export const EmployeeDashboard: React.FC = () => {
     () => new Set(tickets.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').map(t => t.asset_id)),
     [tickets]
   );
+
+  const loanerReturnTicketByAssetId = useMemo(() => {
+    const map = new Map<number, number>();
+    tickets.forEach(t => {
+      if (t.status === 'WAITING_LOANER_RETURN' && t.loaner_asset_id) {
+        map.set(t.loaner_asset_id, t.id);
+      }
+    });
+    return map;
+  }, [tickets]);
+
+  const handleConfirmLoanerReturn = useCallback(async (ticketId: number) => {
+    try {
+      await api.confirmLoanerReturn(ticketId);
+      await Promise.all([refreshAssets(), refreshTickets()]);
+    } catch (err: any) {
+      alert(`確認歸還失敗：${err.message}`);
+    }
+  }, [refreshAssets, refreshTickets]);
 
   const handleSearch = useCallback(() => {
     setAppliedFilters({ ...inputs });
@@ -235,7 +255,10 @@ export const EmployeeDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredAssets.map(asset => (
+                  {filteredAssets.map(asset => {
+                    const isLoanerAsset = asset.owner_id !== user?.id;
+                    const loanerTicketId = loanerReturnTicketByAssetId.get(asset.id);
+                    return (
                     <tr key={asset.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span className="text-xs font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded">
@@ -243,7 +266,12 @@ export const EmployeeDashboard: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-on-surface whitespace-nowrap">
-                        {asset.name}
+                        <div className="flex items-center gap-1.5">
+                          {asset.name}
+                          {isLoanerAsset && (
+                            <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">借用</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span
@@ -260,28 +288,47 @@ export const EmployeeDashboard: React.FC = () => {
                       <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap max-w-[280px] truncate" title={asset.specification}>
                         {asset.specification}
                       </td>
-                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{user?.name ?? '—'}</td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
+                        {isLoanerAsset ? (asset.owner_name ?? '—') : (user?.name ?? '—')}
+                      </td>
                       <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.storage_location ?? '—'}</td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2 whitespace-nowrap">
-                          <button
-                            onClick={() => blockedAssetIds.has(asset.id) ? setBlockedRepairAsset(asset) : setRepairModalAsset(asset)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">build</span>
-                            申請維修
-                          </button>
-                          <button
-                            onClick={() => setHistoryModalAsset(asset)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">history</span>
-                            維修紀錄
-                          </button>
+                          {isLoanerAsset ? (
+                            loanerTicketId ? (
+                              <button
+                                onClick={() => handleConfirmLoanerReturn(loanerTicketId)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">keyboard_return</span>
+                                確認歸還
+                              </button>
+                            ) : (
+                              <span className="text-xs text-on-surface-variant/50 italic">借用中</span>
+                            )
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => blockedAssetIds.has(asset.id) ? setBlockedRepairAsset(asset) : setRepairModalAsset(asset)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">build</span>
+                                申請維修
+                              </button>
+                              <button
+                                onClick={() => setHistoryModalAsset(asset)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">history</span>
+                                維修紀錄
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -15,13 +15,16 @@ class RepairRequest(Base):
     need_backup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     backup_spec: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
-        Enum("OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "RETURNED", name="repair_request_status"),
+        Enum("OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "RETURNED", "WAITING_LOANER_RETURN", name="repair_request_status"),
         nullable=False,
         default="OPEN",
     )
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     expected_completion_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     pickup_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    loaner_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    loaner_return_borrower_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    loaner_return_lender_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
@@ -32,7 +35,8 @@ class RepairRequest(Base):
         "RepairRecord", back_populates="request", uselist=False, cascade="all, delete-orphan"
     )
     requester: Mapped["User"] = relationship("User", back_populates="repair_requests")
-    target_asset: Mapped["Asset"] = relationship("Asset", back_populates="repair_requests")
+    target_asset: Mapped["Asset"] = relationship("Asset", back_populates="repair_requests", foreign_keys=[asset_id])
+    loaner_asset: Mapped["Asset | None"] = relationship("Asset", foreign_keys=[loaner_asset_id])
 
 
 class RepairInspection(Base):

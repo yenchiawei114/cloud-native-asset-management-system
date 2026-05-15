@@ -35,6 +35,7 @@ interface Props {
 
 const STATUS_LABELS: Record<string, string> = {
   OPEN: '待審核', IN_PROGRESS: '維修中', DONE: '已完成', CANCELLED: '已取消', RETURNED: '已退回',
+  WAITING_LOANER_RETURN: '待備用機歸還',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -43,6 +44,7 @@ const STATUS_COLORS: Record<string, string> = {
   DONE: 'bg-green-100 text-green-700',
   CANCELLED: 'bg-slate-100 text-slate-600',
   RETURNED: 'bg-red-100 text-red-700',
+  WAITING_LOANER_RETURN: 'bg-purple-100 text-purple-700',
 };
 
 export const AdminTicketDetailModal: React.FC<Props> = ({
@@ -94,6 +96,14 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
               label="備用機需求"
               value={ticket.need_backup ? `需要${ticket.backup_spec ? `（${ticket.backup_spec}）` : ''}` : '不需要'}
             />
+            {ticket.loaner_asset_id && (
+              <InfoRow
+                label="備用機"
+                value={ticket.loaner_asset_code && ticket.loaner_asset_name
+                  ? `${ticket.loaner_asset_code} — ${ticket.loaner_asset_name}`
+                  : `資產 #${ticket.loaner_asset_id}`}
+              />
+            )}
             {ticket.pickup_location && (
               <InfoRow label="收件地點" value={ticket.pickup_location} />
             )}
@@ -104,6 +114,22 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
               />
             )}
           </Section>
+
+          {/* 備用機歸還確認狀態 */}
+          {ticket.status === 'WAITING_LOANER_RETURN' && (
+            <Section title="備用機歸還確認" titleClass="text-purple-700">
+              <div className="space-y-2">
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_lender_confirmed ? 'bg-green-50 text-green-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                  <span className="material-symbols-outlined text-sm">{ticket.loaner_return_lender_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                  出借方確認歸還{ticket.loaner_return_lender_confirmed ? '（已確認）' : '（待確認）'}
+                </div>
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_borrower_confirmed ? 'bg-green-50 text-green-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                  <span className="material-symbols-outlined text-sm">{ticket.loaner_return_borrower_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                  借用方確認歸還{ticket.loaner_return_borrower_confirmed ? '（已確認）' : '（待確認）'}
+                </div>
+              </div>
+            </Section>
+          )}
 
           {/* 故障描述 */}
           <Section title="故障描述">
@@ -128,8 +154,8 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
             </Section>
           )}
 
-          {/* ── 結案內容（DONE 才顯示） ── */}
-          {ticket.status === 'DONE' && record && (
+          {/* ── 結案內容（DONE / WAITING_LOANER_RETURN 才顯示） ── */}
+          {(ticket.status === 'DONE' || ticket.status === 'WAITING_LOANER_RETURN') && record && (
             <>
               <div className="border-t border-outline-variant/20 pt-4">
                 <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-3">結案維修紀錄</p>

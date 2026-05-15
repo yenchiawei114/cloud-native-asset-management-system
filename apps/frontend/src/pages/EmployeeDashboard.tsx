@@ -9,6 +9,34 @@ import { AssetRepairHistoryModal } from '../modules/ticketing/components/AssetRe
 import type { Asset } from '../lib/api';
 import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
 
+// 封鎖提示彈窗：資產已有未完成維修單，不允許再建立新申請
+function BlockedRepairDialog({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+        <div className="flex items-start gap-3">
+          <span className="material-symbols-outlined text-amber-500 text-2xl mt-0.5">warning</span>
+          <div>
+            <h3 className="text-base font-bold text-on-surface">已有進行中的維修申請</h3>
+            <p className="text-sm text-on-surface-variant mt-1">
+              {asset.name}（{asset.asset_code}）目前已有未完成的維修單，無法再建立新的申請。<br />
+              請等待現有維修單完成後再行申請。
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end pt-1">
+          <button
+            onClick={onClose}
+            className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:opacity-90 transition-opacity"
+          >
+            我知道了
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_BADGE: Record<string, string> = {
   available: 'bg-green-100 text-green-700',
   in_use: 'bg-blue-100 text-blue-700',
@@ -40,13 +68,13 @@ export const EmployeeDashboard: React.FC = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { assets: allAssets, loading: assetsLoading, refresh: refreshAssets } = useAssets();
-  const { tickets, loading: ticketsLoading, refresh: refreshTickets } = useTickets();
+  const { tickets, refresh: refreshTickets } = useTickets();
 
   const [inputs, setInputs] = useState<FilterState>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [repairModalAsset, setRepairModalAsset] = useState<Asset | null>(null);
   const [historyModalAsset, setHistoryModalAsset] = useState<Asset | null>(null);
-  const [confirmRepairAsset, setConfirmRepairAsset] = useState<Asset | null>(null);
+  const [blockedRepairAsset, setBlockedRepairAsset] = useState<Asset | null>(null);
 
   const categories = useMemo(() => Array.from(new Set(allAssets.map(a => a.type))), [allAssets]);
 
@@ -237,7 +265,7 @@ export const EmployeeDashboard: React.FC = () => {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           <button
-                            onClick={() => blockedAssetIds.has(asset.id) ? setConfirmRepairAsset(asset) : setRepairModalAsset(asset)}
+                            onClick={() => blockedAssetIds.has(asset.id) ? setBlockedRepairAsset(asset) : setRepairModalAsset(asset)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                           >
                             <span className="material-symbols-outlined text-[16px]">build</span>
@@ -261,34 +289,8 @@ export const EmployeeDashboard: React.FC = () => {
         </div>
       </div>
 
-      {confirmRepairAsset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-amber-500 text-2xl mt-0.5">warning</span>
-              <div>
-                <h3 className="text-base font-bold text-on-surface">已有進行中的維修申請</h3>
-                <p className="text-sm text-on-surface-variant mt-1">
-                  {confirmRepairAsset.name}（{confirmRepairAsset.asset_code}）目前已有未完成的維修單，確定要再建立一張新申請嗎？
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 pt-1">
-              <button
-                onClick={() => setConfirmRepairAsset(null)}
-                className="px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => { setRepairModalAsset(confirmRepairAsset); setConfirmRepairAsset(null); }}
-                className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:opacity-90 transition-opacity"
-              >
-                確定建立
-              </button>
-            </div>
-          </div>
-        </div>
+      {blockedRepairAsset && (
+        <BlockedRepairDialog asset={blockedRepairAsset} onClose={() => setBlockedRepairAsset(null)} />
       )}
 
       {repairModalAsset && (
@@ -303,8 +305,6 @@ export const EmployeeDashboard: React.FC = () => {
       {historyModalAsset && (
         <AssetRepairHistoryModal
           asset={historyModalAsset}
-          tickets={tickets}
-          ticketsLoading={ticketsLoading}
           open
           onClose={() => setHistoryModalAsset(null)}
         />

@@ -1,12 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Asset, RepairRequest } from '../../../lib/api';
+import { Asset, RepairRequest, api } from '../../../lib/api';
+import { useAuth } from '../../auth/hooks/useAuth';
 
 interface Props {
   asset: Asset;
-  tickets: RepairRequest[];
-  ticketsLoading: boolean;
   open: boolean;
   onClose: () => void;
 }
@@ -19,28 +18,45 @@ const STATUS_STYLES: Record<string, string> = {
   RETURNED: 'bg-red-100 text-red-700',
 };
 
-export const AssetRepairHistoryModal: React.FC<Props> = ({
-  asset,
-  tickets,
-  ticketsLoading,
-  open,
-  onClose,
-}) => {
+export const AssetRepairHistoryModal: React.FC<Props> = ({ asset, open, onClose }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const assetTickets = useMemo(
-    () =>
-      tickets
-        .filter(tk => tk.asset_id === asset.id)
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    [tickets, asset.id]
-  );
+  const [tickets, setTickets] = useState<RepairRequest[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isAdmin = user?.role === 'ADMIN';
+
+  const fetchTickets = useCallback(async () => {
+    if (!open) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const items = await api.getAssetTickets(asset.id);
+      let results = items.map(item => item.request);
+      // 一般員工只顯示自己申請的維修紀錄
+      if (!isAdmin && user?.id) {
+        results = results.filter(tk => tk.requester_id === user.id);
+      }
+      results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setTickets(results);
+    } catch (err: any) {
+      setError(err.message || '載入失敗');
+    } finally {
+      setLoading(false);
+    }
+  }, [open, asset.id, isAdmin, user?.id]);
+
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
 
   if (!open) return null;
 
-  const handleRowClick = (ticketId: number) => {
-    navigate(`/repair-history/${ticketId}`);
+  const handleDetailClick = (ticketId: number) => {
+    navigate(isAdmin ? `/tickets/${ticketId}` : `/repair-history/${ticketId}`);
     onClose();
   };
 
@@ -63,11 +79,16 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto">
-          {ticketsLoading ? (
+          {loading ? (
             <div className="flex items-center justify-center p-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
-          ) : assetTickets.length === 0 ? (
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center">
+              <span className="material-symbols-outlined text-4xl text-red-300 mb-2">error</span>
+              <p className="text-sm text-on-surface-variant">{error}</p>
+            </div>
+          ) : tickets.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center">
               <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">history</span>
               <p className="text-sm text-on-surface-variant">尚無維修申請紀錄</p>
@@ -84,7 +105,7 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {assetTickets.map(ticket => (
+                {tickets.map(ticket => (
                   <tr key={ticket.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-5 py-4">
                       <span className="text-xs font-mono font-bold text-primary">
@@ -109,7 +130,7 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({
                     </td>
                     <td className="px-5 py-4">
                       <button
-                        onClick={() => handleRowClick(ticket.id)}
+                        onClick={() => handleDetailClick(ticket.id)}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-colors whitespace-nowrap"
                       >
                         <span className="material-symbols-outlined text-[14px]">open_in_new</span>

@@ -385,7 +385,37 @@ export const TicketDetailPage: React.FC = () => {
             )}
           </div>
 
-          {/* Attachments */}
+          {/* 預計完工日期（維修中） */}
+          {ticket.status === 'IN_PROGRESS' && ticket.expected_completion_date && (
+            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex items-start gap-3">
+              <span className="material-symbols-outlined text-blue-500 mt-0.5">event</span>
+              <div>
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1">預計完成維修日期</p>
+                <p className="text-sm font-semibold text-blue-800">
+                  {new Date(ticket.expected_completion_date).toLocaleDateString('zh-TW')}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 維修結果（已完成） */}
+          {ticket.status === 'DONE' && record && (
+            <div className="bg-green-50 border border-green-100 rounded-2xl p-5 space-y-4">
+              <p className="text-xs font-bold text-green-700 uppercase tracking-widest">維修結果</p>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">故障原因判斷</p>
+                  <p className="text-sm text-on-surface leading-relaxed">{record.issue_description}</p>
+                </div>
+                <div className="border-t border-green-100 pt-3">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">維修方案與結果</p>
+                  <p className="text-sm text-on-surface leading-relaxed">{record.solution}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 附件照片 */}
           <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-3">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">附件照片</p>
             {requestAttachments.length === 0 && !isEditing ? (

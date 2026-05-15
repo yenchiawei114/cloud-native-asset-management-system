@@ -35,6 +35,8 @@ export const AdminAssetRepairsPage: React.FC = () => {
 
   const [detailTicket, setDetailTicket] = useState<RepairRequest | null>(null);
   const [detailAttachments, setDetailAttachments] = useState<any[]>([]);
+  const [detailRecord, setDetailRecord] = useState<any | null>(null);
+  const [detailInspection, setDetailInspection] = useState<any | null>(null);
   const [approveId, setApproveId] = useState<number | null>(null);
   const [returnId, setReturnId] = useState<number | null>(null);
   const [closeId, setCloseId] = useState<number | null>(null);
@@ -60,12 +62,22 @@ export const AdminAssetRepairsPage: React.FC = () => {
 
   const openDetail = async (ticket: RepairRequest) => {
     setDetailTicket(ticket);
-    try {
-      const atts = await api.getTicketAttachments(ticket.id);
-      setDetailAttachments(atts);
-    } catch {
-      setDetailAttachments([]);
-    }
+    setDetailRecord(null);
+    setDetailInspection(null);
+
+    const [atts, record, inspection] = await Promise.all([
+      api.getTicketAttachments(ticket.id).catch(() => []),
+      (ticket.status === 'IN_PROGRESS' || ticket.status === 'DONE')
+        ? api.getTicketRecord(ticket.id).catch(() => null)
+        : Promise.resolve(null),
+      ticket.status === 'DONE'
+        ? api.getTicketInspection(ticket.id).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    setDetailAttachments(atts);
+    setDetailRecord(record);
+    setDetailInspection(inspection);
   };
 
   if (loading) {
@@ -130,13 +142,12 @@ export const AdminAssetRepairsPage: React.FC = () => {
                     <th className="px-4 py-3">申請人</th>
                     <th className="px-4 py-3">申請日期</th>
                     <th className="px-4 py-3">故障描述</th>
-                    <th className="px-4 py-3 text-center">附件照片</th>
                     <th className="px-4 py-3 text-center">備用機</th>
                     <th className="px-4 py-3 text-right">操作</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-outline-variant/5">
-                  {tickets.map(({ request: t, attachment }) => (
+                  {tickets.map(({ request: t }) => (
                     <tr key={t.id} className="hover:bg-surface-container-low transition-colors">
                       <td className="px-4 py-3 font-mono font-bold text-primary text-xs">
                         #TKT-{String(t.id).padStart(4, '0')}
@@ -154,19 +165,6 @@ export const AdminAssetRepairsPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-on-surface max-w-[200px] truncate">
                         {t.description}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {attachment ? (
-                          <a href={attachment.file_url} target="_blank" rel="noopener noreferrer">
-                            <img
-                              src={attachment.file_url}
-                              alt={attachment.file_name}
-                              className="w-10 h-10 rounded-lg object-cover mx-auto border border-outline-variant/20 hover:opacity-80 transition-opacity"
-                            />
-                          </a>
-                        ) : (
-                          <span className="text-on-surface-variant/40 text-xs">—</span>
-                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {t.need_backup ? (
@@ -201,7 +199,9 @@ export const AdminAssetRepairsPage: React.FC = () => {
       <AdminTicketDetailModal
         ticket={detailTicket}
         attachments={detailAttachments}
-        onClose={() => setDetailTicket(null)}
+        record={detailRecord}
+        inspection={detailInspection}
+        onClose={() => { setDetailTicket(null); setDetailRecord(null); setDetailInspection(null); }}
       />
       <ApproveTicketDialog
         ticketId={approveId}

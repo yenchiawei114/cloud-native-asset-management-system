@@ -873,13 +873,21 @@ async def list_ticket_attachments(
     if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # 取得該票單對應的驗收單 ID（若有）
+    # 取得維修紀錄 ID（若有）
+    record_row = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
+    record_id = record_row.id if record_row else None
+
+    # 取得驗收單 ID（若有）
     inspection_row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
     inspection_id = inspection_row.id if inspection_row else None
 
     conditions = [
         (Attachment.attachable_type == "REPAIR_REQUEST") & (Attachment.attachable_id == ticket_id)
     ]
+    if record_id is not None:
+        conditions.append(
+            (Attachment.attachable_type == "REPAIR_RECORD") & (Attachment.attachable_id == record_id)
+        )
     if inspection_id is not None:
         conditions.append(
             (Attachment.attachable_type == "REPAIR_INSPECTION") & (Attachment.attachable_id == inspection_id)

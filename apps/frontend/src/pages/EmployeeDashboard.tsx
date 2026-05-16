@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAssets } from '../modules/assets/hooks/useAssets';
@@ -7,7 +7,7 @@ import { useAuth } from '../modules/auth/hooks/useAuth';
 import { NewRepairRequestModal } from '../modules/ticketing/components/NewRepairRequestModal';
 import { AssetRepairHistoryModal } from '../modules/ticketing/components/AssetRepairHistoryModal';
 import { api } from '../lib/api';
-import type { Asset } from '../lib/api';
+import type { Asset, Vendor } from '../lib/api';
 import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
 
 // 封鎖提示彈窗：資產已有未完成維修單，不允許再建立新申請
@@ -79,6 +79,11 @@ export const EmployeeDashboard: React.FC = () => {
   const [historyModalAsset, setHistoryModalAsset] = useState<Asset | null>(null);
   const [blockedRepairAsset, setBlockedRepairAsset] = useState<Asset | null>(null);
 
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  useEffect(() => {
+    api.listVendors().then(setVendors).catch(() => {});
+  }, []);
+
   const categories = useMemo(() => Array.from(new Set(allAssets.map(a => a.type))), [allAssets]);
 
   const blockedAssetIds = useMemo(
@@ -119,7 +124,7 @@ export const EmployeeDashboard: React.FC = () => {
       const matchName = !assetName || a.name.toLowerCase().includes(assetName.toLowerCase());
       const matchModel = !model || a.model.toLowerCase().includes(model.toLowerCase());
       const matchSpec = !spec || a.specification.toLowerCase().includes(spec.toLowerCase());
-      const matchVendor = !vendor || a.vendor.toLowerCase().includes(vendor.toLowerCase());
+      const matchVendor = !vendor || a.vendor === vendor;
       const matchCategory = !category || a.type === category;
       const matchStatus = !status || a.status === status;
       return matchCode && matchName && matchModel && matchSpec && matchVendor && matchCategory && matchStatus;
@@ -154,7 +159,6 @@ export const EmployeeDashboard: React.FC = () => {
                 { key: 'assetName', label: t('dashboard.table.assetName') },
                 { key: 'model',     label: t('dashboard.table.model') },
                 { key: 'spec',      label: t('dashboard.table.specs') },
-                { key: 'vendor',    label: '廠商' },
               ] as { key: keyof FilterState; label: string }[]
             ).map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
@@ -168,6 +172,19 @@ export const EmployeeDashboard: React.FC = () => {
                 />
               </div>
             ))}
+            <div className="flex items-center gap-2">
+              <label className={labelCls}>廠商</label>
+              <select
+                className={selectCls}
+                value={inputs.vendor}
+                onChange={e => setInputs(prev => ({ ...prev, vendor: e.target.value }))}
+              >
+                <option value="">全部廠商</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.name}>{v.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* 下拉選單 + 搜尋按鈕 */}

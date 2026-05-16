@@ -145,7 +145,7 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
                         setDropdownOpen(true);
                       }}
                       onFocus={() => setDropdownOpen(true)}
-                      placeholder="輸入資產編號或名稱搜尋..."
+                      placeholder=""
                       className="flex-1 bg-transparent border-none text-sm focus:ring-0 outline-none min-w-0"
                     />
                     {loanerAsset && (

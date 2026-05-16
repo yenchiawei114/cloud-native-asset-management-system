@@ -139,6 +139,7 @@ async def list_assets(
     spec_q: str | None = None,
     vendor_q: str | None = None,
     owner_q: str | None = None,
+    office_location_q: str | None = None,
     asset_type: AssetType | None = None,
     status: AssetStatus | None = None,
     db: AsyncSession = Depends(get_db),
@@ -211,6 +212,9 @@ async def list_assets(
             if (a.owner_name and q in a.owner_name.lower())
             or (a.owner_employee_id and q in a.owner_employee_id.lower())
         ]
+    if office_location_q:
+        q = office_location_q.lower()
+        result = [a for a in result if a.office_location and q in a.office_location.lower()]
     return result
 
 

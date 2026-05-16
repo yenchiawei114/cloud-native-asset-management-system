@@ -10,6 +10,7 @@ interface UseAssetsParams {
   spec_q?: string;
   vendor_q?: string;
   owner_q?: string;
+  office_location_q?: string;
   asset_type?: string;
 }
 
@@ -30,6 +31,7 @@ export const useAssets = (params?: UseAssetsParams) => {
         spec_q: params?.spec_q,
         vendor_q: params?.vendor_q,
         owner_q: params?.owner_q,
+        office_location_q: params?.office_location_q,
         asset_type: params?.asset_type,
         status: params?.status !== 'ALL' ? params?.status : undefined,
       });

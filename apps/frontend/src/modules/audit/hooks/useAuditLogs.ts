@@ -6,6 +6,7 @@ interface UseAuditLogsParams {
   action?: string;
   from_date?: string;
   to_date?: string;
+  user_id?: number;
   page?: number;
   page_size?: number;
 }

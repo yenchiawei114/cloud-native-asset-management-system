@@ -6,7 +6,8 @@ import { useAuth } from "../modules/auth/hooks/useAuth";
 import { useAssets } from "../modules/assets/hooks/useAssets";
 import { AddAssetDialog } from "../modules/assets/components/AddAssetDialog";
 import { AssetTransferDialog } from "../modules/assets/components/AssetTransferDialog";
-import { api, Asset, Vendor, RepairRequest } from "../lib/api";
+import { api, Asset, Vendor, OfficeLocation, User, RepairRequest } from "../lib/api";
+import { UserSearchCombobox } from "../modules/core/components/UserSearchCombobox";
 import { PendingTransfersBanner } from "../modules/assets/components/PendingTransfersBanner";
 
 const ASSET_TYPES = [
@@ -70,6 +71,7 @@ interface SearchState {
   spec_q: string;
   vendor_q: string;
   owner_q: string;
+  office_location_q: string;
   asset_type: string;
   status: string;
 }
@@ -81,6 +83,7 @@ const EMPTY_SEARCH: SearchState = {
   spec_q: "",
   vendor_q: "",
   owner_q: "",
+  office_location_q: "",
   asset_type: "",
   status: "",
 };
@@ -100,17 +103,22 @@ export const AdminDashboard: React.FC = () => {
     spec_q: submitted.spec_q || undefined,
     vendor_q: submitted.vendor_q || undefined,
     owner_q: submitted.owner_q || undefined,
+    office_location_q: submitted.office_location_q || undefined,
     asset_type: submitted.asset_type || undefined,
     status: submitted.status || undefined,
   });
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   useEffect(() => {
-    api
-      .listVendors()
-      .then(setVendors)
-      .catch(() => {});
+    api.listVendors().then(setVendors).catch(() => {});
   }, []);
+
+  const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>([]);
+  useEffect(() => {
+    api.getOfficeLocations().then(setOfficeLocations).catch(() => {});
+  }, []);
+
+  const [selectedOwner, setSelectedOwner] = useState<User | null>(null);
 
   const [activeTickets, setActiveTickets] = useState<RepairRequest[]>([]);
   const [ticketStatusFilter, setTicketStatusFilter] = useState<ActiveTicketStatus | null>(null);
@@ -159,10 +167,12 @@ export const AdminDashboard: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  const handleSearch = () => setSubmitted({ ...draft });
+  const handleSearch = () =>
+    setSubmitted({ ...draft, owner_q: selectedOwner?.employee_id || "" });
   const handleClear = () => {
     setDraft(EMPTY_SEARCH);
     setSubmitted(EMPTY_SEARCH);
+    setSelectedOwner(null);
   };
   const draftField = (key: keyof SearchState, value: string) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -346,99 +356,88 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Search */}
         <section className="bg-surface-container-low rounded-xl p-5 border border-outline-variant/10">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
-            <SearchInput
-              label="資產編號"
-              value={draft.asset_code_q}
-              onChange={(v) => draftField("asset_code_q", v)}
-              placeholder="A0000001"
-            />
-            <SearchInput
-              label="資產名稱"
-              value={draft.name_q}
-              onChange={(v) => draftField("name_q", v)}
-              placeholder="MacBook Pro"
-            />
-            <SearchInput
-              label="型號"
-              value={draft.model_q}
-              onChange={(v) => draftField("model_q", v)}
-              placeholder="MBP14-M3"
-            />
-            <SearchInput
-              label="規格"
-              value={draft.spec_q}
-              onChange={(v) => draftField("spec_q", v)}
-              placeholder="16GB 512GB"
-            />
-            <SearchInput
-              label="保管人（姓名/工號）"
-              value={draft.owner_q}
-              onChange={(v) => draftField("owner_q", v)}
-              placeholder="王小明 / A12345678"
-            />
+          {/* 第一列：文字欄位 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+            <SearchInput label="資產編號" value={draft.asset_code_q} onChange={(v) => draftField("asset_code_q", v)} />
+            <SearchInput label="資產名稱" value={draft.name_q} onChange={(v) => draftField("name_q", v)} />
+            <SearchInput label="型號" value={draft.model_q} onChange={(v) => draftField("model_q", v)} />
+            <SearchInput label="規格" value={draft.spec_q} onChange={(v) => draftField("spec_q", v)} />
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+
+          {/* 第二列：保管人 combobox、廠商下拉、辦公地點下拉 */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+            <UserSearchCombobox
+              label="保管人"
+              selectedUser={selectedOwner}
+              onSelect={setSelectedOwner}
+            />
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-                廠商
-              </label>
-              <input
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">廠商</label>
+              <select
                 value={draft.vendor_q}
                 onChange={(e) => draftField("vendor_q", e.target.value)}
-                placeholder="Apple, Dell..."
-                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
-              />
+                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
+              >
+                <option value="">全部廠商</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.name}>{v.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-                分類
-              </label>
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">辦公地點</label>
+              <select
+                value={draft.office_location_q}
+                onChange={(e) => draftField("office_location_q", e.target.value)}
+                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
+              >
+                <option value="">全部地點</option>
+                {officeLocations.map((l) => (
+                  <option key={l.id} value={l.name}>{l.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* 第三列：分類、狀態、搜尋/清空 */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">分類</label>
               <select
                 value={draft.asset_type}
                 onChange={(e) => draftField("asset_type", e.target.value)}
-                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
+                className="min-w-[8rem] bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
                 {ASSET_TYPES.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
+                  <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-                狀態
-              </label>
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">狀態</label>
               <select
                 value={draft.status}
                 onChange={(e) => draftField("status", e.target.value)}
-                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
+                className="min-w-[8rem] bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
                 {ASSET_STATUSES.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
+                  <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
             </div>
-            <div className="flex items-end gap-2">
+            <div className="ml-auto flex items-end gap-2">
               <button
                 onClick={handleSearch}
-                className="flex-1 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-1"
+                className="py-2 px-4 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-sm">
-                  search
-                </span>
+                <span className="material-symbols-outlined text-sm">search</span>
                 搜尋
               </button>
               <button
                 onClick={handleClear}
-                className="flex-1 py-2 bg-surface-container-highest text-on-surface-variant text-sm font-semibold rounded-lg hover:bg-surface-container transition-colors flex items-center justify-center gap-1"
+                className="py-2 px-4 bg-surface-container-highest text-on-surface-variant text-sm font-semibold rounded-lg hover:bg-surface-container transition-colors flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-sm">
-                  clear_all
-                </span>
+                <span className="material-symbols-outlined text-sm">clear_all</span>
                 清空
               </button>
             </div>

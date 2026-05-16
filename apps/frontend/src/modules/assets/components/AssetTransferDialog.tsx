@@ -101,7 +101,7 @@ export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransfe
                     onChange={e => { setOwnerSearch(e.target.value); setSelectedUser(null); setDropdownOpen(true); }}
                     onFocus={() => setDropdownOpen(true)}
                     className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
-                    placeholder="輸入姓名或工號搜尋"
+                    placeholder=""
                   />
                   {dropdownOpen && filteredUsers.length > 0 && (
                     <ul className="absolute z-10 mt-1 w-full bg-surface border border-outline-variant/30 rounded-lg shadow-lg max-h-48 overflow-y-auto">

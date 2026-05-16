@@ -240,6 +240,7 @@ export const api = {
     spec_q?: string;
     vendor_q?: string;
     owner_q?: string;
+    office_location_q?: string;
     asset_type?: string;
   }) => {
     const cleanParams = Object.fromEntries(
@@ -379,7 +380,7 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
-  listAuditLogs: (params?: { target_type?: string; action?: string; from_date?: string; to_date?: string; page?: number; page_size?: number }) => {
+  listAuditLogs: (params?: { target_type?: string; action?: string; from_date?: string; to_date?: string; user_id?: number; page?: number; page_size?: number }) => {
     const cleanParams = Object.fromEntries(
       Object.entries(params || {}).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "undefined")
     );

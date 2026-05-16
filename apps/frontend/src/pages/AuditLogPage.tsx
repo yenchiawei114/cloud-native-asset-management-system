@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../modules/dashboard/components/DashboardLayout";
 import { useAuditLogs } from "../modules/audit/hooks/useAuditLogs";
+import { UserSearchCombobox } from "../modules/core/components/UserSearchCombobox";
+import type { User } from "../lib/api";
 
 export const AuditLogPage: React.FC = () => {
   const { t } = useTranslation();
@@ -15,6 +17,7 @@ export const AuditLogPage: React.FC = () => {
     from_date: "",
     to_date: "",
   });
+  const [selectedOperator, setSelectedOperator] = useState<User | null>(null);
 
   const { logs, total, loading } = useAuditLogs({
     ...params,
@@ -22,6 +25,7 @@ export const AuditLogPage: React.FC = () => {
     action: params.action || undefined,
     from_date: params.from_date || undefined,
     to_date: params.to_date || undefined,
+    user_id: selectedOperator?.id ?? undefined,
   });
 
   const totalPages = Math.ceil(total / params.page_size);
@@ -53,12 +57,13 @@ export const AuditLogPage: React.FC = () => {
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/10">
-            <label className="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1">
-              {t("audit.operator")}
-            </label>
-            <select className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none">
-              <option value="">{t("audit.filters.allOperators")}</option>
-            </select>
+            <UserSearchCombobox
+              label={t("audit.operator")}
+              selectedUser={selectedOperator}
+              onSelect={(u) => { setSelectedOperator(u); setParams(p => ({ ...p, page: 1 })); }}
+              labelClassName="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1"
+              inputClassName="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none px-3 py-2 pr-8"
+            />
           </div>
           <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/10">
             <label className="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1">

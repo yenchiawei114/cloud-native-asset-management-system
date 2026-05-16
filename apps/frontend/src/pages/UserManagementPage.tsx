@@ -228,7 +228,7 @@ export const UserManagementPage: React.FC = () => {
                 onChange={(e) => setDraftField("employee_id", e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 className={inputCls}
-                placeholder="模糊搜尋..."
+                placeholder=""
               />
             </div>
             <div>
@@ -238,7 +238,7 @@ export const UserManagementPage: React.FC = () => {
                 onChange={(e) => setDraftField("name", e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 className={inputCls}
-                placeholder="模糊搜尋..."
+                placeholder=""
               />
             </div>
             <div>
@@ -248,7 +248,7 @@ export const UserManagementPage: React.FC = () => {
                 onChange={(e) => setDraftField("email", e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 className={inputCls}
-                placeholder="模糊搜尋..."
+                placeholder=""
               />
             </div>
           </div>

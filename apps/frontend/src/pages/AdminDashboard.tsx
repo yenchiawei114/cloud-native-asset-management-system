@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../modules/dashboard/components/DashboardLayout";
+import { useAuth } from "../modules/auth/hooks/useAuth";
 import { useAssets } from "../modules/assets/hooks/useAssets";
 import { AddAssetDialog } from "../modules/assets/components/AddAssetDialog";
 import { AssetTransferDialog } from "../modules/assets/components/AssetTransferDialog";
-import { api, Asset, Vendor } from "../lib/api";
+import { api, Asset, Vendor, RepairRequest } from "../lib/api";
 import { PendingTransfersBanner } from "../modules/assets/components/PendingTransfersBanner";
 
 const ASSET_TYPES = [
@@ -32,6 +33,36 @@ const ASSET_STATUSES = [
 
 const ASSET_STATUS_OPTIONS = ASSET_STATUSES.filter((s) => s.value);
 
+const ACTIVE_TICKET_STATUSES = ["OPEN", "IN_PROGRESS", "WAITING_LOANER_RETURN"] as const;
+type ActiveTicketStatus = (typeof ACTIVE_TICKET_STATUSES)[number];
+
+const TICKET_STATUS_LABELS: Record<ActiveTicketStatus, string> = {
+  OPEN: "待審核",
+  IN_PROGRESS: "維修中",
+  WAITING_LOANER_RETURN: "待備用機歸還",
+};
+
+const TICKET_BADGE_COLORS: Record<ActiveTicketStatus, string> = {
+  OPEN: "bg-amber-100 text-amber-700 border-amber-200",
+  IN_PROGRESS: "bg-blue-100 text-blue-700 border-blue-200",
+  WAITING_LOANER_RETURN: "bg-purple-100 text-purple-700 border-purple-200",
+};
+
+const TICKET_CHIP_COLORS: Record<ActiveTicketStatus, { active: string; inactive: string }> = {
+  OPEN: {
+    active: "bg-amber-500 text-white border-amber-500",
+    inactive: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100",
+  },
+  IN_PROGRESS: {
+    active: "bg-blue-500 text-white border-blue-500",
+    inactive: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100",
+  },
+  WAITING_LOANER_RETURN: {
+    active: "bg-purple-500 text-white border-purple-500",
+    inactive: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100",
+  },
+};
+
 interface SearchState {
   asset_code_q: string;
   name_q: string;
@@ -57,6 +88,7 @@ const EMPTY_SEARCH: SearchState = {
 export const AdminDashboard: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [draft, setDraft] = useState<SearchState>(EMPTY_SEARCH);
   const [submitted, setSubmitted] = useState<SearchState>(EMPTY_SEARCH);
@@ -79,6 +111,43 @@ export const AdminDashboard: React.FC = () => {
       .then(setVendors)
       .catch(() => {});
   }, []);
+
+  const [activeTickets, setActiveTickets] = useState<RepairRequest[]>([]);
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<ActiveTicketStatus | null>(null);
+
+  useEffect(() => {
+    api
+      .listTickets()
+      .then((tickets) =>
+        setActiveTickets(
+          tickets.filter((t): t is RepairRequest & { status: ActiveTicketStatus } =>
+            (ACTIVE_TICKET_STATUSES as readonly string[]).includes(t.status),
+          ),
+        ),
+      )
+      .catch(() => {});
+  }, []);
+
+  const activeTicketMap = useMemo(
+    () => new Map(activeTickets.map((t) => [t.asset_id, t])),
+    [activeTickets],
+  );
+
+  const ticketCounts = useMemo(
+    () => ({
+      OPEN: activeTickets.filter((t) => t.status === "OPEN").length,
+      IN_PROGRESS: activeTickets.filter((t) => t.status === "IN_PROGRESS").length,
+      WAITING_LOANER_RETURN: activeTickets.filter((t) => t.status === "WAITING_LOANER_RETURN").length,
+    }),
+    [activeTickets],
+  );
+
+  const displayedAssets = ticketStatusFilter
+    ? assets.filter((a) => activeTicketMap.get(a.id)?.status === ticketStatusFilter)
+    : assets;
+
+  const toggleTicketFilter = (status: ActiveTicketStatus) =>
+    setTicketStatusFilter((prev) => (prev === status ? null : status));
 
   const [addOpen, setAddOpen] = useState(false);
   const [transferAsset, setTransferAsset] = useState<Asset | null>(null);
@@ -234,6 +303,47 @@ export const AdminDashboard: React.FC = () => {
 
         <PendingTransfersBanner onConfirmed={refresh} />
 
+        {/* 待處理維修工單摘要 */}
+        {ACTIVE_TICKET_STATUSES.some((s) => ticketCounts[s] > 0) && (
+          <section className="bg-surface-container-low rounded-xl px-5 py-3 border border-outline-variant/10 flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2 text-xs font-bold text-on-surface-variant shrink-0">
+              <span className="material-symbols-outlined text-sm">build_circle</span>
+              待處理維修工單
+            </div>
+            <div className="flex items-center gap-2 flex-wrap flex-1">
+              {ACTIVE_TICKET_STATUSES.map((status) => {
+                const count = ticketCounts[status];
+                if (count === 0) return null;
+                const isActive = ticketStatusFilter === status;
+                const colors = TICKET_CHIP_COLORS[status];
+                return (
+                  <button
+                    key={status}
+                    onClick={() => toggleTicketFilter(status)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${isActive ? colors.active : colors.inactive}`}
+                  >
+                    {TICKET_STATUS_LABELS[status]}
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${isActive ? "bg-white/25" : "bg-black/8"}`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {ticketStatusFilter && (
+              <button
+                onClick={() => setTicketStatusFilter(null)}
+                className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-on-surface transition-colors shrink-0"
+              >
+                <span className="material-symbols-outlined text-sm">close</span>
+                清除篩選
+              </button>
+            )}
+          </section>
+        )}
+
         {/* Search */}
         <section className="bg-surface-container-low rounded-xl p-5 border border-outline-variant/10">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
@@ -351,10 +461,11 @@ export const AdminDashboard: React.FC = () => {
                   <th className="px-4 py-3">規格</th>
                   <th className="px-4 py-3">保管人</th>
                   <th className="px-4 py-3">辦公地點</th>
+                  <th className="px-4 py-3">維修工單</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/5">
-                {assets.map((asset) => {
+                {displayedAssets.map((asset) => {
                   const isDeactivated = asset.status === "deactivated";
                   const isRowDirty = !!pendingEdits[asset.id];
                   const val = (f: keyof Asset) => getFieldValue(asset, f);
@@ -379,14 +490,17 @@ export const AdminDashboard: React.FC = () => {
                                 }
                               />
                             )}
-                            {!isDeactivated && (
+                            {!isDeactivated &&
+                              (asset.status === "available" || asset.status === "in_use") && (
                               <ActionBtn
                                 icon="swap_horiz"
                                 label="資產轉移"
                                 onClick={() => setTransferAsset(asset)}
                               />
                             )}
-                            {!isDeactivated && (
+                            {!isDeactivated &&
+                              asset.status === "available" &&
+                              asset.owner_id === user?.id && (
                               <ActionBtn
                                 icon="power_off"
                                 label="停用"
@@ -547,6 +661,28 @@ export const AdminDashboard: React.FC = () => {
                       <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap">
                         {asset.office_location || "—"}
                       </td>
+
+                      {/* 維修工單狀態 */}
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const ticket = activeTicketMap.get(asset.id);
+                          if (!ticket) {
+                            return (
+                              <span className="text-on-surface-variant/30 text-xs">—</span>
+                            );
+                          }
+                          const status = ticket.status as ActiveTicketStatus;
+                          return (
+                            <button
+                              onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
+                              title="查看維修工單"
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-opacity hover:opacity-75 ${TICKET_BADGE_COLORS[status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}
+                            >
+                              {TICKET_STATUS_LABELS[status] ?? status}
+                            </button>
+                          );
+                        })()}
+                      </td>
                     </tr>
                   );
                 })}
@@ -554,14 +690,16 @@ export const AdminDashboard: React.FC = () => {
                 {assets.length === 0 && (
                   <tr>
                     <td
-                      colSpan={editMode ? 9 : 10}
+                      colSpan={editMode ? 10 : 11}
                       className="py-20 text-center opacity-40 whitespace-nowrap"
                     >
                       <span className="material-symbols-outlined text-6xl mb-4 block">
                         database_off
                       </span>
                       <p className="font-bold">
-                        {t("dashboard.employee.noAssets")}
+                        {ticketStatusFilter
+                          ? `目前沒有「${TICKET_STATUS_LABELS[ticketStatusFilter]}」的資產`
+                          : t("dashboard.employee.noAssets")}
                       </p>
                     </td>
                   </tr>

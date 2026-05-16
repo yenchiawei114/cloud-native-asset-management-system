@@ -87,16 +87,19 @@ export const EmployeeDashboard: React.FC = () => {
   );
 
   const loanerReturnTicketByAssetId = useMemo(() => {
-    const map = new Map<number, number>();
+    const map = new Map<number, import('../lib/api').RepairRequest>();
     tickets.forEach(t => {
       if (t.status === 'WAITING_LOANER_RETURN' && t.loaner_asset_id) {
-        map.set(t.loaner_asset_id, t.id);
+        map.set(t.loaner_asset_id, t);
       }
     });
     return map;
   }, [tickets]);
 
+  const [pendingReturnTicketId, setPendingReturnTicketId] = useState<number | null>(null);
+
   const handleConfirmLoanerReturn = useCallback(async (ticketId: number) => {
+    setPendingReturnTicketId(null);
     try {
       await api.confirmLoanerReturn(ticketId);
       await Promise.all([refreshAssets(), refreshTickets()]);
@@ -262,20 +265,27 @@ export const EmployeeDashboard: React.FC = () => {
                 <tbody className="divide-y divide-slate-50">
                   {filteredAssets.map(asset => {
                     const isLoanerAsset = asset.owner_id !== user?.id;
-                    const loanerTicketId = loanerReturnTicketByAssetId.get(asset.id);
+                    const loanerTicket = loanerReturnTicketByAssetId.get(asset.id);
                     return (
                     <tr key={asset.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           {isLoanerAsset ? (
-                            loanerTicketId ? (
-                              <button
-                                onClick={() => handleConfirmLoanerReturn(loanerTicketId)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">keyboard_return</span>
-                                確認歸還
-                              </button>
+                            loanerTicket ? (
+                              loanerTicket.loaner_return_borrower_confirmed ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-green-50 text-green-600 cursor-default">
+                                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                                  已確認歸還
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => setPendingReturnTicketId(loanerTicket.id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">keyboard_return</span>
+                                  確認歸還
+                                </button>
+                              )
                             ) : (
                               <span className="text-xs text-on-surface-variant/50 italic">借用中</span>
                             )
@@ -361,6 +371,36 @@ export const EmployeeDashboard: React.FC = () => {
           open
           onClose={() => setHistoryModalAsset(null)}
         />
+      )}
+
+      {pendingReturnTicketId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-purple-500 text-2xl mt-0.5">keyboard_return</span>
+              <div>
+                <h3 className="text-base font-bold text-on-surface">確認歸還備用機</h3>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  請確認您已將備用機實際歸還。確認後此操作無法撤銷。
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setPendingReturnTicketId(null)}
+                className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleConfirmLoanerReturn(pendingReturnTicketId)}
+                className="px-5 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                確認已歸還
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </DashboardLayout>
   );

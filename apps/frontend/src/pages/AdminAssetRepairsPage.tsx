@@ -105,9 +105,10 @@ export const AdminAssetRepairsPage: React.FC = () => {
     if (!confirm('確認已收回備用機？')) return;
     try {
       await api.confirmLoanerReturn(ticketId);
-      fetchData();
     } catch (err: any) {
       alert(`確認失敗：${err.message}`);
+    } finally {
+      fetchData();
     }
   };
 

@@ -1,16 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAssets } from '../modules/assets/hooks/useAssets';
-import { AssetCreatePayload } from '../lib/api';
+import { api, AssetCreatePayload, Vendor } from '../lib/api';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
+import { useAuth } from '../modules/auth/hooks/useAuth';
 
 export const AssetCreatePage: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const { createAsset } = useAssets();
   const { feedbackState, showFeedback, closeFeedback } = useFeedback();
+  const { user: authUser } = useAuth();
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+
+  useEffect(() => {
+    api.listVendors().then(setVendors).catch(() => {});
+  }, []);
   
   React.useEffect(() => {
     document.title = "新增資產 | Executive Architect";
@@ -96,7 +103,10 @@ export const AssetCreatePage: React.FC = () => {
                   </select>
                 </InputGroup>
                 <InputGroup label="品牌/廠商 (Vendor)" required>
-                  <input required className={inputStyles} placeholder="例如：Apple, Dell" value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} />
+                  <select required className={inputStyles} value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})}>
+                    <option value="">請選擇廠商</option>
+                    {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+                  </select>
                 </InputGroup>
                 <InputGroup label="型號 (Model)" required>
                   <input required className={inputStyles} placeholder="例如：M3 Max / A2991" value={formData.model} onChange={e => setFormData({...formData, model: e.target.value})} />
@@ -150,9 +160,16 @@ export const AssetCreatePage: React.FC = () => {
                   <input required type="date" className={inputStyles} value={formData.warranty_expiry} onChange={e => setFormData({...formData, warranty_expiry: e.target.value})} />
                 </InputGroup>
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <InputGroup label="辦公地點（自動帶入）">
+                  <div className={`${inputStyles} bg-surface-container-high cursor-not-allowed opacity-70`}>
+                    {authUser?.location ?? '（未設定辦公地點）'}
+                  </div>
+                </InputGroup>
+              </div>
               <p className="text-xs text-outline/70 flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-sm">info</span>
-                辦公地點將自動帶入管理員所屬部門，並隨保管人異動自動更新。
+                辦公地點自動帶入管理員所屬地點，並隨保管人異動自動更新。
               </p>
             </section>
 

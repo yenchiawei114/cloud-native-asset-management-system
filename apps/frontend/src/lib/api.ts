@@ -33,6 +33,11 @@ export interface OfficeLocation {
   name: string;
 }
 
+export interface Vendor {
+  id: number;
+  name: string;
+}
+
 export interface User {
   id: number;
   employee_id: string;
@@ -179,6 +184,7 @@ export const api = {
 
   getDepartments: () => http<Department[]>("/api/departments"),
   getOfficeLocations: () => http<OfficeLocation[]>("/api/office-locations"),
+  listVendors: () => http<Vendor[]>("/api/vendors"),
 
   getMe: () => http<User>("/api/users/me"),
   listUsers: (keyword?: string) =>
@@ -232,6 +238,7 @@ export const api = {
     name_q?: string;
     model_q?: string;
     spec_q?: string;
+    vendor_q?: string;
     owner_q?: string;
     asset_type?: string;
   }) => {

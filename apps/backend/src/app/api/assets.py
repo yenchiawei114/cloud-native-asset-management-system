@@ -137,6 +137,7 @@ async def list_assets(
     name_q: str | None = None,
     model_q: str | None = None,
     spec_q: str | None = None,
+    vendor_q: str | None = None,
     owner_q: str | None = None,
     asset_type: AssetType | None = None,
     status: AssetStatus | None = None,
@@ -189,6 +190,8 @@ async def list_assets(
         stmt = stmt.where(Asset.model.ilike(f"%{model_q}%"))
     if spec_q:
         stmt = stmt.where(Asset.specification.ilike(f"%{spec_q}%"))
+    if vendor_q:
+        stmt = stmt.where(Asset.vendor.ilike(f"%{vendor_q}%"))
 
     rows = (await db.scalars(stmt)).all()
 

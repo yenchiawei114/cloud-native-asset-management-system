@@ -6,6 +6,7 @@ from app.models.notification_preference import NotificationPreference
 from app.models.office_location import OfficeLocation
 from app.models.user import User
 from app.models.ticket import RepairRequest, RepairRecord, RepairInspection, Attachment
+from app.models.vendor import Vendor
 
 __all__ = [
     "Asset",
@@ -20,4 +21,5 @@ __all__ = [
     "RepairInspection",
     "RepairRecord",
     "Attachment",
+    "Vendor",
 ]

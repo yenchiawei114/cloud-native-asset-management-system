@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAssets } from '../modules/assets/hooks/useAssets';
 import { AddAssetDialog } from '../modules/assets/components/AddAssetDialog';
 import { AssetTransferDialog } from '../modules/assets/components/AssetTransferDialog';
-import { api, Asset } from '../lib/api';
+import { api, Asset, Vendor } from '../lib/api';
 import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
 
 const ASSET_TYPES = [
@@ -37,13 +37,14 @@ interface SearchState {
   name_q: string;
   model_q: string;
   spec_q: string;
+  vendor_q: string;
   owner_q: string;
   asset_type: string;
   status: string;
 }
 
 const EMPTY_SEARCH: SearchState = {
-  asset_code_q: '', name_q: '', model_q: '', spec_q: '', owner_q: '',
+  asset_code_q: '', name_q: '', model_q: '', spec_q: '', vendor_q: '', owner_q: '',
   asset_type: '', status: '',
 };
 
@@ -59,10 +60,16 @@ export const AdminDashboard: React.FC = () => {
     name_q: submitted.name_q || undefined,
     model_q: submitted.model_q || undefined,
     spec_q: submitted.spec_q || undefined,
+    vendor_q: submitted.vendor_q || undefined,
     owner_q: submitted.owner_q || undefined,
     asset_type: submitted.asset_type || undefined,
     status: submitted.status || undefined,
   });
+
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  useEffect(() => {
+    api.listVendors().then(setVendors).catch(() => {});
+  }, []);
 
   const [addOpen, setAddOpen] = useState(false);
   const [transferAsset, setTransferAsset] = useState<Asset | null>(null);
@@ -130,6 +137,7 @@ export const AdminDashboard: React.FC = () => {
     setSaveError('');
   };
 
+
   if (loading) {
     return (
       <DashboardLayout activeTab="all">
@@ -196,7 +204,16 @@ export const AdminDashboard: React.FC = () => {
             <SearchInput label="規格" value={draft.spec_q} onChange={v => draftField('spec_q', v)} placeholder="16GB 512GB" />
             <SearchInput label="保管人（姓名/工號）" value={draft.owner_q} onChange={v => draftField('owner_q', v)} placeholder="王小明 / A12345678" />
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">廠商</label>
+              <input
+                value={draft.vendor_q}
+                onChange={e => draftField('vendor_q', e.target.value)}
+                placeholder="Apple, Dell..."
+                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+              />
+            </div>
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">分類</label>
               <select
@@ -234,11 +251,12 @@ export const AdminDashboard: React.FC = () => {
             <table className="min-w-max w-full text-left text-sm">
               <thead>
                 <tr className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
-                  <th className="px-4 py-3">操作</th>
+                  {!editMode && <th className="px-4 py-3">操作</th>}
                   <th className="px-4 py-3">資產編號</th>
                   <th className="px-4 py-3">資產名稱</th>
                   <th className="px-4 py-3 text-center">狀態</th>
                   <th className="px-4 py-3">分類</th>
+                  <th className="px-4 py-3">廠商</th>
                   <th className="px-4 py-3">型號</th>
                   <th className="px-4 py-3">規格</th>
                   <th className="px-4 py-3">保管人</th>
@@ -248,47 +266,50 @@ export const AdminDashboard: React.FC = () => {
               <tbody className="divide-y divide-outline-variant/5">
                 {assets.map(asset => {
                   const isDeactivated = asset.status === 'deactivated';
+                  const isRowDirty = !!pendingEdits[asset.id];
                   const val = (f: keyof Asset) => getFieldValue(asset, f);
                   const set = (f: string, v: string) => setFieldEdit(asset.id, f, v);
 
                   return (
                     <tr
                       key={asset.id}
-                      className={`transition-colors ${isDeactivated ? 'opacity-50' : 'hover:bg-surface-container-low'}`}
+                      className={`transition-colors ${isDeactivated ? 'opacity-50' : isRowDirty ? 'bg-amber-50' : 'hover:bg-surface-container-low'}`}
                     >
-                      {/* 操作 */}
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          {!isDeactivated && (
-                            <ActionBtn
-                              icon="build"
-                              label="維修紀錄"
-                              onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
-                            />
-                          )}
-                          {!editMode && !isDeactivated && (
-                            <ActionBtn
-                              icon="swap_horiz"
-                              label="資產轉移"
-                              onClick={() => setTransferAsset(asset)}
-                            />
-                          )}
-                          {!editMode && !isDeactivated && (
-                            <ActionBtn
-                              icon="power_off"
-                              label="停用"
-                              onClick={() => handleDeactivate(asset.id)}
-                            />
-                          )}
-                          {!editMode && isDeactivated && (
-                            <ActionBtn
-                              icon="power"
-                              label="啟用"
-                              onClick={() => handleActivate(asset.id)}
-                            />
-                          )}
-                        </div>
-                      </td>
+                      {/* 操作 — 編輯模式下隱藏 */}
+                      {!editMode && (
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1">
+                            {!isDeactivated && (
+                              <ActionBtn
+                                icon="build"
+                                label="維修紀錄"
+                                onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
+                              />
+                            )}
+                            {!isDeactivated && (
+                              <ActionBtn
+                                icon="swap_horiz"
+                                label="資產轉移"
+                                onClick={() => setTransferAsset(asset)}
+                              />
+                            )}
+                            {!isDeactivated && (
+                              <ActionBtn
+                                icon="power_off"
+                                label="停用"
+                                onClick={() => handleDeactivate(asset.id)}
+                              />
+                            )}
+                            {isDeactivated && (
+                              <ActionBtn
+                                icon="power"
+                                label="啟用"
+                                onClick={() => handleActivate(asset.id)}
+                              />
+                            )}
+                          </div>
+                        </td>
+                      )}
 
                       {/* 資產編號 */}
                       <td className="px-4 py-3">
@@ -322,11 +343,25 @@ export const AdminDashboard: React.FC = () => {
                       {/* 分類 */}
                       <td className="px-4 py-3 text-on-surface-variant text-xs">
                         {editMode && !isDeactivated ? (
-                          <select value={val('type')} onChange={e => set('type', e.target.value)} className={inlineCls}>
+                          <select value={val('type')} onChange={e => set('type', e.target.value)}
+                            className={inlineCls}>
                             {ASSET_TYPE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                           </select>
                         ) : (
                           ASSET_TYPE_OPTIONS.find(t => t.value === asset.type)?.label ?? asset.type
+                        )}
+                      </td>
+
+                      {/* 廠商 */}
+                      <td className="px-4 py-3 text-on-surface-variant">
+                        {editMode && !isDeactivated ? (
+                          <select value={val('vendor')} onChange={e => set('vendor', e.target.value)}
+                            className={inlineCls}>
+                            {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+                            {vendors.length === 0 && <option value={val('vendor')}>{val('vendor')}</option>}
+                          </select>
+                        ) : (
+                          <span className="whitespace-nowrap">{asset.vendor || '—'}</span>
                         )}
                       </td>
 
@@ -370,7 +405,7 @@ export const AdminDashboard: React.FC = () => {
 
                 {assets.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="py-20 text-center opacity-40 whitespace-nowrap">
+                    <td colSpan={editMode ? 9 : 10} className="py-20 text-center opacity-40 whitespace-nowrap">
                       <span className="material-symbols-outlined text-6xl mb-4 block">database_off</span>
                       <p className="font-bold">{t('dashboard.employee.noAssets')}</p>
                     </td>

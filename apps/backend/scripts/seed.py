@@ -19,11 +19,20 @@ from app.models import (
     Attachment,
     NotificationPreference,
     AuditLog,
+    Vendor,
 )
 from app.models.asset import AssetType, AssetStatus
 from app.models.user import Role, Sex
 from app.models.audit_log import Action, TargetType
 from app.models.notification_preference import NoteType
+
+VENDORS = [
+    "Apple Inc.",
+    "Dell",
+    "Samsung",
+    "HP",
+    "Cisco",
+]
 
 OFFICE_LOCATIONS = [
     "Taipei HQ - Building A, 2F",
@@ -507,6 +516,17 @@ NOTIFICATION_PREFERENCES = [
 
 async def run() -> None:
     async with Session() as session:
+        # Seed Vendors
+        vendor_count = 0
+        for vendor_name in VENDORS:
+            existing = await session.scalar(select(Vendor).where(Vendor.name == vendor_name))
+            if existing:
+                continue
+            session.add(Vendor(name=vendor_name))
+            vendor_count += 1
+        await session.commit()
+        print(f"seeded: {vendor_count} vendor(s)")
+
         # Seed OfficeLocation
         loc_count = 0
         for loc_name in OFFICE_LOCATIONS:

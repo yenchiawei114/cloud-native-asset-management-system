@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, User } from '../../../lib/api';
+import { api, User, Vendor } from '../../../lib/api';
 import { useAuth } from '../../auth/hooks/useAuth';
 
 interface Props {
@@ -27,6 +27,7 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
   });
   const [users, setUsers] = useState<User[]>([]);
   const [selectedOwner, setSelectedOwner] = useState<User | null>(null);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,6 +40,7 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
         setSelectedOwner(self);
       }
     }).catch(() => {});
+    api.listVendors().then(setVendors).catch(() => {});
   }, [open, authUser?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,7 +61,7 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
         owner_id: selectedOwner?.id ?? null,
         activation_date: form.activation_date,
         warranty_expiry: form.warranty_expiry,
-        storage_location: form.storage_location || null,
+        storage_location: null,
       });
       onCreated();
       onClose();
@@ -119,16 +121,21 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
               </select>
             </Field>
             <Field label="廠商" required>
-              <input required value={form.vendor} onChange={e => field('vendor', e.target.value)}
-                className={inputCls} placeholder="Apple" />
+              <select required value={form.vendor} onChange={e => field('vendor', e.target.value)} className={inputCls}>
+                <option value="">請選擇廠商</option>
+                {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+              </select>
             </Field>
             <Field label="型號" required>
               <input required value={form.model} onChange={e => field('model', e.target.value)}
                 className={inputCls} placeholder="MBP14-M3" />
             </Field>
             <Field label="辦公地點">
-              <input value={form.storage_location} onChange={e => field('storage_location', e.target.value)}
-                className={inputCls} placeholder="B棟 2F" />
+              <input
+                readOnly
+                value={selectedOwner?.location ?? '（將隨保管人自動帶入）'}
+                className={inputCls + ' cursor-not-allowed opacity-60'}
+              />
             </Field>
           </div>
 

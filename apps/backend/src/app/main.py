@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from app.api import assets, audit_logs, auth, health, ticket, user
+from app.api import assets, audit_logs, auth, health, ticket, user, vendor
 from app.core.cache import close_cache
 from app.core.config import settings
 from app.core.db import dispose_engines
@@ -53,3 +53,4 @@ app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(ticket.router, prefix="/api", tags=["tickets"])
 # /api/transfers/* 和 /api/assets/*/transfers 都在 assets router 內
 app.include_router(user.router, prefix="/api", tags=["users"])
+app.include_router(vendor.router, prefix="/api", tags=["vendors"])

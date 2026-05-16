@@ -8,6 +8,7 @@ interface UseAssetsParams {
   name_q?: string;
   model_q?: string;
   spec_q?: string;
+  vendor_q?: string;
   owner_q?: string;
   asset_type?: string;
 }
@@ -27,6 +28,7 @@ export const useAssets = (params?: UseAssetsParams) => {
         name_q: params?.name_q,
         model_q: params?.model_q,
         spec_q: params?.spec_q,
+        vendor_q: params?.vendor_q,
         owner_q: params?.owner_q,
         asset_type: params?.asset_type,
         status: params?.status !== 'ALL' ? params?.status : undefined,

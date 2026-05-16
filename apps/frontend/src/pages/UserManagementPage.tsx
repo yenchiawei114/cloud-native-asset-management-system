@@ -31,8 +31,8 @@ const EMPTY_FILTER: FilterDraft = {
 export const UserManagementPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { users, loading, deleteUser, refresh } = useUsers();
-  const { feedbackState, showFeedback, closeFeedback } = useFeedback();
+  const { users, loading, refresh } = useUsers();
+  const { feedbackState, closeFeedback } = useFeedback();
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>([]);
@@ -106,23 +106,6 @@ export const UserManagementPage: React.FC = () => {
     setEditMode(false);
     setPendingEdits({});
     setSaveError('');
-  };
-
-  const handleDelete = (employeeId: string) => {
-    showFeedback({
-      title: '確認刪除',
-      message: '確定要刪除此使用者嗎？此操作無法復原。',
-      type: 'confirm',
-      onConfirm: async () => {
-        try {
-          await deleteUser(employeeId);
-          showFeedback({ title: '成功', message: '使用者已刪除', type: 'success', onConfirm: closeFeedback });
-        } catch (err: any) {
-          showFeedback({ title: '刪除失敗', message: `刪除失敗: ${err.message}`, type: 'error', onConfirm: closeFeedback });
-        }
-      },
-      onCancel: closeFeedback,
-    });
   };
 
   const editCount = Object.keys(pendingEdits).length;
@@ -281,7 +264,6 @@ export const UserManagementPage: React.FC = () => {
             <table className="min-w-max w-full text-left border-separate border-spacing-0 text-sm">
               <thead>
                 <tr className="bg-surface-container-low/50 text-[11px] font-extrabold text-outline uppercase tracking-widest">
-                  <th className="px-4 py-4 border-b border-outline-variant/10">操作</th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">{t('profile.employeeId')}</th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">{t('profile.name')}</th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">{t('profile.email')}</th>
@@ -296,7 +278,7 @@ export const UserManagementPage: React.FC = () => {
               <tbody className="divide-y divide-outline-variant/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="py-20 text-center">
+                    <td colSpan={9} className="py-20 text-center">
                       <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
                     </td>
                   </tr>
@@ -307,21 +289,6 @@ export const UserManagementPage: React.FC = () => {
                       key={user.id}
                       className={`transition-colors group ${isDirty ? 'bg-amber-50 border-l-2 border-amber-400' : 'hover:bg-surface-container-low'}`}
                     >
-                      {/* 操作 */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          {isDirty && (
-                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="已編輯，尚未存檔" />
-                          )}
-                          <button
-                            onClick={() => handleDelete(user.employee_id)}
-                            className="p-1.5 text-outline hover:text-error hover:bg-surface-container-highest rounded transition-all"
-                            title="刪除"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">delete</span>
-                          </button>
-                        </div>
-                      </td>
 
                       {/* 工號（唯讀） */}
                       <td className="px-4 py-3 font-mono font-bold text-outline group-hover:text-primary transition-colors whitespace-nowrap">
@@ -364,7 +331,7 @@ export const UserManagementPage: React.FC = () => {
                           <select
                             value={String(getFieldValue(user, 'sex') ?? 'MALE')}
                             onChange={e => setFieldEdit(user.employee_id, 'sex', e.target.value)}
-                            className={inlineCls}
+                            className={inlineSelectCls}
                           >
                             <option value="MALE">男</option>
                             <option value="FEMALE">女</option>

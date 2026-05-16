@@ -52,6 +52,7 @@ interface FilterState {
   assetName: string;
   model: string;
   spec: string;
+  vendor: string;
   category: string;
   status: string;
 }
@@ -61,6 +62,7 @@ const EMPTY_FILTERS: FilterState = {
   assetName: '',
   model: '',
   spec: '',
+  vendor: '',
   category: '',
   status: '',
 };
@@ -108,15 +110,16 @@ export const EmployeeDashboard: React.FC = () => {
   }, [inputs]);
 
   const filteredAssets = useMemo(() => {
-    const { assetCode, assetName, model, spec, category, status } = appliedFilters;
+    const { assetCode, assetName, model, spec, vendor, category, status } = appliedFilters;
     return allAssets.filter(a => {
       const matchCode = !assetCode || a.asset_code.toLowerCase().includes(assetCode.toLowerCase());
       const matchName = !assetName || a.name.toLowerCase().includes(assetName.toLowerCase());
       const matchModel = !model || a.model.toLowerCase().includes(model.toLowerCase());
       const matchSpec = !spec || a.specification.toLowerCase().includes(spec.toLowerCase());
+      const matchVendor = !vendor || a.vendor.toLowerCase().includes(vendor.toLowerCase());
       const matchCategory = !category || a.type === category;
       const matchStatus = !status || a.status === status;
-      return matchCode && matchName && matchModel && matchSpec && matchCategory && matchStatus;
+      return matchCode && matchName && matchModel && matchSpec && matchVendor && matchCategory && matchStatus;
     });
   }, [allAssets, appliedFilters]);
 
@@ -141,13 +144,14 @@ export const EmployeeDashboard: React.FC = () => {
         {/* Search Toolbar */}
         <div className="bg-surface-container-lowest rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
           {/* 文字搜尋欄位 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
             {(
               [
                 { key: 'assetCode', label: t('dashboard.table.assetCode') },
                 { key: 'assetName', label: t('dashboard.table.assetName') },
                 { key: 'model',     label: t('dashboard.table.model') },
                 { key: 'spec',      label: t('dashboard.table.specs') },
+                { key: 'vendor',    label: '廠商' },
               ] as { key: keyof FilterState; label: string }[]
             ).map(({ key, label }) => (
               <div key={key} className="flex items-center gap-2">
@@ -240,6 +244,7 @@ export const EmployeeDashboard: React.FC = () => {
                       ['assetName', '資產名稱'],
                       ['status', '當前狀態'],
                       ['type', '分類'],
+                      ['vendor', '廠商'],
                       ['model', '型號'],
                       ['specs', '規格'],
                       ['custodian', '保管人'],
@@ -318,6 +323,7 @@ export const EmployeeDashboard: React.FC = () => {
                       <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
                         {t(`assets.type.${asset.type}`, asset.type)}
                       </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.vendor || '—'}</td>
                       <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.model}</td>
                       <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap" title={asset.specification}>
                         {asset.specification}

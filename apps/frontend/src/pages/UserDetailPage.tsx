@@ -267,12 +267,12 @@ export const UserDetailPage: React.FC = () => {
                       value={editData.sex}
                       onChange={(e) => setEditData({ ...editData, sex: e.target.value as any })}
                     >
-                      <option value="M">男 (Male)</option>
-                      <option value="F">女 (Female)</option>
+                      <option value="MALE">男 (Male)</option>
+                      <option value="FEMALE">女 (Female)</option>
                     </select>
                   ) : (
                     <div className="p-4 bg-surface-container-low/30 rounded-xl text-sm font-bold text-on-surface">
-                      {user.sex === 'M' ? '男 (Male)' : '女 (Female)'}
+                      {user.sex === 'MALE' ? '男 (Male)' : '女 (Female)'}
                     </div>
                   )}
                 </div>
@@ -288,8 +288,8 @@ export const UserDetailPage: React.FC = () => {
                       value={editData.role}
                       onChange={(e) => setEditData({ ...editData, role: e.target.value as any })}
                     >
-                      <option value="employee">一般員工 (Employee)</option>
-                      <option value="admin">系統管理員 (Admin)</option>
+                      <option value="EMPLOYEE">一般員工 (Employee)</option>
+                      <option value="ADMIN">系統管理員 (Admin)</option>
                     </select>
                   ) : (
                     <div className="p-4 bg-surface-container-low/30 rounded-xl text-sm font-bold text-on-surface text-capitalize">

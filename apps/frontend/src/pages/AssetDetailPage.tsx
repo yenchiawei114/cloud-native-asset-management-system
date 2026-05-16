@@ -322,7 +322,7 @@ export const AssetDetailPage: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-400 mb-2">{t('assets.detail.location')}</label>
                   <div className="flex items-center gap-2 px-4 py-3 bg-surface-container-low rounded-lg text-sm font-semibold">
                     <span className="material-symbols-outlined text-primary text-sm">location_on</span>
-                    {asset.storage_location || 'N/A'}
+                    {asset.office_location || 'N/A'}
                   </div>
                 </div>
               </div>

@@ -98,7 +98,7 @@ export const ProfilePage: React.FC = () => {
             <Field label={t('profile.employeeId')} value={user?.employee_id} />
             <Field
               label={t('profile.role')}
-              value={user?.role === 'admin' ? t('profile.admin') : t('profile.employee')}
+              value={user?.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')}
             />
             {/* Email field with inline edit */}
             <div className="space-y-1">

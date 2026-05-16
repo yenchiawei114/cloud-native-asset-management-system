@@ -23,13 +23,24 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface Department {
+  id: number;
+  name: string;
+}
+
+export interface OfficeLocation {
+  id: number;
+  name: string;
+}
+
 export interface User {
   id: number;
   employee_id: string;
   name: string;
-  sex: 'M' | 'F';
+  sex: 'MALE' | 'FEMALE';
   department_id: number;
-  role: 'employee' | 'admin';
+  location: string | null;
+  role: 'EMPLOYEE' | 'ADMIN';
   email: string;
   must_change_password: boolean;
   last_password_changed_at: string | null;
@@ -40,10 +51,11 @@ export interface UserCreatePayload {
   employee_id: string;
   password: string;
   name: string;
-  sex: 'M' | 'F';
+  sex: 'MALE' | 'FEMALE';
   department_id: number;
+  location?: string | null;
   email: string;
-  role: 'employee' | 'admin';
+  role: 'EMPLOYEE' | 'ADMIN';
 }
 
 export interface Asset {
@@ -66,6 +78,7 @@ export interface Asset {
   version: number;
   owner_name?: string | null;
   owner_employee_id?: string | null;
+  office_location?: string | null;
 }
 
 export interface AssetCreatePayload {
@@ -163,6 +176,9 @@ export const api = {
     body: JSON.stringify(data)
   }),
   logout: () => http<any>("/api/logout", { method: "POST" }),
+
+  getDepartments: () => http<Department[]>("/api/departments"),
+  getOfficeLocations: () => http<OfficeLocation[]>("/api/office-locations"),
 
   getMe: () => http<User>("/api/users/me"),
   listUsers: (keyword?: string) =>

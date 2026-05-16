@@ -11,7 +11,7 @@ from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
 from app.core.db import get_db
 from app.core.security import hash_password, verify_password
-from app.models import NotificationPreference, User
+from app.models import NotificationPreference, User, Department, OfficeLocation
 from app.models.audit_log import Action, TargetType
 from app.models.notification_preference import NoteType
 from app.models.user import Role, Sex
@@ -36,12 +36,23 @@ def _sex_to_str(sex: Sex) -> str:
 	return sex.name
 
 
+class DepartmentOut(BaseModel):
+	id: int
+	name: str
+
+
+class OfficeLocationOut(BaseModel):
+	id: int
+	name: str
+
+
 class UserRegisterRequest(BaseModel):
 	employee_id: str = Field(min_length=9, max_length=9)
 	password: str = Field(min_length=1)
 	name: str
 	sex: Literal["MALE", "FEMALE"] = "MALE"
 	department_id: int
+	location: str | None = None
 	email: str
 
 
@@ -76,6 +87,7 @@ class UserOut(BaseModel):
 	name: str
 	sex: str
 	department_id: int
+	location: str | None
 	role: str
 	email: str
 	must_change_password: bool
@@ -87,6 +99,7 @@ class UserUpdateByAdmin(BaseModel):
 	name: str | None = None
 	sex: Literal["MALE", "FEMALE"] | None = None
 	department_id: int | None = None
+	location: str | None = None
 	role: Literal["EMPLOYEE", "ADMIN"] | None = None
 	email: str | None = None
 	password: str | None = None
@@ -99,6 +112,7 @@ def _user_to_out(row: User) -> UserOut:
 		name=row.name,
 		sex=_sex_to_str(row.sex),
 		department_id=row.department_id,
+		location=row.location,
 		role=_role_to_str(row.role),
 		email=row.email,
 		must_change_password=row.must_change_password,
@@ -133,6 +147,7 @@ async def _register_with_role(
 		name=payload.name,
 		sex=Sex[payload.sex],
 		department_id=payload.department_id,
+		location=payload.location,
 		role=role,
 		email=payload.email,
 		must_change_password=True,
@@ -164,6 +179,18 @@ async def _register_with_role(
 # @router.post("/admins/register", response_model=UserOut, status_code=201)
 # async def register_admin(payload: UserRegisterRequest, db: AsyncSession = Depends(get_db)) -> UserOut:
 # 	return await _register_with_role(payload=payload, role=Role.ADMIN, db=db)
+
+
+@router.get("/departments", response_model=list[DepartmentOut])
+async def list_departments(db: AsyncSession = Depends(get_db), _=Depends(get_current_user)) -> list[DepartmentOut]:
+	rows = (await db.scalars(select(Department).order_by(Department.id.asc()))).all()
+	return [DepartmentOut(id=r.id, name=r.name) for r in rows]
+
+
+@router.get("/office-locations", response_model=list[OfficeLocationOut])
+async def list_office_locations(db: AsyncSession = Depends(get_db), _=Depends(get_current_user)) -> list[OfficeLocationOut]:
+	rows = (await db.scalars(select(OfficeLocation).order_by(OfficeLocation.id.asc()))).all()
+	return [OfficeLocationOut(id=r.id, name=r.name) for r in rows]
 
 
 @router.get("/users/me", response_model=UserOut)
@@ -362,6 +389,8 @@ async def admin_update_user(
 		row.department_id = payload.department_id
 	if payload.role is not None:
 		row.role = Role[payload.role]
+	if payload.location is not None:
+		row.location = payload.location
 	if payload.email is not None:
 		row.email = payload.email
 	if payload.password is not None:

@@ -15,8 +15,8 @@ export const UserManagementPage: React.FC = () => {
 
   const stats = {
     total: users.length,
-    admins: users.filter(u => u.role === 'admin').length,
-    employees: users.filter(u => u.role === 'employee').length,
+    admins: users.filter(u => u.role === 'ADMIN').length,
+    employees: users.filter(u => u.role === 'EMPLOYEE').length,
   };
 
   const handleDelete = (employeeId: string) => {
@@ -96,7 +96,7 @@ export const UserManagementPage: React.FC = () => {
                     <td className="px-6 py-4 text-sm font-bold text-outline group-hover:text-primary transition-colors font-mono">{user.employee_id}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${user.role === 'admin' ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container-highest text-on-surface'}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${user.role === 'ADMIN' ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container-highest text-on-surface'}`}>
                           {user.name.charAt(0)}
                         </div>
                         <span className="text-sm font-bold text-on-surface">{user.name}</span>
@@ -104,8 +104,8 @@ export const UserManagementPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-sm text-on-surface-variant">{user.email}</td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${user.role === 'admin' ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container-highest text-on-surface-variant'}`}>
-                        {t(`profile.${user.role.toLowerCase()}`)}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${user.role === 'ADMIN' ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container-highest text-on-surface-variant'}`}>
+                        {user.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">

@@ -30,7 +30,6 @@ export const AssetCreatePage: React.FC = () => {
     vendor: '',
     purchase_date: today,
     purchase_price: 0,
-    storage_location: '',
     activation_date: today,
     warranty_expiry: nextYearStr,
     status: 'available',
@@ -137,11 +136,11 @@ export const AssetCreatePage: React.FC = () => {
               </div>
             </section>
 
-            {/* Section 3: 保固與存放 */}
+            {/* Section 3: 保固資訊 */}
             <section className="bg-surface-container-lowest p-10 rounded-[2rem] border border-outline-variant/10 shadow-sm space-y-8">
               <div className="flex items-center gap-3">
                 <span className="w-1.5 h-8 bg-primary rounded-full"></span>
-                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-primary">保固與存放 (Warranty & Storage)</h3>
+                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-primary">保固資訊 (Warranty)</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <InputGroup label="啟用日期 (Activation Date)" required>
@@ -150,15 +149,11 @@ export const AssetCreatePage: React.FC = () => {
                 <InputGroup label="保固到期日 (Warranty Expiry)" required>
                   <input required type="date" className={inputStyles} value={formData.warranty_expiry} onChange={e => setFormData({...formData, warranty_expiry: e.target.value})} />
                 </InputGroup>
-                <InputGroup label="存放地點" required>
-                  <select required className={inputStyles} value={formData.storage_location || ''} onChange={e => setFormData({...formData, storage_location: e.target.value})}>
-                    <option value="">請選擇存放地點</option>
-                    {STORAGE_LOCATIONS.map(loc => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
-                  </select>
-                </InputGroup>
               </div>
+              <p className="text-xs text-outline/70 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">info</span>
+                辦公地點將自動帶入管理員所屬部門，並隨保管人異動自動更新。
+              </p>
             </section>
 
             {/* Form Actions */}
@@ -207,14 +202,6 @@ export const AssetCreatePage: React.FC = () => {
     </DashboardLayout>
   );
 };
-
-const STORAGE_LOCATIONS = [
-  'Taipei HQ - 4F Storage A',
-  'Taipei HQ - 4F Storage B',
-  'Taipei HQ - Testing Lab',
-  'Taipei HQ - Conference Room',
-  'Taipei HQ - Accessories Room',
-];
 
 const inputStyles = "w-full bg-surface-container-low border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-outline/40 placeholder:font-normal";
 

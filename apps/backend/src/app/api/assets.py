@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import log_action
 from app.core.db import get_db
 from app.core.email import send_email
-from app.models import Asset, AssetTransfer, Department
+from app.models import Asset, AssetTransfer
 from app.models.asset import AssetType, AssetStatus
 from app.models.audit_log import Action, TargetType
 from app.models.user import User, Role
@@ -58,6 +58,7 @@ class AssetOut(AssetCreate):
     borrower_id: int | None = None
     owner_name: str | None = None
     owner_employee_id: str | None = None
+    office_location: str | None = None
 
 
 class AssetTransferCreate(BaseModel):
@@ -101,6 +102,7 @@ def _to_out(asset: Asset, owner: User | None = None) -> AssetOut:
         version=asset.version,
         owner_name=owner.name if owner else None,
         owner_employee_id=owner.employee_id if owner else None,
+        office_location=owner.location if owner else None,
     )
 
 
@@ -242,7 +244,16 @@ async def create_asset(
     db: AsyncSession = Depends(get_db),
     user=Depends(admin_required),
 ) -> AssetOut:
-    asset = Asset(**payload.model_dump())
+    payload_dict = payload.model_dump()
+
+    # 辦公地點跟隨保管人，若無手動指定，自動填入保管人的 location
+    if not payload_dict.get("storage_location"):
+        owner_id = payload_dict.get("owner_id") or user["user_id"]
+        ref_user = await db.get(User, owner_id)
+        if ref_user and ref_user.location:
+            payload_dict["storage_location"] = ref_user.location
+
+    asset = Asset(**payload_dict)
     db.add(asset)
     try:
         await db.flush()
@@ -387,13 +398,9 @@ async def activate_asset(asset_id: int, db: AsyncSession = Depends(get_db), user
         raise HTTPException(status_code=400, detail="只有已停用的資產可以重新啟用")
 
     admin_user = await db.get(User, user["user_id"])
-    dept_location: str | None = None
-    if admin_user and admin_user.department_id:
-        dept = await db.get(Department, admin_user.department_id)
-        dept_location = dept.location if dept else None
 
     asset.owner_id = user["user_id"]
-    asset.storage_location = dept_location
+    asset.storage_location = admin_user.location if admin_user else None
     asset.status = AssetStatus.AVAILABLE
     asset.version += 1
 
@@ -520,6 +527,9 @@ async def confirm_transfer(
         to_user = await db.get(User, transfer.to_owner_id)
         if asset:
             asset.owner_id = transfer.to_owner_id
+            # 辦公地點跟隨新保管人
+            if to_user:
+                asset.storage_location = to_user.location
             # 若新保管人為管理員，狀態設為閒置；否則設為使用中
             is_admin_owner = to_user and to_user.role == Role.ADMIN
             asset.status = AssetStatus.AVAILABLE if is_admin_owner else AssetStatus.IN_USE

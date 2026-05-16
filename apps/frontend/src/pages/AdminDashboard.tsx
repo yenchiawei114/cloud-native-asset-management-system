@@ -328,7 +328,7 @@ export const AdminDashboard: React.FC = () => {
 
                       {/* 辦公地點（跟隨保管人，唯讀） */}
                       <td className="px-4 py-3 text-on-surface-variant">
-                        {asset.storage_location || '—'}
+                        {asset.office_location || '—'}
                       </td>
 
                       {/* 操作 */}

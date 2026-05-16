@@ -12,6 +12,7 @@ from app.models import (
     Asset,
     User,
     Department,
+    OfficeLocation,
     RepairRequest,
     RepairInspection,
     RepairRecord,
@@ -24,19 +25,29 @@ from app.models.user import Role, Sex
 from app.models.audit_log import Action, TargetType
 from app.models.notification_preference import NoteType
 
-# 1 Department
-DEPARTMENTS = [
-    {"name": "Engineering", "location": "Building A, Floor 4"},
-    {"name": "Information Technology", "location": "Building A, Floor 3"},
-    {"name": "AI Team", "location": "Building A, Floor 5"},
-    {"name": "Cybersecurity", "location": "Building A, Floor 2"},
-    {"name": "DevOps", "location": "Building A, Floor 4"},
-    {"name": "Marketing", "location": "Building B, Floor 1"},
-    {"name": "Sales", "location": "Building B, Floor 2"},
-    {"name": "Human Resources", "location": "Building C, Floor 2"},
-    {"name": "Accounting", "location": "Building C, Floor 1"},
-    {"name": "Legal", "location": "Building C, Floor 1"},
+OFFICE_LOCATIONS = [
+    "Taipei HQ - Building A, 2F",
+    "Taipei HQ - Building A, 3F",
+    "Taipei HQ - Building A, 4F",
+    "Taipei HQ - Building B, 1F",
+    "Taipei HQ - Building C, 1F",
 ]
+
+# 5 Departments
+DEPARTMENTS = [
+    {"name": "Engineering"},
+    {"name": "Information Technology"},
+    {"name": "Marketing"},
+    {"name": "Human Resources"},
+    {"name": "Finance"},
+]
+
+# 預設辦公地點（與前端常數對應）
+LOC_A2 = "Taipei HQ - Building A, 2F"
+LOC_A3 = "Taipei HQ - Building A, 3F"
+LOC_A4 = "Taipei HQ - Building A, 4F"
+LOC_B1 = "Taipei HQ - Building B, 1F"
+LOC_C1 = "Taipei HQ - Building C, 1F"
 
 # 10 Users
 USERS = [
@@ -47,7 +58,8 @@ USERS = [
         "sex": Sex.MALE,
         "role": Role.ADMIN,
         "email": "ycweicloudnative@gmail.com",
-        "department_id": 5,
+        "department_id": 1,
+        "location": LOC_A4,
     },
     {
         "employee_id": "EMP202602",
@@ -56,7 +68,8 @@ USERS = [
         "sex": Sex.MALE,
         "role": Role.ADMIN,
         "email": "bob@example.com",
-        "department_id": 5,
+        "department_id": 1,
+        "location": LOC_A4,
     },
     {
         "employee_id": "EMP202603",
@@ -65,7 +78,8 @@ USERS = [
         "sex": Sex.FEMALE,
         "role": Role.EMPLOYEE,
         "email": "carol@example.com",
-        "department_id": 8,
+        "department_id": 4,
+        "location": LOC_C1,
     },
     {
         "employee_id": "EMP202604",
@@ -75,6 +89,7 @@ USERS = [
         "role": Role.EMPLOYEE,
         "email": "david@example.com",
         "department_id": 1,
+        "location": LOC_A4,
     },
     {
         "employee_id": "EMP202605",
@@ -83,7 +98,8 @@ USERS = [
         "sex": Sex.FEMALE,
         "role": Role.EMPLOYEE,
         "email": "emma@example.com",
-        "department_id": 3,
+        "department_id": 2,
+        "location": LOC_A3,
     },
     {
         "employee_id": "EMP202606",
@@ -92,7 +108,8 @@ USERS = [
         "sex": Sex.MALE,
         "role": Role.EMPLOYEE,
         "email": "frank@example.com",
-        "department_id": 3,
+        "department_id": 2,
+        "location": LOC_A2,
     },
     {
         "employee_id": "EMP202607",
@@ -101,7 +118,8 @@ USERS = [
         "sex": Sex.FEMALE,
         "role": Role.EMPLOYEE,
         "email": "grace@example.com",
-        "department_id": 6,
+        "department_id": 3,
+        "location": LOC_B1,
     },
     {
         "employee_id": "EMP202608",
@@ -110,7 +128,8 @@ USERS = [
         "sex": Sex.MALE,
         "role": Role.EMPLOYEE,
         "email": "henry@example.com",
-        "department_id": 10,
+        "department_id": 5,
+        "location": LOC_C1,
     },
     {
         "employee_id": "EMP202609",
@@ -119,7 +138,8 @@ USERS = [
         "sex": Sex.FEMALE,
         "role": Role.EMPLOYEE,
         "email": "iris@example.com",
-        "department_id": 10,
+        "department_id": 5,
+        "location": LOC_C1,
     },
     {
         "employee_id": "EMP202610",
@@ -129,6 +149,7 @@ USERS = [
         "role": Role.EMPLOYEE,
         "email": "jack@example.com",
         "department_id": 1,
+        "location": LOC_A4,
     },
 ]
 
@@ -486,6 +507,17 @@ NOTIFICATION_PREFERENCES = [
 
 async def run() -> None:
     async with Session() as session:
+        # Seed OfficeLocation
+        loc_count = 0
+        for loc_name in OFFICE_LOCATIONS:
+            existing = await session.scalar(select(OfficeLocation).where(OfficeLocation.name == loc_name))
+            if existing:
+                continue
+            session.add(OfficeLocation(name=loc_name))
+            loc_count += 1
+        await session.commit()
+        print(f"seeded: {loc_count} office location(s)")
+
         # Seed Department
         dept_count = 0
         for dept_data in DEPARTMENTS:

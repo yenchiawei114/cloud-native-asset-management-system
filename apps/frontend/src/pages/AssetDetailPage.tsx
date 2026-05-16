@@ -8,6 +8,14 @@ import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
 import { api } from '../lib/api';
 
+const ASSET_STATUS_BADGE: Record<string, string> = {
+  available: 'bg-green-100 text-green-700',
+  in_use: 'bg-blue-100 text-blue-700',
+  maintenance: 'bg-amber-100 text-amber-700',
+  borrowed: 'bg-purple-100 text-purple-700',
+  deactivated: 'bg-slate-100 text-slate-400',
+};
+
 export const AssetDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -128,16 +136,8 @@ export const AssetDetailPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${
-                asset.status === 'available' ? 'bg-green-100 text-green-700' :
-                asset.status === 'in_use' ? 'bg-blue-100 text-blue-700' :
-                'bg-amber-100 text-amber-700'
-              }`}>
-              <span className={`w-2 h-2 rounded-full ${
-                  asset.status === 'available' ? 'bg-green-500' :
-                  asset.status === 'in_use' ? 'bg-blue-500' :
-                  'bg-amber-500'
-                }`}></span>
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${ASSET_STATUS_BADGE[asset.status] ?? 'bg-slate-100 text-slate-600'}`}>
+              <span className="w-2 h-2 rounded-full bg-current" />
               {t(`assets.status.${asset.status}`)}
             </span>
             {isAdmin && !isEditing && asset.owner_id === user?.id && (asset.status === 'available' || asset.status === 'in_use') && (

@@ -32,6 +32,14 @@ const ASSET_STATUS_LABELS: Record<string, string> = {
   borrowed: '已借出', deactivated: '已停用',
 };
 
+const ASSET_STATUS_COLORS: Record<string, string> = {
+  available: 'bg-green-100 text-green-700 border-green-200',
+  in_use: 'bg-blue-100 text-blue-700 border-blue-200',
+  maintenance: 'bg-amber-100 text-amber-700 border-amber-200',
+  borrowed: 'bg-purple-100 text-purple-700 border-purple-200',
+  deactivated: 'bg-slate-100 text-slate-400 border-slate-200',
+};
+
 export const AdminAssetRepairsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -49,6 +57,11 @@ export const AdminAssetRepairsPage: React.FC = () => {
   const [returnId, setReturnId] = useState<number | null>(null);
   const [closeId, setCloseId] = useState<number | null>(null);
   const [newRepairOpen, setNewRepairOpen] = useState(false);
+  const [blockedDialogOpen, setBlockedDialogOpen] = useState(false);
+
+  const hasActiveTicket = tickets.some(({ request: t }) =>
+    t.status === 'OPEN' || t.status === 'IN_PROGRESS' || t.status === 'WAITING_LOANER_RETURN'
+  );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -132,7 +145,7 @@ export const AdminAssetRepairsPage: React.FC = () => {
                 <p className="text-xs font-mono text-on-surface-variant">{asset.asset_code}</p>
               </div>
             </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-bold border ${STATUS_COLORS[asset.status.toUpperCase()] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold border ${ASSET_STATUS_COLORS[asset.status] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
               {ASSET_STATUS_LABELS[asset.status] ?? asset.status}
             </span>
           </div>
@@ -146,7 +159,7 @@ export const AdminAssetRepairsPage: React.FC = () => {
               <span className="text-xs text-on-surface-variant font-medium">{tickets.length} 筆</span>
               {asset && asset.status !== 'deactivated' && (
                 <button
-                  onClick={() => setNewRepairOpen(true)}
+                  onClick={() => hasActiveTicket ? setBlockedDialogOpen(true) : setNewRepairOpen(true)}
                   className="px-3 py-1.5 bg-primary text-on-primary text-xs font-bold rounded-lg flex items-center gap-1.5 hover:opacity-90 transition-opacity"
                 >
                   <span className="material-symbols-outlined text-sm">add_circle</span>
@@ -261,6 +274,31 @@ export const AdminAssetRepairsPage: React.FC = () => {
           onClose={() => setNewRepairOpen(false)}
           onSuccess={() => { setNewRepairOpen(false); fetchData(); }}
         />
+      )}
+
+      {blockedDialogOpen && asset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-amber-500 text-2xl mt-0.5">warning</span>
+              <div>
+                <h3 className="text-base font-bold text-on-surface">已有進行中的維修申請</h3>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  {asset.name}（{asset.asset_code}）目前已有未完成的維修單，無法再建立新的申請。<br />
+                  請等待現有維修單完成後再行申請。
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={() => setBlockedDialogOpen(false)}
+                className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:opacity-90 transition-opacity"
+              >
+                我知道了
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </DashboardLayout>
   );

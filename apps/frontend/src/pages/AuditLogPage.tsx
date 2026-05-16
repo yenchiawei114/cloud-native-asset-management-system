@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
-import { useAuditLogs } from '../modules/audit/hooks/useAuditLogs';
+import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { DashboardLayout } from "../modules/dashboard/components/DashboardLayout";
+import { useAuditLogs } from "../modules/audit/hooks/useAuditLogs";
 
 export const AuditLogPage: React.FC = () => {
   const { t } = useTranslation();
@@ -10,10 +10,10 @@ export const AuditLogPage: React.FC = () => {
   const [params, setParams] = useState({
     page: 1,
     page_size: 20,
-    target_type: '',
-    action: '',
-    from_date: '',
-    to_date: '',
+    target_type: "",
+    action: "",
+    from_date: "",
+    to_date: "",
   });
 
   const { logs, total, loading } = useAuditLogs({
@@ -32,17 +32,20 @@ export const AuditLogPage: React.FC = () => {
         {/* Title Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-on-surface">{t('audit.title')}</h1>
-            <p className="text-on-surface-variant mt-1 font-medium">{t('audit.subtitle')}</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-on-surface">
+              {t("audit.title")}
+            </h1>
           </div>
           <div className="flex gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest text-on-surface-variant rounded-md shadow-sm text-sm font-semibold border border-outline-variant/10 hover:bg-surface-container-high transition-colors">
-              <span className="material-symbols-outlined text-lg">download</span>
-              {t('audit.export')}
+              <span className="material-symbols-outlined text-lg">
+                download
+              </span>
+              {t("audit.export")}
             </button>
             <button className="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest text-on-surface-variant rounded-md shadow-sm text-sm font-semibold border border-outline-variant/10 hover:bg-surface-container-high transition-colors">
               <span className="material-symbols-outlined text-lg">print</span>
-              {t('audit.print')}
+              {t("audit.print")}
             </button>
           </div>
         </div>
@@ -50,39 +53,53 @@ export const AuditLogPage: React.FC = () => {
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/10">
-            <label className="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1">{t('audit.operator')}</label>
+            <label className="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1">
+              {t("audit.operator")}
+            </label>
             <select className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none">
-              <option value="">{t('audit.filters.allOperators')}</option>
+              <option value="">{t("audit.filters.allOperators")}</option>
             </select>
           </div>
           <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/10">
-            <label className="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1">{t('audit.targetType')}</label>
-            <select 
+            <label className="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1">
+              {t("audit.targetType")}
+            </label>
+            <select
               className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none"
               value={params.target_type}
-              onChange={(e) => setParams({ ...params, target_type: e.target.value, page: 1 })}
+              onChange={(e) =>
+                setParams({ ...params, target_type: e.target.value, page: 1 })
+              }
             >
-              <option value="">{t('audit.filters.allTypes')}</option>
-              <option value="ASSET">{t('audit.type.ASSET')}</option>
-              <option value="TICKET">{t('audit.type.TICKET')}</option>
-              <option value="USER">{t('audit.type.USER')}</option>
+              <option value="">{t("audit.filters.allTypes")}</option>
+              <option value="ASSET">{t("audit.type.ASSET")}</option>
+              <option value="TICKET">{t("audit.type.TICKET")}</option>
+              <option value="USER">{t("audit.type.USER")}</option>
             </select>
           </div>
           <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/10 md:col-span-2">
-            <label className="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1">{t('audit.filters.dateRange')}</label>
+            <label className="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2 px-1">
+              {t("audit.filters.dateRange")}
+            </label>
             <div className="flex items-center gap-3">
-              <input 
-                type="date" 
+              <input
+                type="date"
                 className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none px-3 py-2"
                 value={params.from_date}
-                onChange={(e) => setParams({ ...params, from_date: e.target.value, page: 1 })}
+                onChange={(e) =>
+                  setParams({ ...params, from_date: e.target.value, page: 1 })
+                }
               />
-              <span className="text-outline text-xs">{t('audit.filters.to')}</span>
-              <input 
-                type="date" 
+              <span className="text-outline text-xs">
+                {t("audit.filters.to")}
+              </span>
+              <input
+                type="date"
                 className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none px-3 py-2"
                 value={params.to_date}
-                onChange={(e) => setParams({ ...params, to_date: e.target.value, page: 1 })}
+                onChange={(e) =>
+                  setParams({ ...params, to_date: e.target.value, page: 1 })
+                }
               />
             </div>
           </div>
@@ -92,26 +109,38 @@ export const AuditLogPage: React.FC = () => {
         <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-outline-variant/10 overflow-hidden flex flex-col">
           <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center">
             <h3 className="font-bold text-lg text-on-surface">
-              {t('audit.latestRecords', { count: 50 })}
+              {t("audit.latestRecords", { count: 50 })}
             </h3>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
               <span className="text-[10px] font-bold text-primary uppercase tracking-widest">
-                {t('audit.liveUpdating')}
+                {t("audit.liveUpdating")}
               </span>
             </div>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-surface-container-low/50">
-                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">{t('audit.timestamp')}</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">{t('audit.operator')}</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">{t('audit.targetId')}</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">{t('audit.action')}</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">{t('audit.status')}</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest text-right">{t('audit.actions')}</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">
+                    {t("audit.timestamp")}
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">
+                    {t("audit.operator")}
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">
+                    {t("audit.targetId")}
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">
+                    {t("audit.action")}
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">
+                    {t("audit.status")}
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest text-right">
+                    {t("audit.actions")}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/5">
@@ -123,95 +152,110 @@ export const AuditLogPage: React.FC = () => {
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-20 text-center text-outline text-sm">
-                      {t('audit.noLogs')}
+                    <td
+                      colSpan={6}
+                      className="py-20 text-center text-outline text-sm"
+                    >
+                      {t("audit.noLogs")}
                     </td>
                   </tr>
-                ) : logs.map((log) => (
-                  <tr 
-                    key={log.id} 
-                    onClick={() => navigate(`/audit-logs/${log.id}`)}
-                    className="group hover:bg-surface-container-low transition-colors cursor-pointer"
-                  >
-                    <td className="px-6 py-4 text-sm text-on-surface-variant font-medium">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-full bg-primary-container/10 flex items-center justify-center text-[10px] font-bold text-primary">
-                          {log.actor_name?.charAt(0) || 'S'}
+                ) : (
+                  logs.map((log) => (
+                    <tr
+                      key={log.id}
+                      onClick={() => navigate(`/audit-logs/${log.id}`)}
+                      className="group hover:bg-surface-container-low transition-colors cursor-pointer"
+                    >
+                      <td className="px-6 py-4 text-sm text-on-surface-variant font-medium">
+                        {new Date(log.timestamp).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-primary-container/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                            {log.actor_name?.charAt(0) || "S"}
+                          </div>
+                          <span className="text-sm font-bold text-on-surface">
+                            {log.actor_name || "System"}
+                          </span>
                         </div>
-                        <span className="text-sm font-bold text-on-surface">{log.actor_name || 'System'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-xs font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded">
-                        {log.target_type}-{log.target_id}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold text-on-surface">
-                          {t(`audit.actionType.${log.action}`)} {t(`audit.type.${log.target_type}`)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-xs font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded">
+                          {log.target_type}-{log.target_id}
                         </span>
-                        <span className="text-[10px] text-outline line-clamp-1">{log.target_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded uppercase tracking-wider">
-                        {t('audit.completed')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="p-2 text-outline group-hover:text-primary transition-colors">
-                        <span className="material-symbols-outlined">visibility</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-on-surface">
+                            {t(`audit.actionType.${log.action}`)}{" "}
+                            {t(`audit.type.${log.target_type}`)}
+                          </span>
+                          <span className="text-[10px] text-outline line-clamp-1">
+                            {log.target_name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded uppercase tracking-wider">
+                          {t("audit.completed")}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button className="p-2 text-outline group-hover:text-primary transition-colors">
+                          <span className="material-symbols-outlined">
+                            visibility
+                          </span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           <div className="p-6 bg-surface-container-low/30 border-t border-outline-variant/10 flex flex-col md:flex-row justify-between items-center gap-4">
             <span className="text-xs text-outline font-medium">
-              {t('audit.pagination', { 
-                start: (params.page - 1) * params.page_size + 1, 
-                end: Math.min(params.page * params.page_size, total), 
-                total: total.toLocaleString() 
+              {t("audit.pagination", {
+                start: (params.page - 1) * params.page_size + 1,
+                end: Math.min(params.page * params.page_size, total),
+                total: total.toLocaleString(),
               })}
             </span>
             <div className="flex gap-1">
-              <button 
+              <button
                 disabled={params.page === 1}
                 onClick={() => setParams({ ...params, page: params.page - 1 })}
                 className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-high text-outline disabled:opacity-30"
               >
-                <span className="material-symbols-outlined text-sm">chevron_left</span>
+                <span className="material-symbols-outlined text-sm">
+                  chevron_left
+                </span>
               </button>
               {[...Array(Math.min(5, totalPages))].map((_, i) => {
                 const p = i + 1; // Simplistic pagination for now
                 return (
-                  <button 
+                  <button
                     key={p}
                     onClick={() => setParams({ ...params, page: p })}
-                    className={`w-8 h-8 flex items-center justify-center rounded text-xs font-bold transition-all ${params.page === p ? 'bg-primary text-white shadow-md shadow-primary/20' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+                    className={`w-8 h-8 flex items-center justify-center rounded text-xs font-bold transition-all ${params.page === p ? "bg-primary text-white shadow-md shadow-primary/20" : "text-on-surface-variant hover:bg-surface-container-high"}`}
                   >
                     {p}
                   </button>
                 );
               })}
-              <button 
+              <button
                 disabled={params.page === totalPages || totalPages === 0}
                 onClick={() => setParams({ ...params, page: params.page + 1 })}
                 className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-high text-outline disabled:opacity-30"
               >
-                <span className="material-symbols-outlined text-sm">chevron_right</span>
+                <span className="material-symbols-outlined text-sm">
+                  chevron_right
+                </span>
               </button>
             </div>
           </div>
         </div>
-
       </div>
     </DashboardLayout>
   );

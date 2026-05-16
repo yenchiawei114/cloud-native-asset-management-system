@@ -231,9 +231,10 @@ export const AdminDashboard: React.FC = () => {
         {/* Table */}
         <div className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm border border-outline-variant/10">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="min-w-max w-full text-left text-sm">
               <thead>
                 <tr className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
+                  <th className="px-4 py-3">操作</th>
                   <th className="px-4 py-3">資產編號</th>
                   <th className="px-4 py-3">資產名稱</th>
                   <th className="px-4 py-3 text-center">狀態</th>
@@ -242,7 +243,6 @@ export const AdminDashboard: React.FC = () => {
                   <th className="px-4 py-3">規格</th>
                   <th className="px-4 py-3">保管人</th>
                   <th className="px-4 py-3">辦公地點</th>
-                  <th className="px-4 py-3 text-right">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/5">
@@ -256,6 +256,40 @@ export const AdminDashboard: React.FC = () => {
                       key={asset.id}
                       className={`transition-colors ${isDeactivated ? 'opacity-50' : 'hover:bg-surface-container-low'}`}
                     >
+                      {/* 操作 */}
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1">
+                          {!isDeactivated && (
+                            <ActionBtn
+                              icon="build"
+                              label="維修紀錄"
+                              onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
+                            />
+                          )}
+                          {!editMode && !isDeactivated && (
+                            <ActionBtn
+                              icon="swap_horiz"
+                              label="資產轉移"
+                              onClick={() => setTransferAsset(asset)}
+                            />
+                          )}
+                          {!editMode && !isDeactivated && (
+                            <ActionBtn
+                              icon="power_off"
+                              label="停用"
+                              onClick={() => handleDeactivate(asset.id)}
+                            />
+                          )}
+                          {!editMode && isDeactivated && (
+                            <ActionBtn
+                              icon="power"
+                              label="啟用"
+                              onClick={() => handleActivate(asset.id)}
+                            />
+                          )}
+                        </div>
+                      </td>
+
                       {/* 資產編號 */}
                       <td className="px-4 py-3">
                         {editMode && !isDeactivated ? (
@@ -297,27 +331,27 @@ export const AdminDashboard: React.FC = () => {
                       </td>
 
                       {/* 型號 */}
-                      <td className="px-4 py-3 text-on-surface-variant max-w-[120px]">
+                      <td className="px-4 py-3 text-on-surface-variant">
                         {editMode && !isDeactivated ? (
                           <input value={val('model')} onChange={e => set('model', e.target.value)}
                             className={inlineCls} placeholder="型號" />
                         ) : (
-                          <span className="truncate block">{asset.model || '—'}</span>
+                          <span className="whitespace-nowrap">{asset.model || '—'}</span>
                         )}
                       </td>
 
                       {/* 規格 */}
-                      <td className="px-4 py-3 text-on-surface-variant max-w-[150px]">
+                      <td className="px-4 py-3 text-on-surface-variant">
                         {editMode && !isDeactivated ? (
                           <input value={val('specification')} onChange={e => set('specification', e.target.value)}
                             className={inlineCls} placeholder="規格" />
                         ) : (
-                          <span className="truncate block">{asset.specification || '—'}</span>
+                          <span className="whitespace-nowrap">{asset.specification || '—'}</span>
                         )}
                       </td>
 
                       {/* 保管人（鎖定） */}
-                      <td className="px-4 py-3 text-on-surface-variant">
+                      <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap">
                         {asset.owner_name ? (
                           <div>
                             <p className="font-medium text-on-surface">{asset.owner_name}</p>
@@ -327,42 +361,8 @@ export const AdminDashboard: React.FC = () => {
                       </td>
 
                       {/* 辦公地點（跟隨保管人，唯讀） */}
-                      <td className="px-4 py-3 text-on-surface-variant">
+                      <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap">
                         {asset.office_location || '—'}
-                      </td>
-
-                      {/* 操作 */}
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-1">
-                          {!isDeactivated && (
-                            <ActionBtn
-                              icon="build"
-                              label="維修紀錄"
-                              onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
-                            />
-                          )}
-                          {!editMode && !isDeactivated && (
-                            <ActionBtn
-                              icon="swap_horiz"
-                              label="資產轉移"
-                              onClick={() => setTransferAsset(asset)}
-                            />
-                          )}
-                          {!editMode && !isDeactivated && (
-                            <ActionBtn
-                              icon="power_off"
-                              label="停用"
-                              onClick={() => handleDeactivate(asset.id)}
-                            />
-                          )}
-                          {!editMode && isDeactivated && (
-                            <ActionBtn
-                              icon="power"
-                              label="啟用"
-                              onClick={() => handleActivate(asset.id)}
-                            />
-                          )}
-                        </div>
                       </td>
                     </tr>
                   );
@@ -370,7 +370,7 @@ export const AdminDashboard: React.FC = () => {
 
                 {assets.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="py-20 text-center opacity-40">
+                    <td colSpan={9} className="py-20 text-center opacity-40 whitespace-nowrap">
                       <span className="material-symbols-outlined text-6xl mb-4 block">database_off</span>
                       <p className="font-bold">{t('dashboard.employee.noAssets')}</p>
                     </td>

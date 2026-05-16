@@ -232,6 +232,9 @@ export const EmployeeDashboard: React.FC = () => {
               <table className="min-w-max w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/60 border-b border-slate-100">
+                    <th className="px-5 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      {t('dashboard.table.actions', '操作')}
+                    </th>
                     {[
                       ['assetCode', '資產編號'],
                       ['assetName', '資產名稱'],
@@ -249,9 +252,6 @@ export const EmployeeDashboard: React.FC = () => {
                         {t(`dashboard.table.${key}`, label)}
                       </th>
                     ))}
-                    <th className="px-5 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                      {t('dashboard.table.actions', '操作')}
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -260,38 +260,6 @@ export const EmployeeDashboard: React.FC = () => {
                     const loanerTicketId = loanerReturnTicketByAssetId.get(asset.id);
                     return (
                     <tr key={asset.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-5 py-4 whitespace-nowrap">
-                        <span className="text-xs font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded">
-                          {asset.asset_code}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-on-surface whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          {asset.name}
-                          {isLoanerAsset && (
-                            <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">借用</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${STATUS_BADGE[asset.status] ?? 'bg-slate-100 text-slate-600'}`}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {t(`assets.status.${asset.status}`, asset.status)}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
-                        {t(`assets.type.${asset.type}`, asset.type)}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.model}</td>
-                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap max-w-[280px] truncate" title={asset.specification}>
-                        {asset.specification}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
-                        {isLoanerAsset ? (asset.owner_name ?? '—') : (user?.name ?? '—')}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.storage_location ?? '—'}</td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           {isLoanerAsset ? (
@@ -326,6 +294,38 @@ export const EmployeeDashboard: React.FC = () => {
                           )}
                         </div>
                       </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span className="text-xs font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded">
+                          {asset.asset_code}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-sm font-semibold text-on-surface whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          {asset.name}
+                          {isLoanerAsset && (
+                            <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">借用</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${STATUS_BADGE[asset.status] ?? 'bg-slate-100 text-slate-600'}`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {t(`assets.status.${asset.status}`, asset.status)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
+                        {t(`assets.type.${asset.type}`, asset.type)}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.model}</td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap" title={asset.specification}>
+                        {asset.specification}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
+                        {isLoanerAsset ? (asset.owner_name ?? '—') : (user?.name ?? '—')}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.storage_location ?? '—'}</td>
                     </tr>
                     );
                   })}

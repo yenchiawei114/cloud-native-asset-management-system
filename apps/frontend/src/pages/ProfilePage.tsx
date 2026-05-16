@@ -1,18 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAuth } from '../modules/auth/hooks/useAuth';
 import { useProfile } from '../modules/users/hooks/useProfile';
-import { api } from '../lib/api';
+import { api, Department } from '../lib/api';
 
 type StatusMsg = { type: 'success' | 'error'; text: string };
+
+const SEX_LABELS: Record<string, string> = { MALE: '男', FEMALE: '女' };
 
 export const ProfilePage: React.FC = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { changePassword } = useProfile();
 
-  // Email change
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+
+  const [departments, setDepartments] = useState<Department[]>([]);
+
+  useEffect(() => {
+    api.getDepartments().then(setDepartments).catch(() => {});
+  }, []);
+
+  const deptName = departments.find(d => d.id === user?.department_id)?.name ?? '—';
+
+  // Email change (admin only)
   const [editingEmail, setEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailStatus, setEmailStatus] = useState<StatusMsg | null>(null);
@@ -96,16 +108,17 @@ export const ProfilePage: React.FC = () => {
           <div className="grid grid-cols-2 gap-x-8 gap-y-5">
             <Field label={t('profile.name')} value={user?.name} />
             <Field label={t('profile.employeeId')} value={user?.employee_id} />
-            <Field
-              label={t('profile.role')}
-              value={user?.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')}
-            />
-            {/* Email field with inline edit */}
-            <div className="space-y-1">
+            <Field label={t('profile.role')} value={user?.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')} />
+            <Field label="性別" value={SEX_LABELS[user?.sex] ?? user?.sex} />
+            <Field label="部門" value={deptName} />
+            <Field label="辦公地點" value={user?.location ?? '—'} />
+
+            {/* Email */}
+            <div className="space-y-1 col-span-2 sm:col-span-1">
               <span className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">
                 {t('profile.email')}
               </span>
-              {editingEmail ? (
+              {isAdmin && editingEmail ? (
                 <div className="space-y-2">
                   <div className="flex gap-2">
                     <input
@@ -138,12 +151,14 @@ export const ProfilePage: React.FC = () => {
               ) : (
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-base font-medium text-on-surface">{user?.email ?? '---'}</p>
-                  <button
-                    onClick={() => { setNewEmail(user?.email ?? ''); setEditingEmail(true); setEmailStatus(null); }}
-                    className="text-xs font-bold text-primary hover:underline shrink-0"
-                  >
-                    修改
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => { setNewEmail(user?.email ?? ''); setEditingEmail(true); setEmailStatus(null); }}
+                      className="text-xs font-bold text-primary hover:underline shrink-0"
+                    >
+                      修改
+                    </button>
+                  )}
                 </div>
               )}
               {!editingEmail && emailStatus && (

@@ -99,6 +99,17 @@ export const ProfilePage: React.FC = () => {
           {t('profile.title')}
         </h1>
 
+        {/* 未更新密碼提醒 */}
+        {user?.must_change_password && (
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+            <span className="material-symbols-outlined text-amber-500 mt-0.5 shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
+            <div>
+              <p className="text-sm font-bold text-amber-800">請更新您的密碼</p>
+              <p className="text-xs text-amber-700 mt-0.5">您尚未修改系統預設密碼，建議立即前往下方「修改密碼」區段更新，以確保帳號安全。</p>
+            </div>
+          </div>
+        )}
+
         {/* Personal Info */}
         <section className="bg-surface-container-lowest rounded-2xl p-6 shadow-sm border border-slate-100">
           <h2 className="text-sm font-bold text-on-surface flex items-center gap-2 mb-5">

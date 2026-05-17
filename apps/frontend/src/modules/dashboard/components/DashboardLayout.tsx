@@ -36,6 +36,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
     { id: 'all', label: t('auth.nav.allAssets'), icon: 'database', path: '/all-assets' },
     { id: 'audit', label: t('auth.nav.auditLogs'), icon: 'analytics', path: '/audit-logs' },
     { id: 'users', label: t('auth.nav.userManagement'), icon: 'manage_accounts', path: '/users' },
+    { id: 'profile', label: t('auth.nav.profile'), icon: 'person', path: '/profile' },
   ];
 
   const navItems = isAdmin ? adminNav : employeeNav;

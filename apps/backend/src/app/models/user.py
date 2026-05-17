@@ -36,6 +36,7 @@ class User(Base):
     last_password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     termination_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
         server_default=func.now(), 

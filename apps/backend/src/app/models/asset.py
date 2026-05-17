@@ -91,6 +91,7 @@ class AssetTransfer(Base):
     )
     from_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     to_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_offboarding_transfer: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     asset: Mapped["Asset"] = relationship("Asset", back_populates="transfers", foreign_keys=[asset_id])

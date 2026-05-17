@@ -152,9 +152,17 @@ export const UserDetailPage: React.FC = () => {
             </div>
           </div>
           
-          <div className="flex gap-3">
-            {/* 禁止編輯其他管理員的任何資料 */}
-            {!isEditing && !(user.role === 'ADMIN' && user.employee_id !== currentUser?.employee_id) ? (
+          <div className="flex gap-3 items-center">
+            {/* 已離職 badge */}
+            {!user.is_active && (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-error/10 text-error text-xs font-black rounded-full border border-error/20">
+                <span className="material-symbols-outlined text-xs">person_off</span>
+                已離職
+              </span>
+            )}
+
+            {/* 停用帳號不顯示任何操作按鈕 */}
+            {user.is_active && !isEditing && !(user.role === 'ADMIN' && user.employee_id !== currentUser?.employee_id) ? (
               <>
                 <button
                   onClick={() => setIsEditing(true)}
@@ -165,22 +173,22 @@ export const UserDetailPage: React.FC = () => {
                 </button>
                 <button
                   onClick={confirmDelete}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-error/10 text-error text-sm font-bold rounded-xl hover:bg-error hover:text-white transition-all active:scale-95"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-high text-on-surface-variant text-sm font-bold rounded-xl hover:bg-surface-container-highest transition-all active:scale-95"
                 >
                   <span className="material-symbols-outlined text-sm">delete</span>
                   {t('common.delete')}
                 </button>
               </>
-            ) : isEditing ? (
+            ) : user.is_active && isEditing ? (
               <>
-                <button 
+                <button
                   onClick={confirmSave}
                   className="flex items-center gap-2 px-6 py-2.5 bg-primary text-on-primary text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
                 >
                   <span className="material-symbols-outlined text-sm">save</span>
                   {t('common.save')}
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     setIsEditing(false);
                     setEditData(user);
@@ -341,11 +349,9 @@ export const UserDetailPage: React.FC = () => {
 
         {/* Modals handled by FeedbackDialog */}
       </main>
-      <FeedbackDialog 
-        {...feedbackState} 
+      <FeedbackDialog
+        {...feedbackState}
         onConfirm={() => {
-          // 如果 onConfirm 是 async，我們不應該在這裡直接 closeFeedback
-          // 讓具體的回調函式決定何時關閉或顯示下一個反饋
           if (feedbackState.type !== 'confirm') {
             closeFeedback();
           }
@@ -353,6 +359,7 @@ export const UserDetailPage: React.FC = () => {
         }}
         onCancel={closeFeedback}
       />
+
     </DashboardLayout>
   );
 };

@@ -7,6 +7,7 @@ import { useAuth } from "../modules/auth/hooks/useAuth";
 import { FeedbackDialog } from "../modules/core/components/FeedbackDialog";
 import { useFeedback } from "../modules/core/hooks/useFeedback";
 import { api, User, Department, OfficeLocation } from "../lib/api";
+import { OffboardingModal } from "../modules/users/components/OffboardingModal";
 
 const SEX_LABELS: Record<string, string> = { MALE: "男", FEMALE: "女" };
 
@@ -51,6 +52,8 @@ export const UserManagementPage: React.FC = () => {
 
   const [draft, setDraft] = useState<FilterDraft>(EMPTY_FILTER);
   const [applied, setApplied] = useState<FilterDraft>(EMPTY_FILTER);
+
+  const [offboardingTarget, setOffboardingTarget] = useState<User | null>(null);
 
   const [editMode, setEditMode] = useState(false);
   const [pendingEdits, setPendingEdits] = useState<
@@ -384,12 +387,15 @@ export const UserManagementPage: React.FC = () => {
                   <th className="px-4 py-4 border-b border-outline-variant/10">
                     建立時間
                   </th>
+                  <th className="px-4 py-4 border-b border-outline-variant/10">
+                    操作
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="py-20 text-center">
+                    <td colSpan={10} className="py-20 text-center">
                       <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
                     </td>
                   </tr>
@@ -419,13 +425,21 @@ export const UserManagementPage: React.FC = () => {
                           ) : (
                             <div className="flex items-center space-x-3">
                               <div
-                                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${user.role === "ADMIN" ? "bg-primary-container text-on-primary-container" : "bg-surface-container-highest text-on-surface"}`}
+                                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${user.role === "ADMIN" ? "bg-primary-container text-on-primary-container" : "bg-surface-container-highest text-on-surface"} ${user.is_active === false ? "opacity-40" : ""}`}
                               >
                                 {user.name.charAt(0)}
                               </div>
-                              <span className="font-semibold text-on-surface">
-                                {user.name}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={`font-semibold ${user.is_active === false ? "text-outline line-through" : "text-on-surface"}`}>
+                                  {user.name}
+                                </span>
+                                {user.is_active === false && (
+                                  <span className="text-[10px] font-black px-1.5 py-0.5 bg-error/10 text-error rounded-full border border-error/20">已離職</span>
+                                )}
+                                {user.is_active && user.termination_date && (
+                                  <span className="text-[10px] font-black px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full border border-amber-300">離職中</span>
+                                )}
+                              </div>
                             </div>
                           )}
                         </td>
@@ -537,6 +551,33 @@ export const UserManagementPage: React.FC = () => {
                             "zh-TW",
                           )}
                         </td>
+
+                        {/* 操作 */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {user.role === "EMPLOYEE" &&
+                            user.is_active !== false &&
+                            !user.termination_date &&
+                            user.employee_id !== currentUser?.employee_id && (
+                              <button
+                                onClick={() => setOffboardingTarget(user)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-error bg-error/10 hover:bg-error/20 rounded-lg transition-colors active:scale-95"
+                              >
+                                <span className="material-symbols-outlined text-xs">person_off</span>
+                                離職
+                              </button>
+                            )}
+                          {user.role === "EMPLOYEE" &&
+                            user.is_active &&
+                            user.termination_date && (
+                              <button
+                                onClick={() => setOffboardingTarget(user)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors active:scale-95"
+                              >
+                                <span className="material-symbols-outlined text-xs">pending_actions</span>
+                                查看進度
+                              </button>
+                            )}
+                        </td>
                       </tr>
                     );
                   })
@@ -564,6 +605,14 @@ export const UserManagementPage: React.FC = () => {
         }}
         onCancel={closeFeedback}
       />
+
+      {offboardingTarget && (
+        <OffboardingModal
+          targetUser={offboardingTarget}
+          onClose={() => setOffboardingTarget(null)}
+          onSuccess={() => refresh()}
+        />
+      )}
     </DashboardLayout>
   );
 };

@@ -51,7 +51,58 @@ export interface User {
   last_password_changed_at: string | null;
   hire_date: string | null;
   termination_date: string | null;
+  is_active: boolean;
   created_at: string;
+}
+
+export interface OffboardingAssetItem {
+  id: number;
+  asset_code: string;
+  name: string;
+  status: string;
+}
+
+export interface OffboardingTicketItem {
+  id: number;
+  description: string;
+  status: string;
+  has_loaner: boolean;
+}
+
+export interface OffboardingTransferItem {
+  id: number;
+  asset_id: number;
+  asset_name: string | null;
+  asset_code: string | null;
+}
+
+export interface OffboardingTransferStatus {
+  transfer_id: number;
+  asset_id: number;
+  asset_code: string;
+  asset_name: string;
+  to_owner_name: string;
+  to_owner_employee_id: string;
+  status: 'PENDING' | 'COMPLETED';
+  to_confirmed: boolean;
+}
+
+export interface OffboardingChecklist {
+  can_proceed: boolean;
+  hard_blocker_reason: string | null;
+  owned_assets: OffboardingAssetItem[];
+  borrowed_loaners: OffboardingAssetItem[];
+  in_progress_tickets: OffboardingTicketItem[];
+  pending_transfers: OffboardingTransferItem[];
+  open_tickets: OffboardingTicketItem[];
+  is_offboarding_in_progress: boolean;
+  offboarding_transfers: OffboardingTransferStatus[];
+  all_transfers_complete: boolean;
+}
+
+export interface OffboardPayload {
+  asset_successor_id: number | null;
+  termination_date: string;
 }
 
 export interface UserCreatePayload {
@@ -208,6 +259,16 @@ export const api = {
     http<User>(`/api/users/${employeeId}`),
   deleteUser: (employeeId: string) =>
     http<void>(`/api/users/${employeeId}`, { method: 'DELETE' }),
+  getOffboardingChecklist: (employeeId: string) =>
+    http<OffboardingChecklist>(`/api/users/${employeeId}/offboarding-checklist`),
+  offboardUser: (employeeId: string, payload: OffboardPayload) =>
+    http<User>(`/api/users/${employeeId}/offboard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  finalizeOffboarding: (employeeId: string) =>
+    http<User>(`/api/users/${employeeId}/offboard/finalize`, { method: 'POST' }),
 
   verifyPassword: (currentPassword: string) =>
     http<{ valid: boolean }>("/api/users/me/verify-password", {

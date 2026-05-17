@@ -537,9 +537,10 @@ async def confirm_transfer(
             # 辦公地點跟隨新保管人
             if to_user:
                 asset.storage_location = to_user.location
-            # 若新保管人為管理員，狀態設為閒置；否則設為使用中
-            is_admin_owner = to_user and to_user.role == Role.ADMIN
-            asset.status = AssetStatus.AVAILABLE if is_admin_owner else AssetStatus.IN_USE
+            # 維修中的資產不更動狀態，待維修結案後由工單流程設定
+            if asset.status != AssetStatus.MAINTENANCE:
+                is_admin_owner = to_user and to_user.role == Role.ADMIN
+                asset.status = AssetStatus.AVAILABLE if is_admin_owner else AssetStatus.IN_USE
             asset.version += 1
         transfer.status = "COMPLETED"
 

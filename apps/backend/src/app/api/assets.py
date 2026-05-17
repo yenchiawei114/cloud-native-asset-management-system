@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, or_
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_action
@@ -35,6 +36,7 @@ class AssetCreate(BaseModel):
 
 
 class AssetUpdate(BaseModel):
+    version: int
     # asset_code 為唯一鍵，不允許修改
     name: str | None = None
     type: AssetType | None = None
@@ -184,16 +186,21 @@ async def update_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
+    if asset.version != payload.version:
+        raise HTTPException(
+            status_code=409, 
+            detail="該資產已被其他使用者修改，請重新整理後再試 (Asset has been modified by another user)"
+        )
+
     before_data = _to_out(asset).model_dump(mode="json")
     # 使用 model_fields_set 確保明確傳入 null 時能清除欄位
-    update_data = payload.model_dump(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True, exclude={"version"})
     # 建立日誌專用的序列化數據
-    after_data = payload.model_dump(exclude_unset=True, mode="json")
+    after_data = payload.model_dump(exclude_unset=True, exclude={"version"}, mode="json")
 
     for field, value in update_data.items():
         setattr(asset, field, value)
 
-    asset.version += 1
     await log_action(
         db,
         user_id=user["user_id"],
@@ -204,7 +211,14 @@ async def update_asset(
         target_name=f"{asset.name} ({asset.asset_code})",
         detail={"before": before_data, "after": after_data},
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except StaleDataError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409, 
+            detail="該資產已被其他使用者修改，請重新整理後再試 (Asset has been modified by another user)"
+        )
     await db.refresh(asset)
     return _to_out(asset)
 

@@ -356,27 +356,27 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Search */}
         <section className="bg-surface-container-low rounded-xl p-5 border border-outline-variant/10">
-          {/* 第一列：文字欄位 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          {/* 第一列：文字輸入框 + 保管人 */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
             <SearchInput label="資產編號" value={draft.asset_code_q} onChange={(v) => draftField("asset_code_q", v)} />
             <SearchInput label="資產名稱" value={draft.name_q} onChange={(v) => draftField("name_q", v)} />
             <SearchInput label="型號" value={draft.model_q} onChange={(v) => draftField("model_q", v)} />
             <SearchInput label="規格" value={draft.spec_q} onChange={(v) => draftField("spec_q", v)} />
-          </div>
-
-          {/* 第二列：保管人 combobox、廠商下拉、辦公地點下拉 */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
             <UserSearchCombobox
               label="保管人"
               selectedUser={selectedOwner}
               onSelect={setSelectedOwner}
             />
-            <div className="space-y-1">
+          </div>
+
+          {/* 第二列：下拉選單 + 搜尋/清空 */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">廠商</label>
               <select
                 value={draft.vendor_q}
                 onChange={(e) => draftField("vendor_q", e.target.value)}
-                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
+                className="min-w-[8rem] bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
                 <option value="">全部廠商</option>
                 {vendors.map((v) => (
@@ -384,12 +384,12 @@ export const AdminDashboard: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">辦公地點</label>
               <select
                 value={draft.office_location_q}
                 onChange={(e) => draftField("office_location_q", e.target.value)}
-                className="w-full bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
+                className="min-w-[8rem] bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
                 <option value="">全部地點</option>
                 {officeLocations.map((l) => (
@@ -397,11 +397,7 @@ export const AdminDashboard: React.FC = () => {
                 ))}
               </select>
             </div>
-          </div>
-
-          {/* 第三列：分類、狀態、搜尋/清空 */}
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">分類</label>
               <select
                 value={draft.asset_type}
@@ -413,7 +409,7 @@ export const AdminDashboard: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">狀態</label>
               <select
                 value={draft.status}

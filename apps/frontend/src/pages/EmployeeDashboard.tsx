@@ -136,9 +136,8 @@ export const EmployeeDashboard: React.FC = () => {
     await Promise.all([refreshAssets(), refreshTickets()]);
   }, [refreshAssets, refreshTickets]);
 
-  const inputCls = "flex-1 min-w-0 px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all";
-  const labelCls = "text-xs font-semibold text-slate-500 whitespace-nowrap shrink-0";
-  const selectCls = "bg-surface-container-low border-none rounded-lg pl-3 pr-8 py-2 text-sm text-on-surface focus:ring-2 focus:ring-primary/20 outline-none transition-all";
+  const searchLabelCls = "text-[10px] font-bold text-on-surface-variant uppercase tracking-widest";
+  const searchSelectCls = "bg-surface-container-low border-none rounded-lg pl-3 pr-8 py-2 text-sm text-on-surface focus:ring-2 focus:ring-primary/20 outline-none transition-all";
 
   return (
     <DashboardLayout activeTab="assets">
@@ -151,8 +150,8 @@ export const EmployeeDashboard: React.FC = () => {
 
         {/* Search Toolbar */}
         <div className="bg-surface-container-lowest rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
-          {/* 文字搜尋欄位 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+          {/* 第一列：文字輸入框 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {(
               [
                 { key: 'assetCode', label: t('dashboard.table.assetCode') },
@@ -161,21 +160,25 @@ export const EmployeeDashboard: React.FC = () => {
                 { key: 'spec',      label: t('dashboard.table.specs') },
               ] as { key: keyof FilterState; label: string }[]
             ).map(({ key, label }) => (
-              <div key={key} className="flex items-center gap-2">
-                <label className={labelCls}>{label}</label>
+              <div key={key} className="space-y-1">
+                <label className={searchLabelCls}>{label}</label>
                 <input
                   type="text"
-                  className={inputCls}
+                  className="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   value={inputs[key]}
                   onChange={e => setInputs(prev => ({ ...prev, [key]: e.target.value }))}
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 />
               </div>
             ))}
-            <div className="flex items-center gap-2">
-              <label className={labelCls}>廠商</label>
+          </div>
+
+          {/* 第二列：下拉選單 + 搜尋/清空 */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className={searchLabelCls}>廠商</label>
               <select
-                className={selectCls}
+                className={searchSelectCls}
                 value={inputs.vendor}
                 onChange={e => setInputs(prev => ({ ...prev, vendor: e.target.value }))}
               >
@@ -185,14 +188,10 @@ export const EmployeeDashboard: React.FC = () => {
                 ))}
               </select>
             </div>
-          </div>
-
-          {/* 下拉選單 + 搜尋按鈕 */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className={labelCls}>{t('dashboard.table.type')}</label>
+            <div className="flex flex-col gap-1">
+              <label className={searchLabelCls}>{t('dashboard.table.type')}</label>
               <select
-                className={selectCls}
+                className={searchSelectCls}
                 value={inputs.category}
                 onChange={e => setInputs(prev => ({ ...prev, category: e.target.value }))}
               >
@@ -202,11 +201,10 @@ export const EmployeeDashboard: React.FC = () => {
                 ))}
               </select>
             </div>
-
-            <div className="flex items-center gap-2">
-              <label className={labelCls}>{t('dashboard.table.status')}</label>
+            <div className="flex flex-col gap-1">
+              <label className={searchLabelCls}>{t('dashboard.table.status')}</label>
               <select
-                className={selectCls}
+                className={searchSelectCls}
                 value={inputs.status}
                 onChange={e => setInputs(prev => ({ ...prev, status: e.target.value }))}
               >
@@ -216,8 +214,7 @@ export const EmployeeDashboard: React.FC = () => {
                 ))}
               </select>
             </div>
-
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-end gap-2">
               <button
                 onClick={() => { setInputs(EMPTY_FILTERS); setAppliedFilters(EMPTY_FILTERS); }}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 transition-colors"

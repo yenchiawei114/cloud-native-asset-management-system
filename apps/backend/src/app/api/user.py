@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -58,6 +58,11 @@ class UserRegisterRequest(BaseModel):
 
 class AdminCreateUserRequest(UserRegisterRequest):
 	role: Literal["EMPLOYEE", "ADMIN"] = "EMPLOYEE"
+	hire_date: date | None = None
+
+
+class VerifyPasswordPayload(BaseModel):
+	current_password: str = Field(min_length=1)
 
 
 class ChangePasswordPayload(BaseModel):
@@ -92,6 +97,8 @@ class UserOut(BaseModel):
 	email: str
 	must_change_password: bool
 	last_password_changed_at: datetime | None
+	hire_date: date | None
+	termination_date: date | None
 	created_at: datetime
 
 
@@ -103,6 +110,8 @@ class UserUpdateByAdmin(BaseModel):
 	role: Literal["EMPLOYEE", "ADMIN"] | None = None
 	email: str | None = None
 	password: str | None = None
+	hire_date: date | None = None
+	termination_date: date | None = None
 
 
 def _user_to_out(row: User) -> UserOut:
@@ -117,6 +126,8 @@ def _user_to_out(row: User) -> UserOut:
 		email=row.email,
 		must_change_password=row.must_change_password,
 		last_password_changed_at=row.last_password_changed_at,
+		hire_date=row.hire_date,
+		termination_date=row.termination_date,
 		created_at=row.created_at,
 	)
 
@@ -152,6 +163,7 @@ async def _register_with_role(
 		email=payload.email,
 		must_change_password=True,
 		last_password_changed_at=None,
+		hire_date=getattr(payload, "hire_date", None),
 	)
 	db.add(row)
 	await db.flush()
@@ -200,6 +212,21 @@ async def get_my_profile(user=Depends(get_current_user), db: AsyncSession = Depe
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 	return _user_to_out(row)
+
+
+@router.post("/users/me/verify-password")
+async def verify_my_password(
+	payload: VerifyPasswordPayload,
+	user=Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> dict:
+	user_id = user.get("user_id")
+	row = await db.get(User, user_id)
+	if row is None:
+		raise HTTPException(status_code=404, detail="user not found")
+	if not verify_password(payload.current_password, row.password):
+		raise HTTPException(status_code=401, detail="invalid current password")
+	return {"valid": True}
 
 
 @router.put("/users/me/password")
@@ -379,6 +406,9 @@ async def admin_update_user(
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 
+	if row.role == Role.ADMIN and row.id != user["user_id"]:
+		raise HTTPException(status_code=403, detail="cannot modify another admin's data")
+
 	before = _user_to_out(row).model_dump(mode="json")
 
 	if payload.name is not None:
@@ -395,6 +425,10 @@ async def admin_update_user(
 		row.email = payload.email
 	if payload.password is not None:
 		row.password = hash_password(payload.password)
+	if payload.hire_date is not None:
+		row.hire_date = payload.hire_date
+	if payload.termination_date is not None:
+		row.termination_date = payload.termination_date
 
 	after = _user_to_out(row).model_dump(mode="json")
 	await log_action(

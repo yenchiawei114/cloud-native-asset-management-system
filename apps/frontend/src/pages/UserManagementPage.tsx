@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../modules/dashboard/components/DashboardLayout";
 import { useUsers } from "../modules/users/hooks/useUsers";
+import { useAuth } from "../modules/auth/hooks/useAuth";
 import { FeedbackDialog } from "../modules/core/components/FeedbackDialog";
 import { useFeedback } from "../modules/core/hooks/useFeedback";
 import { api, User, Department, OfficeLocation } from "../lib/api";
@@ -39,7 +40,11 @@ export const UserManagementPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { users, loading, refresh } = useUsers();
+  const { user: currentUser } = useAuth();
   const { feedbackState, closeFeedback } = useFeedback();
+
+  const isOtherAdmin = (u: User) =>
+    u.role === "ADMIN" && u.employee_id !== currentUser?.employee_id;
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>([]);
@@ -403,15 +408,11 @@ export const UserManagementPage: React.FC = () => {
 
                         {/* 姓名 */}
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {editMode ? (
+                          {editMode && !isOtherAdmin(user) ? (
                             <input
                               value={String(getFieldValue(user, "name") ?? "")}
                               onChange={(e) =>
-                                setFieldEdit(
-                                  user.employee_id,
-                                  "name",
-                                  e.target.value,
-                                )
+                                setFieldEdit(user.employee_id, "name", e.target.value)
                               }
                               className={inlineCls}
                             />
@@ -431,16 +432,12 @@ export const UserManagementPage: React.FC = () => {
 
                         {/* Email */}
                         <td className="px-4 py-3 whitespace-nowrap text-on-surface-variant">
-                          {editMode ? (
+                          {editMode && !isOtherAdmin(user) ? (
                             <input
                               type="email"
                               value={String(getFieldValue(user, "email") ?? "")}
                               onChange={(e) =>
-                                setFieldEdit(
-                                  user.employee_id,
-                                  "email",
-                                  e.target.value,
-                                )
+                                setFieldEdit(user.employee_id, "email", e.target.value)
                               }
                               className={inlineCls}
                             />
@@ -451,17 +448,11 @@ export const UserManagementPage: React.FC = () => {
 
                         {/* 性別 */}
                         <td className="px-4 py-3 whitespace-nowrap text-on-surface-variant">
-                          {editMode ? (
+                          {editMode && !isOtherAdmin(user) ? (
                             <select
-                              value={String(
-                                getFieldValue(user, "sex") ?? "MALE",
-                              )}
+                              value={String(getFieldValue(user, "sex") ?? "MALE")}
                               onChange={(e) =>
-                                setFieldEdit(
-                                  user.employee_id,
-                                  "sex",
-                                  e.target.value,
-                                )
+                                setFieldEdit(user.employee_id, "sex", e.target.value)
                               }
                               className={inlineSelectCls}
                             >
@@ -469,31 +460,24 @@ export const UserManagementPage: React.FC = () => {
                               <option value="FEMALE">女</option>
                             </select>
                           ) : (
-                            (SEX_LABELS[user.sex] ?? user.sex)
+                            SEX_LABELS[user.sex] ?? user.sex
                           )}
                         </td>
 
                         {/* 部門 */}
                         <td className="px-4 py-3 whitespace-nowrap text-on-surface-variant">
-                          {editMode ? (
+                          {editMode && !isOtherAdmin(user) ? (
                             <select
                               value={String(
-                                getFieldValue(user, "department_id") ??
-                                  user.department_id,
+                                getFieldValue(user, "department_id") ?? user.department_id
                               )}
                               onChange={(e) =>
-                                setFieldEdit(
-                                  user.employee_id,
-                                  "department_id",
-                                  Number(e.target.value),
-                                )
+                                setFieldEdit(user.employee_id, "department_id", Number(e.target.value))
                               }
                               className={inlineSelectCls}
                             >
                               {departments.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                  {d.name}
-                                </option>
+                                <option key={d.id} value={d.id}>{d.name}</option>
                               ))}
                             </select>
                           ) : (
@@ -503,31 +487,23 @@ export const UserManagementPage: React.FC = () => {
 
                         {/* 辦公地點 */}
                         <td className="px-4 py-3 whitespace-nowrap text-on-surface-variant">
-                          {editMode ? (
+                          {editMode && !isOtherAdmin(user) ? (
                             <select
                               value={String(
-                                getFieldValue(user, "location") ??
-                                  user.location ??
-                                  "",
+                                getFieldValue(user, "location") ?? user.location ?? ""
                               )}
                               onChange={(e) =>
-                                setFieldEdit(
-                                  user.employee_id,
-                                  "location",
-                                  e.target.value,
-                                )
+                                setFieldEdit(user.employee_id, "location", e.target.value)
                               }
                               className={inlineSelectCls}
                             >
                               <option value="">—</option>
                               {officeLocations.map((l) => (
-                                <option key={l.id} value={l.name}>
-                                  {l.name}
-                                </option>
+                                <option key={l.id} value={l.name}>{l.name}</option>
                               ))}
                             </select>
                           ) : (
-                            (user.location ?? "—")
+                            user.location ?? "—"
                           )}
                         </td>
 

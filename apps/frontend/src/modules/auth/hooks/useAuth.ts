@@ -64,9 +64,19 @@ export const useAuth = () => {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    try {
+      const profile = await api.getMe();
+      setUser(profile);
+    } catch {
+      // 靜默失敗，不影響頁面
+    }
+  };
+
   return {
     login,
     logout,
+    refreshUser,
     loading,
     error,
     user,

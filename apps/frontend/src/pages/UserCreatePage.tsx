@@ -24,6 +24,7 @@ export const UserCreatePage: React.FC = () => {
     location: '',
     email: '',
     role: 'EMPLOYEE',
+    hire_date: '',
   });
 
   useEffect(() => {
@@ -111,7 +112,7 @@ export const UserCreatePage: React.FC = () => {
                 </div>
                 <div className="col-span-1">
                   <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">{t('profile.sex')} <span className="text-error">*</span></label>
-                  <select 
+                  <select
                     className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none appearance-none"
                     value={formData.sex}
                     onChange={e => setFormData({...formData, sex: e.target.value as any})}
@@ -119,6 +120,16 @@ export const UserCreatePage: React.FC = () => {
                     <option value="MALE">{t('profile.male')} (Male)</option>
                     <option value="FEMALE">{t('profile.female')} (Female)</option>
                   </select>
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">入職日期 <span className="text-error">*</span></label>
+                  <input
+                    required
+                    className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none"
+                    type="date"
+                    value={formData.hire_date ?? ''}
+                    onChange={e => setFormData({...formData, hire_date: e.target.value || null})}
+                  />
                 </div>
               </div>
             </section>

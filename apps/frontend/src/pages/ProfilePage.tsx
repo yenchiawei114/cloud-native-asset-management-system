@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAuth } from '../modules/auth/hooks/useAuth';
 import { useProfile } from '../modules/users/hooks/useProfile';
-import { api, Department } from '../lib/api';
+import { api, Department, OfficeLocation } from '../lib/api';
 
 type StatusMsg = { type: 'success' | 'error'; text: string };
 
@@ -11,26 +11,75 @@ const SEX_LABELS: Record<string, string> = { MALE: '男', FEMALE: '女' };
 
 export const ProfilePage: React.FC = () => {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { changePassword } = useProfile();
 
   const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
 
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>([]);
 
   useEffect(() => {
     api.getDepartments().then(setDepartments).catch(() => {});
+    api.getOfficeLocations().then(setOfficeLocations).catch(() => {});
   }, []);
 
   const deptName = departments.find(d => d.id === user?.department_id)?.name ?? '—';
 
-  // Email change (admin only)
-  const [editingEmail, setEditingEmail] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [emailStatus, setEmailStatus] = useState<StatusMsg | null>(null);
-  const [emailSubmitting, setEmailSubmitting] = useState(false);
+  // 基本資料編輯（管理員限定）
+  const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [editData, setEditData] = useState({ name: '', email: '', sex: '', department_id: 0, location: '' });
+  const [infoStatus, setInfoStatus] = useState<StatusMsg | null>(null);
+  const [infoSubmitting, setInfoSubmitting] = useState(false);
 
-  // Password change (two-step)
+  const startEditInfo = () => {
+    setEditData({
+      name: user?.name ?? '',
+      email: user?.email ?? '',
+      sex: user?.sex ?? 'MALE',
+      department_id: user?.department_id ?? 0,
+      location: user?.location ?? '',
+    });
+    setInfoStatus(null);
+    setIsEditingInfo(true);
+  };
+
+  const cancelEditInfo = () => {
+    setIsEditingInfo(false);
+    setInfoStatus(null);
+  };
+
+  const handleSaveInfo = async () => {
+    if (!user) return;
+    if (!editData.name.trim()) {
+      setInfoStatus({ type: 'error', text: '姓名不能為空' });
+      return;
+    }
+    if (!editData.email || !editData.email.includes('@')) {
+      setInfoStatus({ type: 'error', text: '請輸入有效的電子郵件' });
+      return;
+    }
+    setInfoSubmitting(true);
+    setInfoStatus(null);
+    try {
+      await api.updateUser(user.employee_id, {
+        name: editData.name,
+        email: editData.email,
+        sex: editData.sex as 'MALE' | 'FEMALE',
+        department_id: editData.department_id,
+        location: editData.location || null,
+      });
+      await refreshUser();
+      setInfoStatus({ type: 'success', text: '個人資料已更新' });
+      setIsEditingInfo(false);
+    } catch (err: any) {
+      setInfoStatus({ type: 'error', text: err.message || '更新失敗' });
+    } finally {
+      setInfoSubmitting(false);
+    }
+  };
+
+  // 密碼修改（兩步驟）
   const [pwStep, setPwStep] = useState<1 | 2>(1);
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -38,13 +87,22 @@ export const ProfilePage: React.FC = () => {
   const [pwStatus, setPwStatus] = useState<StatusMsg | null>(null);
   const [pwSubmitting, setPwSubmitting] = useState(false);
 
-  const handleVerifyOldPw = () => {
+  const handleVerifyOldPw = async () => {
     if (!oldPw.trim()) {
-      setPwStatus({ type: 'error', text: '請輸入舊密碼' });
+      setPwStatus({ type: 'error', text: '請輸入目前密碼' });
       return;
     }
+    setPwSubmitting(true);
     setPwStatus(null);
-    setPwStep(2);
+    try {
+      await api.verifyPassword(oldPw);
+      setPwStep(2);
+    } catch {
+      setPwStatus({ type: 'error', text: '目前密碼不正確' });
+      setOldPw('');
+    } finally {
+      setPwSubmitting(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -61,6 +119,7 @@ export const ProfilePage: React.FC = () => {
     const result = await changePassword(oldPw, newPw);
     setPwSubmitting(false);
     if (result.success) {
+      await refreshUser();
       setPwStatus({ type: 'success', text: '密碼已成功修改' });
       setOldPw('');
       setNewPw('');
@@ -70,25 +129,6 @@ export const ProfilePage: React.FC = () => {
       setPwStatus({ type: 'error', text: result.message || t('profile.passwordError') });
       setPwStep(1);
       setOldPw('');
-    }
-  };
-
-  const handleUpdateEmail = async () => {
-    if (!newEmail || !newEmail.includes('@')) {
-      setEmailStatus({ type: 'error', text: '請輸入有效的電子郵件' });
-      return;
-    }
-    if (!user) return;
-    setEmailSubmitting(true);
-    setEmailStatus(null);
-    try {
-      await api.updateMyEmail(newEmail);
-      setEmailStatus({ type: 'success', text: '電子郵件已更新' });
-      setEditingEmail(false);
-    } catch (err: any) {
-      setEmailStatus({ type: 'error', text: err.message || '更新失敗' });
-    } finally {
-      setEmailSubmitting(false);
     }
   };
 
@@ -110,78 +150,144 @@ export const ProfilePage: React.FC = () => {
           </div>
         )}
 
-        {/* Personal Info */}
+        {/* 基本資料 */}
         <section className="bg-surface-container-lowest rounded-2xl p-6 shadow-sm border border-slate-100">
-          <h2 className="text-sm font-bold text-on-surface flex items-center gap-2 mb-5">
-            <span className="material-symbols-outlined text-primary text-lg">badge</span>
-            {t('profile.basicInfo')}
-          </h2>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-            <Field label={t('profile.name')} value={user?.name} />
-            <Field label={t('profile.employeeId')} value={user?.employee_id} />
-            <Field label={t('profile.role')} value={user?.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')} />
-            <Field label="性別" value={SEX_LABELS[user?.sex] ?? user?.sex} />
-            <Field label="部門" value={deptName} />
-            <Field label="辦公地點" value={user?.location ?? '—'} />
-
-            {/* Email */}
-            <div className="space-y-1 col-span-2 sm:col-span-1">
-              <span className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">
-                {t('profile.email')}
-              </span>
-              {isAdmin && editingEmail ? (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      className="flex-1 bg-surface-container-low border-none rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                      value={newEmail}
-                      onChange={e => setNewEmail(e.target.value)}
-                      autoFocus
-                    />
-                    <button
-                      onClick={handleUpdateEmail}
-                      disabled={emailSubmitting}
-                      className="px-3 py-1.5 text-xs font-bold text-white bg-primary rounded-lg disabled:opacity-50 hover:opacity-90 transition-opacity"
-                    >
-                      {emailSubmitting ? '儲存...' : '儲存'}
-                    </button>
-                    <button
-                      onClick={() => { setEditingEmail(false); setEmailStatus(null); }}
-                      className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-                    >
-                      取消
-                    </button>
-                  </div>
-                  {emailStatus && (
-                    <p className={`text-xs ${emailStatus.type === 'success' ? 'text-green-600' : 'text-error'}`}>
-                      {emailStatus.text}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-base font-medium text-on-surface">{user?.email ?? '---'}</p>
-                  {isAdmin && (
-                    <button
-                      onClick={() => { setNewEmail(user?.email ?? ''); setEditingEmail(true); setEmailStatus(null); }}
-                      className="text-xs font-bold text-primary hover:underline shrink-0"
-                    >
-                      修改
-                    </button>
-                  )}
-                </div>
-              )}
-              {!editingEmail && emailStatus && (
-                <p className={`text-xs mt-1 ${emailStatus.type === 'success' ? 'text-green-600' : 'text-error'}`}>
-                  {emailStatus.text}
-                </p>
-              )}
-            </div>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-sm font-bold text-on-surface flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-lg">badge</span>
+              {t('profile.basicInfo')}
+            </h2>
+            {isAdmin && !isEditingInfo && (
+              <button
+                onClick={startEditInfo}
+                className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+              >
+                <span className="material-symbols-outlined text-sm">edit</span>
+                編輯資料
+              </button>
+            )}
           </div>
+
+          {infoStatus && !isEditingInfo && (
+            <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium ${infoStatus.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {infoStatus.text}
+            </div>
+          )}
+
+          {isEditingInfo ? (
+            <div className="space-y-4">
+              {infoStatus && (
+                <div className={`px-4 py-3 rounded-xl text-sm font-medium ${infoStatus.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                  {infoStatus.text}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                {/* 姓名 */}
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">{t('profile.name')}</label>
+                  <input
+                    type="text"
+                    className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                    value={editData.name}
+                    onChange={e => setEditData({ ...editData, name: e.target.value })}
+                    autoFocus
+                  />
+                </div>
+                {/* 員工編號（唯讀） */}
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-slate-300 block">{t('profile.employeeId')}</label>
+                  <p className="text-sm font-medium text-slate-400 px-3 py-2 bg-slate-50 rounded-lg cursor-not-allowed">{user?.employee_id}</p>
+                </div>
+                {/* 角色（唯讀） */}
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-slate-300 block">{t('profile.role')}</label>
+                  <p className="text-sm font-medium text-slate-400 px-3 py-2 bg-slate-50 rounded-lg cursor-not-allowed">
+                    {user?.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')}
+                  </p>
+                </div>
+                {/* 性別 */}
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">性別</label>
+                  <select
+                    className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                    value={editData.sex}
+                    onChange={e => setEditData({ ...editData, sex: e.target.value })}
+                  >
+                    <option value="MALE">男</option>
+                    <option value="FEMALE">女</option>
+                  </select>
+                </div>
+                {/* 部門 */}
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">部門</label>
+                  <select
+                    className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                    value={editData.department_id}
+                    onChange={e => setEditData({ ...editData, department_id: Number(e.target.value) })}
+                  >
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* 辦公地點 */}
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">辦公地點</label>
+                  <select
+                    className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                    value={editData.location}
+                    onChange={e => setEditData({ ...editData, location: e.target.value })}
+                  >
+                    <option value="">—</option>
+                    {officeLocations.map(loc => (
+                      <option key={loc.id} value={loc.name}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* 電子郵件 */}
+                <div className="space-y-1.5 col-span-2">
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">{t('profile.email')}</label>
+                  <input
+                    type="email"
+                    className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                    value={editData.email}
+                    onChange={e => setEditData({ ...editData, email: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleSaveInfo}
+                  disabled={infoSubmitting}
+                  className="px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl shadow-sm shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {infoSubmitting ? '儲存中...' : '儲存變更'}
+                </button>
+                <button
+                  onClick={cancelEditInfo}
+                  className="px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+              <Field label={t('profile.name')} value={user?.name} />
+              <Field label={t('profile.employeeId')} value={user?.employee_id} />
+              <Field label={t('profile.role')} value={user?.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')} />
+              <Field label="性別" value={SEX_LABELS[user?.sex] ?? user?.sex} />
+              <Field label="部門" value={deptName} />
+              <Field label="辦公地點" value={user?.location ?? '—'} />
+              <div className="space-y-1 col-span-2">
+                <span className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">{t('profile.email')}</span>
+                <p className="text-base font-medium text-on-surface">{user?.email ?? '---'}</p>
+              </div>
+            </div>
+          )}
         </section>
 
-        {/* Change Password */}
+        {/* 修改密碼 */}
         <section className="bg-surface-container-lowest rounded-2xl p-6 shadow-sm border border-slate-100">
           <h2 className="text-sm font-bold text-on-surface flex items-center gap-2 mb-5">
             <span className="material-symbols-outlined text-primary text-lg">lock_reset</span>
@@ -189,11 +295,7 @@ export const ProfilePage: React.FC = () => {
           </h2>
 
           {pwStatus && (
-            <div
-              className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium ${
-                pwStatus.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-              }`}
-            >
+            <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium ${pwStatus.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
               {pwStatus.text}
             </div>
           )}
@@ -215,9 +317,10 @@ export const ProfilePage: React.FC = () => {
               </div>
               <button
                 onClick={handleVerifyOldPw}
-                className="px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl shadow-sm shadow-primary/20 hover:opacity-90 transition-opacity"
+                disabled={pwSubmitting}
+                className="px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl shadow-sm shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
-                驗證
+                {pwSubmitting ? '驗證中...' : '驗證'}
               </button>
             </div>
           ) : (
@@ -261,13 +364,7 @@ export const ProfilePage: React.FC = () => {
                   {pwSubmitting ? '修改中...' : '確認修改'}
                 </button>
                 <button
-                  onClick={() => {
-                    setPwStep(1);
-                    setOldPw('');
-                    setNewPw('');
-                    setConfirmPw('');
-                    setPwStatus(null);
-                  }}
+                  onClick={() => { setPwStep(1); setOldPw(''); setNewPw(''); setConfirmPw(''); setPwStatus(null); }}
                   className="px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
                 >
                   取消

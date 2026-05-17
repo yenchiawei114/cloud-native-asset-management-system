@@ -49,6 +49,8 @@ export interface User {
   email: string;
   must_change_password: boolean;
   last_password_changed_at: string | null;
+  hire_date: string | null;
+  termination_date: string | null;
   created_at: string;
 }
 
@@ -61,6 +63,7 @@ export interface UserCreatePayload {
   location?: string | null;
   email: string;
   role: 'EMPLOYEE' | 'ADMIN';
+  hire_date?: string | null;
 }
 
 export interface Asset {
@@ -205,6 +208,13 @@ export const api = {
     http<User>(`/api/users/${employeeId}`),
   deleteUser: (employeeId: string) =>
     http<void>(`/api/users/${employeeId}`, { method: 'DELETE' }),
+
+  verifyPassword: (currentPassword: string) =>
+    http<{ valid: boolean }>("/api/users/me/verify-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_password: currentPassword })
+    }),
 
   changePassword: (payload: any) =>
     http<any>("/api/users/me/password", {

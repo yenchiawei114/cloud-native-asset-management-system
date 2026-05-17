@@ -5,12 +5,14 @@ import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout
 import { api, User } from '../lib/api';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
+import { useAuth } from '../modules/auth/hooks/useAuth';
 
 export const UserDetailPage: React.FC = () => {
   const { employeeId } = useParams<{ employeeId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
   
+  const { user: currentUser } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -151,16 +153,17 @@ export const UserDetailPage: React.FC = () => {
           </div>
           
           <div className="flex gap-3">
-            {!isEditing ? (
+            {/* 禁止編輯其他管理員的任何資料 */}
+            {!isEditing && !(user.role === 'ADMIN' && user.employee_id !== currentUser?.employee_id) ? (
               <>
-                <button 
+                <button
                   onClick={() => setIsEditing(true)}
                   className="flex items-center gap-2 px-6 py-2.5 bg-primary text-on-primary text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
                 >
                   <span className="material-symbols-outlined text-sm">edit</span>
                   {t('common.edit')}
                 </button>
-                <button 
+                <button
                   onClick={confirmDelete}
                   className="flex items-center gap-2 px-6 py-2.5 bg-error/10 text-error text-sm font-bold rounded-xl hover:bg-error hover:text-white transition-all active:scale-95"
                 >
@@ -168,7 +171,7 @@ export const UserDetailPage: React.FC = () => {
                   {t('common.delete')}
                 </button>
               </>
-            ) : (
+            ) : isEditing ? (
               <>
                 <button 
                   onClick={confirmSave}
@@ -188,7 +191,7 @@ export const UserDetailPage: React.FC = () => {
                   {t('common.cancel')}
                 </button>
               </>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -210,6 +213,20 @@ export const UserDetailPage: React.FC = () => {
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-outline font-medium">{t('profile.department')}</span>
                   <span className="font-bold text-on-surface">{user.department_id}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-outline font-medium">入職日期</span>
+                  <span className="font-bold text-on-surface">{user.hire_date ?? '—'}</span>
+                </div>
+                {user.termination_date && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-outline font-medium">離職日期</span>
+                    <span className="font-bold text-error">{user.termination_date}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-outline font-medium">建立日期</span>
+                  <span className="font-bold text-on-surface">{new Date(user.created_at).toLocaleDateString('zh-TW')}</span>
                 </div>
               </div>
             </section>
@@ -248,8 +265,8 @@ export const UserDetailPage: React.FC = () => {
                   onChange={(val) => setEditData({ ...editData, name: val })}
                   icon="badge"
                 />
-                <FormField 
-                  label={t('profile.email')} 
+                <FormField
+                  label={t('profile.email')}
                   value={isEditing ? editData.email || '' : user.email}
                   isEditing={isEditing}
                   onChange={(val) => setEditData({ ...editData, email: val })}

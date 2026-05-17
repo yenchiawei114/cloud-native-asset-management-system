@@ -69,6 +69,7 @@ USERS = [
         "email": "ycweicloudnative@gmail.com",
         "department_id": 1,
         "location": LOC_A4,
+        "hire_date": date(2024, 3, 1),
     },
     {
         "employee_id": "EMP202602",
@@ -79,6 +80,7 @@ USERS = [
         "email": "bob@example.com",
         "department_id": 1,
         "location": LOC_A4,
+        "hire_date": date(2024, 3, 1),
     },
     {
         "employee_id": "EMP202603",
@@ -89,6 +91,7 @@ USERS = [
         "email": "carol@example.com",
         "department_id": 4,
         "location": LOC_C1,
+        "hire_date": date(2024, 6, 15),
     },
     {
         "employee_id": "EMP202604",
@@ -99,6 +102,7 @@ USERS = [
         "email": "david@example.com",
         "department_id": 1,
         "location": LOC_A4,
+        "hire_date": date(2024, 8, 1),
     },
     {
         "employee_id": "EMP202605",
@@ -109,6 +113,7 @@ USERS = [
         "email": "emma@example.com",
         "department_id": 2,
         "location": LOC_A3,
+        "hire_date": date(2024, 9, 1),
     },
     {
         "employee_id": "EMP202606",
@@ -119,6 +124,7 @@ USERS = [
         "email": "frank@example.com",
         "department_id": 2,
         "location": LOC_A2,
+        "hire_date": date(2024, 10, 15),
     },
     {
         "employee_id": "EMP202607",
@@ -129,6 +135,7 @@ USERS = [
         "email": "grace@example.com",
         "department_id": 3,
         "location": LOC_B1,
+        "hire_date": date(2025, 1, 6),
     },
     {
         "employee_id": "EMP202608",
@@ -139,6 +146,7 @@ USERS = [
         "email": "henry@example.com",
         "department_id": 5,
         "location": LOC_C1,
+        "hire_date": date(2025, 3, 3),
     },
     {
         "employee_id": "EMP202609",
@@ -149,6 +157,7 @@ USERS = [
         "email": "iris@example.com",
         "department_id": 5,
         "location": LOC_C1,
+        "hire_date": date(2025, 4, 7),
     },
     {
         "employee_id": "EMP202610",
@@ -159,6 +168,7 @@ USERS = [
         "email": "jack@example.com",
         "department_id": 1,
         "location": LOC_A4,
+        "hire_date": date(2025, 7, 14),
     },
 ]
 

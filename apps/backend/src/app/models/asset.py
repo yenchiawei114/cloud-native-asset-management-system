@@ -59,5 +59,9 @@ class Asset(Base):
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
+    __mapper_args__ = {
+        "version_id_col": version
+    }
+
     owner: Mapped["User"] = relationship("User", back_populates="assets")
     repair_requests: Mapped[list["RepairRequest"]] = relationship("RepairRequest", back_populates="target_asset")

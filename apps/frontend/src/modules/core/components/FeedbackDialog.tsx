@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../design-system/Button';
 
 export interface FeedbackDialogProps {
@@ -17,11 +18,14 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({
   title,
   message,
   type = 'info',
-  confirmText = '確定',
-  cancelText = '取消',
+  confirmText,
+  cancelText,
   onConfirm,
   onCancel
 }) => {
+  const { t } = useTranslation();
+  const displayConfirmText = confirmText ?? t('common.confirm');
+  const displayCancelText = cancelText ?? t('common.cancel');
   if (!isOpen) return null;
 
   const getIcon = () => {
@@ -49,7 +53,7 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({
               onClick={onCancel}
               className="flex-1 py-3 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
             >
-              {cancelText}
+              {displayCancelText}
             </button>
           )}
           <div className="flex-1">
@@ -58,7 +62,7 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({
               className="w-full"
               variant="primary"
             >
-              {confirmText}
+              {displayConfirmText}
             </Button>
           </div>
         </div>

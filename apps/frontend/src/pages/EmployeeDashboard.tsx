@@ -1,190 +1,422 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAssets } from '../modules/assets/hooks/useAssets';
 import { useTickets } from '../modules/ticketing/hooks/useTickets';
+import { useAuth } from '../modules/auth/hooks/useAuth';
+import { NewRepairRequestModal } from '../modules/ticketing/components/NewRepairRequestModal';
+import { AssetRepairHistoryModal } from '../modules/ticketing/components/AssetRepairHistoryModal';
+import { api } from '../lib/api';
+import type { Asset, Vendor } from '../lib/api';
+import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
+
+// 封鎖提示彈窗：資產已有未完成維修單，不允許再建立新申請
+function BlockedRepairDialog({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+        <div className="flex items-start gap-3">
+          <span className="material-symbols-outlined text-amber-500 text-2xl mt-0.5">warning</span>
+          <div>
+            <h3 className="text-base font-bold text-on-surface">{t('employeeDashboard.openTicketTitle')}</h3>
+            <p className="text-sm text-on-surface-variant mt-1">
+              {asset.name}（{asset.asset_code}）{t('employeeDashboard.openTicketMsg')}<br />
+              {t('employeeDashboard.openTicketNote')}
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end pt-1">
+          <button
+            onClick={onClose}
+            className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:opacity-90 transition-opacity"
+          >
+            {t('employeeDashboard.understood')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  available: 'bg-green-100 text-green-700',
+  in_use: 'bg-blue-100 text-blue-700',
+  maintenance: 'bg-amber-100 text-amber-700',
+  borrowed: 'bg-purple-100 text-purple-700',
+};
+
+const ASSET_STATUSES = ['available', 'in_use', 'maintenance', 'borrowed'] as const;
+
+interface FilterState {
+  assetCode: string;
+  assetName: string;
+  model: string;
+  spec: string;
+  vendor: string;
+  category: string;
+  status: string;
+}
+
+const EMPTY_FILTERS: FilterState = {
+  assetCode: '',
+  assetName: '',
+  model: '',
+  spec: '',
+  vendor: '',
+  category: '',
+  status: '',
+};
 
 export const EmployeeDashboard: React.FC = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { assets, loading: assetsLoading, stats: assetStats } = useAssets();
-  const { tickets, loading: ticketsLoading, stats: ticketStats } = useTickets();
+  const { user } = useAuth();
+  const { assets: allAssets, loading: assetsLoading, refresh: refreshAssets } = useAssets();
+  const { tickets, refresh: refreshTickets } = useTickets();
 
-  const loading = assetsLoading || ticketsLoading;
+  const [inputs, setInputs] = useState<FilterState>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [repairModalAsset, setRepairModalAsset] = useState<Asset | null>(null);
+  const [historyModalAsset, setHistoryModalAsset] = useState<Asset | null>(null);
+  const [blockedRepairAsset, setBlockedRepairAsset] = useState<Asset | null>(null);
+
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  useEffect(() => {
+    api.listVendors().then(setVendors).catch(() => {});
+  }, []);
+
+  const categories = useMemo(() => Array.from(new Set(allAssets.map(a => a.type))), [allAssets]);
+
+  const blockedAssetIds = useMemo(
+    () => new Set(tickets.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').map(t => t.asset_id)),
+    [tickets]
+  );
+
+  const loanerReturnTicketByAssetId = useMemo(() => {
+    const map = new Map<number, import('../lib/api').RepairRequest>();
+    tickets.forEach(t => {
+      if (t.status === 'WAITING_LOANER_RETURN' && t.loaner_asset_id) {
+        map.set(t.loaner_asset_id, t);
+      }
+    });
+    return map;
+  }, [tickets]);
+
+  const [pendingReturnTicketId, setPendingReturnTicketId] = useState<number | null>(null);
+
+  const handleConfirmLoanerReturn = useCallback(async (ticketId: number) => {
+    setPendingReturnTicketId(null);
+    try {
+      await api.confirmLoanerReturn(ticketId);
+      await Promise.all([refreshAssets(), refreshTickets()]);
+    } catch (err: any) {
+      alert(t('employeeDashboard.returnFailed') + err.message);
+    }
+  }, [refreshAssets, refreshTickets]);
+
+  const handleSearch = useCallback(() => {
+    setAppliedFilters({ ...inputs });
+  }, [inputs]);
+
+  const filteredAssets = useMemo(() => {
+    const { assetCode, assetName, model, spec, vendor, category, status } = appliedFilters;
+    return allAssets.filter(a => {
+      const matchCode = !assetCode || a.asset_code.toLowerCase().includes(assetCode.toLowerCase());
+      const matchName = !assetName || a.name.toLowerCase().includes(assetName.toLowerCase());
+      const matchModel = !model || a.model.toLowerCase().includes(model.toLowerCase());
+      const matchSpec = !spec || a.specification.toLowerCase().includes(spec.toLowerCase());
+      const matchVendor = !vendor || a.vendor === vendor;
+      const matchCategory = !category || a.type === category;
+      const matchStatus = !status || a.status === status;
+      return matchCode && matchName && matchModel && matchSpec && matchVendor && matchCategory && matchStatus;
+    });
+  }, [allAssets, appliedFilters]);
+
+  const handleRepairSuccess = useCallback(async () => {
+    setRepairModalAsset(null);
+    await Promise.all([refreshAssets(), refreshTickets()]);
+  }, [refreshAssets, refreshTickets]);
+
+  const searchLabelCls = "text-[10px] font-bold text-on-surface-variant uppercase tracking-widest";
+  const searchSelectCls = "bg-surface-container-low border-none rounded-lg pl-3 pr-8 py-2 text-sm text-on-surface focus:ring-2 focus:ring-primary/20 outline-none transition-all";
 
   return (
     <DashboardLayout activeTab="assets">
-      <div className="space-y-8">
-        {/* Page Title & Stats Overview */}
-        <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-          <div>
-            <nav className="flex items-center gap-2 text-xs font-medium text-slate-400 mb-2">
-              <span>{t('auth.nav.myAssets')}</span>
-              <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-              <span className="text-primary font-bold">{t('dashboard.employee.portfolio')}</span>
-            </nav>
-            <h1 className="text-3xl font-extrabold tracking-tight text-on-surface font-headline">{t('dashboard.employee.myAssets')}</h1>
-            <p className="text-on-surface-variant text-sm mt-1">{t('dashboard.employee.assetManagementDesc')}</p>
-          </div>
-          <div className="flex gap-4">
-            <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4 min-w-[160px]">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700">
-                <span className="material-symbols-outlined">inventory</span>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 leading-none mb-1">{t('dashboard.employee.totalAssets')}</p>
-                <p className="text-xl font-extrabold text-on-surface">{loading ? '--' : assetStats.total}</p>
-              </div>
-            </div>
-            <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4 min-w-[160px]">
-              <div className="w-10 h-10 rounded-lg bg-tertiary-fixed flex items-center justify-center text-tertiary">
-                <span className="material-symbols-outlined">build</span>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 leading-none mb-1">{t('dashboard.employee.ongoingTickets')}</p>
-                <p className="text-xl font-extrabold text-on-surface">{loading ? '--' : ticketStats.inProgress}</p>
-              </div>
-            </div>
-          </div>
-        </section>
+      <div className="space-y-5">
+        <h1 className="text-2xl font-extrabold tracking-tight text-on-surface font-headline">
+          {t('dashboard.employee.myAssets')}
+        </h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Assets Table View */}
-          <section className="lg:col-span-2 bg-surface-container-lowest rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-              <h2 className="text-lg font-bold text-on-surface">{t('dashboard.employee.assetList')}</h2>
-            </div>
-            
-            {assetsLoading ? (
-              <div className="flex-1 flex items-center justify-center p-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : assets.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-                <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 mb-4">
-                  <span className="material-symbols-outlined text-4xl">inventory_2</span>
-                </div>
-                <h3 className="text-xl font-bold text-on-surface mb-2">{t('dashboard.employee.noAssignedAssets')}</h3>
-                <p className="text-on-surface-variant text-sm max-w-sm mx-auto">
-                  {t('dashboard.employee.noAssignedAssetsDesc')}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/50">
-                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dashboard.table.assetCode')}</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dashboard.table.assetName')}</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dashboard.table.status')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {assets.map((asset) => (
-                      <tr 
-                        key={asset.id} 
-                        onClick={() => navigate(`/assets/${asset.id}`)}
-                        className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
-                      >
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded">
-                            {asset.asset_code}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-bold text-on-surface">{asset.name}</span>
-                            <span className="text-[10px] text-slate-400">{asset.model}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
-                            asset.status === 'available' ? 'bg-green-100 text-green-700' :
-                            asset.status === 'in_use' ? 'bg-blue-100 text-blue-700' :
-                            asset.status === 'maintenance' ? 'bg-amber-100 text-amber-700' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              asset.status === 'available' ? 'bg-green-500' :
-                              asset.status === 'in_use' ? 'bg-blue-500' :
-                              asset.status === 'maintenance' ? 'bg-amber-500' :
-                              'bg-slate-500'
-                            }`}></span>
-                            {t(`assets.status.${asset.status}`)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+        <PendingTransfersBanner onConfirmed={refreshAssets} />
 
-          {/* Recent Tickets Section */}
-          <section className="bg-surface-container-lowest rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-              <h2 className="text-lg font-bold text-on-surface">{t('dashboard.employee.recentRequests')}</h2>
-              <button onClick={() => navigate('/repair-history')} className="text-xs font-bold text-primary hover:underline">{t('ticketing.backToList')}</button>
+        {/* Search Toolbar */}
+        <div className="bg-surface-container-lowest rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+          {/* 第一列：文字輸入框 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {(
+              [
+                { key: 'assetCode', label: t('dashboard.table.assetCode') },
+                { key: 'assetName', label: t('dashboard.table.assetName') },
+                { key: 'model',     label: t('dashboard.table.model') },
+                { key: 'spec',      label: t('dashboard.table.specs') },
+              ] as { key: keyof FilterState; label: string }[]
+            ).map(({ key, label }) => (
+              <div key={key} className="space-y-1">
+                <label className={searchLabelCls}>{label}</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  value={inputs[key]}
+                  onChange={e => setInputs(prev => ({ ...prev, [key]: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* 第二列：下拉選單 + 搜尋/清空 */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className={searchLabelCls}>{t('employeeDashboard.vendorHeader')}</label>
+              <select
+                className={searchSelectCls}
+                value={inputs.vendor}
+                onChange={e => setInputs(prev => ({ ...prev, vendor: e.target.value }))}
+              >
+                <option value="">{t('employeeDashboard.allVendors')}</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.name}>{v.name}</option>
+                ))}
+              </select>
             </div>
-            <div className="p-4 space-y-4">
-              {ticketsLoading ? (
-                <div className="flex justify-center p-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                </div>
-              ) : tickets.length === 0 ? (
-                <div className="text-center py-8 opacity-40">
-                  <span className="material-symbols-outlined text-4xl mb-2">history</span>
-                  <p className="text-xs">{t('dashboard.employee.noRequests')}</p>
-                </div>
-              ) : (
-                tickets.slice(0, 5).map(ticket => (
-                  <div 
-                    key={ticket.id}
-                    onClick={() => navigate(`/repair-history/${ticket.id}`)}
-                    className="p-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-all border border-transparent hover:border-slate-100 group"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-[10px] font-mono font-bold text-slate-400">#TK-{(ticket.id ?? 0).toString().padStart(4, '0')}</span>
-                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                        ticket.status === 'DONE' ? 'bg-green-500 text-white' :
-                        ticket.status === 'IN_PROGRESS' ? 'bg-blue-500 text-white' :
-                        'bg-amber-500 text-white'
-                      }`}>
-                        {t(`ticketing.status.${ticket.status}`)}
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors line-clamp-1">{ticket.description}</p>
-                    <p className="text-[10px] text-slate-400 mt-1">{new Date(ticket.created_at).toLocaleDateString()}</p>
-                  </div>
-                ))
-              )}
+            <div className="flex flex-col gap-1">
+              <label className={searchLabelCls}>{t('dashboard.table.type')}</label>
+              <select
+                className={searchSelectCls}
+                value={inputs.category}
+                onChange={e => setInputs(prev => ({ ...prev, category: e.target.value }))}
+              >
+                <option value="">{t('dashboard.employee.allCategories')}</option>
+                {categories.map(c => (
+                  <option key={c} value={c}>{t(`assets.type.${c}`, c)}</option>
+                ))}
+              </select>
             </div>
-          </section>
+            <div className="flex flex-col gap-1">
+              <label className={searchLabelCls}>{t('dashboard.table.status')}</label>
+              <select
+                className={searchSelectCls}
+                value={inputs.status}
+                onChange={e => setInputs(prev => ({ ...prev, status: e.target.value }))}
+              >
+                <option value="">{t('dashboard.filters.allStatus')}</option>
+                {ASSET_STATUSES.map(s => (
+                  <option key={s} value={s}>{t(`assets.status.${s}`, s)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="ml-auto flex items-end gap-2">
+              <button
+                onClick={() => { setInputs(EMPTY_FILTERS); setAppliedFilters(EMPTY_FILTERS); }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+                {t('employeeDashboard.clearAll')}
+              </button>
+              <button
+                onClick={handleSearch}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-on-primary rounded-lg text-sm font-bold hover:opacity-90 transition-opacity shadow-sm"
+              >
+                <span className="material-symbols-outlined text-[16px]">search</span>
+                {t('common.search')}
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Bento Style Banner */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-12">
-          <div className="md:col-span-2 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl p-8 text-white relative overflow-hidden shadow-xl">
-            <div className="relative z-10 max-w-md">
-              <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 inline-block">{t('dashboard.employee.support')}</span>
-              <h3 className="text-2xl font-extrabold mb-2 font-headline">{t('dashboard.employee.healthCheck')}</h3>
-              <p className="text-blue-100/70 text-sm mb-6">{t('dashboard.employee.healthCheckDesc')}</p>
-              <button className="bg-white text-blue-900 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-blue-50 transition-all active:scale-95">{t('dashboard.employee.scheduleMaintenance')}</button>
+        {/* Assets Table */}
+        <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          {assetsLoading ? (
+            <div className="flex items-center justify-center p-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
-          </div>
-          <div className="bg-tertiary-fixed rounded-2xl p-8 border border-tertiary/10 flex flex-col justify-between">
-            <div>
-              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-tertiary mb-6 shadow-sm">
-                <span className="material-symbols-outlined text-3xl">verified_user</span>
-              </div>
-              <h3 className="text-xl font-extrabold text-on-tertiary-fixed font-headline leading-tight">{t('dashboard.employee.warrantyTitle')}</h3>
-              <p className="text-on-tertiary-fixed-variant text-sm mt-2">{t('dashboard.employee.warrantyDesc')}</p>
+          ) : filteredAssets.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-16 text-center">
+              <span className="material-symbols-outlined text-5xl text-slate-300 mb-3">inventory_2</span>
+              <p className="text-sm text-on-surface-variant">
+                {allAssets.length === 0
+                  ? t('dashboard.employee.noAssignedAssets')
+                  : t('dashboard.employee.noMatchingAssets')}
+              </p>
             </div>
-          </div>
-        </section>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-max w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/60 border-b border-slate-100">
+                    <th className="px-5 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      {t('dashboard.table.actions', '操作')}
+                    </th>
+                    {[
+                      ['assetCode', '資產編號'],
+                      ['assetName', '資產名稱'],
+                      ['status', '當前狀態'],
+                      ['type', '分類'],
+                      ['vendor', '廠商'],
+                      ['model', '型號'],
+                      ['specs', '規格'],
+                      ['custodian', '保管人'],
+                      ['location', '辦公地點'],
+                    ].map(([key, label]) => (
+                      <th
+                        key={key}
+                        className="px-5 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap"
+                      >
+                        {t(`dashboard.table.${key}`, label)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {filteredAssets.map(asset => {
+                    const isLoanerAsset = asset.owner_id !== user?.id;
+                    const loanerTicket = loanerReturnTicketByAssetId.get(asset.id);
+                    return (
+                    <tr key={asset.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          {isLoanerAsset ? (
+                            loanerTicket ? (
+                              loanerTicket.loaner_return_borrower_confirmed ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-green-50 text-green-600 cursor-default">
+                                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                                  {t('employeeDashboard.alreadyConfirmed')}
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => setPendingReturnTicketId(loanerTicket.id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">keyboard_return</span>
+                                  {t('employeeDashboard.confirmReturnBtn')}
+                                </button>
+                              )
+                            ) : (
+                              <span className="text-xs text-on-surface-variant/50 italic">{t('employeeDashboard.borrowed')}</span>
+                            )
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => blockedAssetIds.has(asset.id) ? setBlockedRepairAsset(asset) : setRepairModalAsset(asset)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">build</span>
+                                {t('employeeDashboard.requestRepair')}
+                              </button>
+                              <button
+                                onClick={() => setHistoryModalAsset(asset)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">history</span>
+                                {t('employeeDashboard.repairHistory')}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span className="text-xs font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded">
+                          {asset.asset_code}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-sm font-semibold text-on-surface whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          {asset.name}
+                          {isLoanerAsset && (
+                            <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">{t('employeeDashboard.borrowed')}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${STATUS_BADGE[asset.status] ?? 'bg-slate-100 text-slate-600'}`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {t(`assets.status.${asset.status}`, asset.status)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
+                        {t(`assets.type.${asset.type}`, asset.type)}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.vendor || '—'}</td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.model}</td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap" title={asset.specification}>
+                        {asset.specification}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
+                        {isLoanerAsset ? (asset.owner_name ?? '—') : (user?.name ?? '—')}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">{asset.storage_location ?? '—'}</td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
+
+      {blockedRepairAsset && (
+        <BlockedRepairDialog asset={blockedRepairAsset} onClose={() => setBlockedRepairAsset(null)} />
+      )}
+
+      {repairModalAsset && (
+        <NewRepairRequestModal
+          asset={repairModalAsset}
+          open
+          onClose={() => setRepairModalAsset(null)}
+          onSuccess={handleRepairSuccess}
+        />
+      )}
+
+      {historyModalAsset && (
+        <AssetRepairHistoryModal
+          asset={historyModalAsset}
+          open
+          onClose={() => setHistoryModalAsset(null)}
+        />
+      )}
+
+      {pendingReturnTicketId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-purple-500 text-2xl mt-0.5">keyboard_return</span>
+              <div>
+                <h3 className="text-base font-bold text-on-surface">{t('employeeDashboard.confirmReturnTitle')}</h3>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  {t('employeeDashboard.confirmReturnMsg')}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setPendingReturnTicketId(null)}
+                className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={() => handleConfirmLoanerReturn(pendingReturnTicketId)}
+                className="px-5 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                {t('employeeDashboard.confirmReturn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

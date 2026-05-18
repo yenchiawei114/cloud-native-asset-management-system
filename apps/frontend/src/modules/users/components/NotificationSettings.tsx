@@ -34,12 +34,12 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({ onLo
     setSaving(prev => ({ ...prev, [type]: true }));
     try {
       await updatePreference(type, values[type]);
-      setMessage({ type: 'success', text: t('profile.save') + '成功' });
+      setMessage({ type: 'success', text: t('profile.saveSuccess') });
     } catch (err: any) {
       const translatedMsg = t(`apiErrors.${err.message}`);
       setMessage({ 
         type: 'error', 
-        text: translatedMsg !== `apiErrors.${err.message}` ? translatedMsg : (err.message || '更新失敗')
+        text: translatedMsg !== `apiErrors.${err.message}` ? translatedMsg : (err.message || t('profile.updateFailed'))
       });
     } finally {
       setSaving(prev => ({ ...prev, [type]: false }));

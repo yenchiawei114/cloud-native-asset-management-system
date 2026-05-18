@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useUsers } from '../modules/users/hooks/useUsers';
-import { UserCreatePayload } from '../lib/api';
+import { UserCreatePayload, Department, OfficeLocation, api } from '../lib/api';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
 
@@ -13,26 +13,35 @@ export const UserCreatePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { createUser } = useUsers();
   const { feedbackState, showFeedback, closeFeedback } = useFeedback();
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>([]);
   const [formData, setFormData] = useState<UserCreatePayload>({
     employee_id: '',
     password: '',
     name: '',
-    sex: 'M',
-    department_id: 1,
+    sex: 'MALE',
+    department_id: 0,
+    location: '',
     email: '',
-    role: 'employee',
+    role: 'EMPLOYEE',
+    hire_date: '',
   });
+
+  useEffect(() => {
+    api.getDepartments().then(setDepartments).catch(() => {});
+    api.getOfficeLocations().then(setOfficeLocations).catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await createUser(formData);
-      showFeedback({ 
-        title: t('profile.create.success'), 
-        message: '新使用者帳號已成功建立。', 
-        type: 'success', 
-        onConfirm: () => navigate('/users') 
+      showFeedback({
+        title: t('profile.create.success'),
+        message: t('users.create.successMsg'),
+        type: 'success',
+        onConfirm: () => navigate('/users'),
       });
     } catch (err: any) {
       showFeedback({ 
@@ -69,11 +78,11 @@ export const UserCreatePage: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-x-8 gap-y-6">
                 <div className="col-span-1">
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">{t('profile.employeeId')} (9碼) <span className="text-error">*</span></label>
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">{t('profile.employeeId')} {t('users.create.employeeIdNote')} <span className="text-error">*</span></label>
                   <input 
                     required
                     className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none" 
-                    placeholder="例如：E00000001" 
+                    placeholder={t('users.create.employeeIdExample')}
                     type="text"
                     value={formData.employee_id}
                     onChange={e => setFormData({...formData, employee_id: e.target.value})}
@@ -84,7 +93,7 @@ export const UserCreatePage: React.FC = () => {
                   <input 
                     required
                     className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none" 
-                    placeholder="輸入全名" 
+                    placeholder={t('users.create.nameExample')}
                     type="text"
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
@@ -95,7 +104,7 @@ export const UserCreatePage: React.FC = () => {
                   <input 
                     required
                     className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none" 
-                    placeholder="example@atlas.com" 
+                    placeholder={t('users.create.emailExample')}
                     type="email"
                     value={formData.email}
                     onChange={e => setFormData({...formData, email: e.target.value})}
@@ -103,14 +112,24 @@ export const UserCreatePage: React.FC = () => {
                 </div>
                 <div className="col-span-1">
                   <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">{t('profile.sex')} <span className="text-error">*</span></label>
-                  <select 
+                  <select
                     className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none appearance-none"
                     value={formData.sex}
                     onChange={e => setFormData({...formData, sex: e.target.value as any})}
                   >
-                    <option value="M">{t('profile.male')} (Male)</option>
-                    <option value="F">{t('profile.female')} (Female)</option>
+                    <option value="MALE">{t('profile.male')} (Male)</option>
+                    <option value="FEMALE">{t('profile.female')} (Female)</option>
                   </select>
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">{t('users.create.hireDate')} <span className="text-error">*</span></label>
+                  <input
+                    required
+                    className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none"
+                    type="date"
+                    value={formData.hire_date ?? ''}
+                    onChange={e => setFormData({...formData, hire_date: e.target.value || null})}
+                  />
                 </div>
               </div>
             </section>
@@ -147,16 +166,16 @@ export const UserCreatePage: React.FC = () => {
                 <div>
                   <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-4 px-1">{t('profile.create.roleSelection')} <span className="text-error">*</span></label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <RoleOption 
-                      active={formData.role === 'employee'} 
-                      onClick={() => setFormData({...formData, role: 'employee'})}
+                    <RoleOption
+                      active={formData.role === 'EMPLOYEE'}
+                      onClick={() => setFormData({...formData, role: 'EMPLOYEE'})}
                       icon="badge"
                       label={`${t('profile.employee')} (Employee)`}
                       desc={t('profile.employeeDesc')}
                     />
-                    <RoleOption 
-                      active={formData.role === 'admin'} 
-                      onClick={() => setFormData({...formData, role: 'admin'})}
+                    <RoleOption
+                      active={formData.role === 'ADMIN'}
+                      onClick={() => setFormData({...formData, role: 'ADMIN'})}
                       icon="admin_panel_settings"
                       label={`${t('profile.admin')} (Admin)`}
                       desc={t('profile.adminDesc')}
@@ -164,15 +183,32 @@ export const UserCreatePage: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">{t('profile.create.deptId')} <span className="text-error">*</span></label>
-                  <input 
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">{t('users.create.department')} <span className="text-error">*</span></label>
+                  <select
                     required
-                    className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none" 
-                    placeholder={t('profile.create.deptIdPlaceholder')} 
-                    type="number"
-                    value={formData.department_id}
+                    className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none appearance-none"
+                    value={formData.department_id || ''}
                     onChange={e => setFormData({...formData, department_id: parseInt(e.target.value) || 0})}
-                  />
+                  >
+                    <option value="">{t('users.create.selectDept')}</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 px-1">{t('users.create.location')} <span className="text-error">*</span></label>
+                  <select
+                    required
+                    className="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant px-4 py-3 text-on-surface rounded-t-lg transition-all focus:ring-0 focus:border-primary outline-none appearance-none"
+                    value={formData.location || ''}
+                    onChange={e => setFormData({...formData, location: e.target.value})}
+                  >
+                    <option value="">{t('users.create.selectLocation')}</option>
+                    {officeLocations.map(loc => (
+                      <option key={loc.id} value={loc.name}>{loc.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </section>

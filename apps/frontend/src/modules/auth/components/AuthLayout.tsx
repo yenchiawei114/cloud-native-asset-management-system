@@ -10,6 +10,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
 
   const handleLanguageChange = (lng: string) => {
     i18n.changeLanguage(lng);
+    localStorage.setItem('lng', lng);
   };
 
   return (
@@ -21,7 +22,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
           <div className="mb-8 flex items-center justify-between">
             <div>
               <span className="text-on-primary-container font-headline font-black text-4xl tracking-tighter">
-                Executive Architect
+                {t('auth.layout.brand')}
               </span>
               <div className="h-1 w-24 bg-tertiary-fixed mt-4"></div>
             </div>

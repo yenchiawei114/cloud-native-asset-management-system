@@ -5,6 +5,7 @@ import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout
 import { useAdminTickets } from '../modules/ticketing/hooks/useAdminTickets';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
+import { fmtDate, fmtNumber } from '../lib/locale';
 
 export const TicketReviewPage: React.FC = () => {
   const { t } = useTranslation();
@@ -21,14 +22,14 @@ export const TicketReviewPage: React.FC = () => {
   const { feedbackState, showFeedback, closeFeedback } = useFeedback();
 
   React.useEffect(() => {
-    document.title = "維修工單管理 | Atlas Asset";
-  }, []);
+    document.title = t('ticketing.review.pageTitle');
+  }, [t]);
 
   const handleApprove = async (id: number) => {
     try {
       await approveTicket(id);
     } catch (err: any) {
-      showFeedback({ title: '批准失敗', message: err.message, type: 'error', onConfirm: closeFeedback });
+      showFeedback({ title: t('ticketing.review.approveFailed'), message: err.message, type: 'error', onConfirm: closeFeedback });
     }
   };
 
@@ -58,7 +59,7 @@ export const TicketReviewPage: React.FC = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-semibold text-on-surface-variant">{t('ticketing.stats.monthlyTickets')}</p>
-                <h3 className="text-4xl font-extrabold mt-2 text-on-surface">{allTickets.length.toLocaleString()}</h3>
+                <h3 className="text-4xl font-extrabold mt-2 text-on-surface">{fmtNumber(allTickets.length)}</h3>
               </div>
               <div className="p-3 bg-primary-container/10 rounded-xl">
                 <span className="material-symbols-outlined text-primary">assignment</span>
@@ -66,15 +67,15 @@ export const TicketReviewPage: React.FC = () => {
             </div>
             <div className="mt-4 flex items-center gap-2 text-xs font-bold text-green-600">
               <span className="material-symbols-outlined text-sm">trending_up</span>
-              <span>較上月增加 12%</span>
+              <span>{t('ticketing.review.monthlyIncrease')}</span>
             </div>
           </div>
 
           <div className="bg-surface-container-low p-6 rounded-2xl relative overflow-hidden group border border-outline-variant/10 shadow-sm transition-all hover:shadow-md">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-semibold text-on-surface-variant">平均修復時間 (MTTR)</p>
-                <h3 className="text-4xl font-extrabold mt-2 text-on-surface">4.2h</h3>
+                <p className="text-sm font-semibold text-on-surface-variant">{t('ticketing.review.mttr')}</p>
+                <h3 className="text-4xl font-extrabold mt-2 text-on-surface">{t('ticketing.review.mttrValue')}</h3>
               </div>
               <div className="p-3 bg-tertiary-container/10 rounded-xl">
                 <span className="material-symbols-outlined text-tertiary">timer</span>
@@ -82,22 +83,22 @@ export const TicketReviewPage: React.FC = () => {
             </div>
             <div className="mt-4 flex items-center gap-2 text-xs font-bold text-green-600">
               <span className="material-symbols-outlined text-sm">trending_down</span>
-              <span>縮短了 15 分鐘</span>
+              <span>{t('ticketing.review.mttrImproved')}</span>
             </div>
           </div>
 
           <div className="bg-surface-container-low p-6 rounded-2xl relative overflow-hidden group border border-outline-variant/10 shadow-sm transition-all hover:shadow-md">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-semibold text-on-surface-variant">SLA 達成率</p>
-                <h3 className="text-4xl font-extrabold mt-2 text-on-surface">98.5%</h3>
+                <p className="text-sm font-semibold text-on-surface-variant">{t('ticketing.review.slaRate')}</p>
+                <h3 className="text-4xl font-extrabold mt-2 text-on-surface">{t('ticketing.review.slaValue')}</h3>
               </div>
               <div className="p-3 bg-secondary-container/10 rounded-xl">
                 <span className="material-symbols-outlined text-secondary">verified</span>
               </div>
             </div>
             <div className="mt-4 flex items-center gap-2 text-xs font-bold text-on-surface-variant">
-              <span>目標設定：95%</span>
+              <span>{t('ticketing.review.slaTarget')}</span>
             </div>
             <div className="absolute bottom-0 left-0 h-1 bg-green-500 w-[98.5%]"></div>
           </div>
@@ -121,10 +122,10 @@ export const TicketReviewPage: React.FC = () => {
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">{t('ticketing.department')}</label>
               <select className="w-full bg-surface-container-low border-none rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-primary/20 appearance-none outline-none">
-                <option>所有部門</option>
-                <option>工程部</option>
-                <option>營運部</option>
-                <option>設計部</option>
+                <option>{t('dashboard.filters.allDepts')}</option>
+                <option>{t('dashboard.filters.deptEngineering')}</option>
+                <option>{t('dashboard.filters.deptOperations')}</option>
+                <option>{t('dashboard.filters.deptDesign')}</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -141,32 +142,32 @@ export const TicketReviewPage: React.FC = () => {
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">優先級</label>
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">{t('ticketing.priority')}</label>
               <div className="flex gap-1">
-                {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map((p) => (
-                  <button 
+                {(['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const).map((p) => (
+                  <button
                     key={p}
                     onClick={() => setPriorityFilter(priorityFilter === p ? 'ALL' : p)}
                     className={`flex-1 py-2 rounded-lg text-[10px] font-black transition-all ${
-                      priorityFilter === p 
-                        ? 'bg-primary text-white shadow-sm' 
+                      priorityFilter === p
+                        ? 'bg-primary text-white shadow-sm'
                         : 'bg-surface-container-highest text-on-surface-variant hover:bg-slate-300'
                     }`}
                   >
-                    {p === 'URGENT' ? '極高' : p === 'HIGH' ? '高' : p === 'MEDIUM' ? '中' : '低'}
+                    {t(`ticketing.priority.${p}`)}
                   </button>
                 ))}
               </div>
             </div>
             <div className="flex items-end">
-              <button 
+              <button
                 onClick={() => {
                   setFilter('ALL');
                   setPriorityFilter('ALL');
                 }}
                 className="w-full py-2.5 bg-on-surface text-surface rounded-lg text-sm font-bold hover:opacity-90 transition-opacity"
               >
-                重置篩選
+                {t('ticketing.review.resetFilter')}
               </button>
             </div>
           </div>
@@ -209,14 +210,14 @@ export const TicketReviewPage: React.FC = () => {
                         <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center">
                           <span className="material-symbols-outlined text-sm">{getIcon(ticket.description || '')}</span>
                         </div>
-                        <span className="text-sm font-semibold text-on-surface line-clamp-1">{ticket.description || '無描述'}</span>
+                        <span className="text-sm font-semibold text-on-surface line-clamp-1">{ticket.description || t('ticketing.noDescription')}</span>
                       </div>
                     </td>
                     <td className="py-5 px-6 text-sm text-on-surface-variant">
                       User #{ticket.requester_id}
                     </td>
                     <td className="py-5 px-6 text-sm text-on-surface-variant">
-                      {new Date(ticket.created_at).toLocaleDateString()}
+                      {fmtDate(ticket.created_at)}
                     </td>
                     <td className="py-5 px-6">
                       <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${getPriorityColor(ticket.priority || 'MEDIUM').bg} ${getPriorityColor(ticket.priority || 'MEDIUM').text}`}>
@@ -229,7 +230,7 @@ export const TicketReviewPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-5 px-6 text-sm text-on-surface-variant font-medium">
-                      {ticket.expected_completion_date ? new Date(ticket.expected_completion_date).toLocaleDateString() : '未設定'}
+                      {ticket.expected_completion_date ? fmtDate(ticket.expected_completion_date) : t('ticketing.notSet')}
                     </td>
                     <td className="py-5 px-6 text-right">
                       <div className="flex justify-end gap-2">
@@ -237,7 +238,7 @@ export const TicketReviewPage: React.FC = () => {
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleApprove(ticket.id); }}
                             className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
-                            title="開始維修"
+                            title={t('ticketing.review.startRepair')}
                           >
                             <span className="material-symbols-outlined text-lg">play_arrow</span>
                           </button>
@@ -263,7 +264,7 @@ export const TicketReviewPage: React.FC = () => {
           {/* Pagination Placeholder */}
           <div className="px-6 py-4 bg-surface-container-low flex justify-between items-center border-t border-slate-200/10">
             <p className="text-xs text-on-surface-variant font-medium">
-              Showing {tickets.length} results
+              {t('ticketing.review.showingResults', { count: tickets.length })}
             </p>
             <div className="flex gap-1">
               <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-highest transition-colors">

@@ -12,9 +12,12 @@ from app.core.audit import log_action
 from app.core.storage import storage
 from app.core.db import get_db
 from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment, User
+from app.models.asset import Asset, AssetStatus
 from app.models.audit_log import Action, TargetType
+from app.models.user import Role
 from app.core.cache import redis
 
+from app.core.email import send_email
 from app.api.deps import require_role, get_current_user
 
 admin_required = require_role("ADMIN")
@@ -40,7 +43,17 @@ class RepairRequestCreate(BaseModel):
 
 
 class RepairRequestStatusUpdate(BaseModel):
-    status: Literal["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"]
+    status: Literal["OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "RETURNED", "WAITING_LOANER_RETURN"]
+    expected_completion_date: date | None = None
+    reject_reason: str | None = None
+    loaner_asset_id: int | None = None  # 核准時指定備用機
+
+
+class CloseTicketPayload(BaseModel):
+    issue_description: str
+    solution: str
+    vendor: str
+    cost: int = 0
 
 
 class RepairRequestUpdate(BaseModel):
@@ -62,10 +75,17 @@ class RepairRequestOut(BaseModel):
     need_backup: bool
     backup_spec: str | None
     status: str
+    reject_reason: str | None = None
     expected_completion_date: date | None
     pickup_location: str | None
+    loaner_asset_id: int | None = None
+    loaner_asset_code: str | None = None
+    loaner_asset_name: str | None = None
+    loaner_return_borrower_confirmed: bool = False
+    loaner_return_lender_confirmed: bool = False
     created_at: datetime
     version: int
+    requester_name: str | None = None
 
 
 class RepairInspectionCreate(BaseModel):
@@ -150,7 +170,11 @@ class RepairRequestWithAttachments(BaseModel):
     attachment: AttachmentOut | None
 
 
-def _request_to_out(row: RepairRequest) -> RepairRequestOut:
+def _request_to_out(
+    row: RepairRequest,
+    requester_name: str | None = None,
+    loaner_asset: Asset | None = None,
+) -> RepairRequestOut:
     return RepairRequestOut(
         id=row.id,
         asset_id=row.asset_id,
@@ -159,10 +183,17 @@ def _request_to_out(row: RepairRequest) -> RepairRequestOut:
         need_backup=row.need_backup,
         backup_spec=row.backup_spec,
         status=row.status,
+        reject_reason=row.reject_reason,
         expected_completion_date=row.expected_completion_date,
         pickup_location=row.pickup_location,
+        loaner_asset_id=row.loaner_asset_id,
+        loaner_asset_code=loaner_asset.asset_code if loaner_asset else None,
+        loaner_asset_name=loaner_asset.name if loaner_asset else None,
+        loaner_return_borrower_confirmed=row.loaner_return_borrower_confirmed,
+        loaner_return_lender_confirmed=row.loaner_return_lender_confirmed,
         created_at=row.created_at,
         version=row.version,
+        requester_name=requester_name,
     )
 
 
@@ -250,7 +281,71 @@ async def _extract_attachment_owner(db: AsyncSession, row: Attachment, user: dic
 @router.get("/tickets", response_model=list[RepairRequestOut])
 async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> list[RepairRequestOut]:
     rows = (await db.scalars(select(RepairRequest).order_by(RepairRequest.id.desc()))).all()
-    return [_request_to_out(r) for r in rows]
+    loaner_ids = {r.loaner_asset_id for r in rows if r.loaner_asset_id}
+    loaner_map: dict[int, Asset] = {}
+    if loaner_ids:
+        loaners = (await db.scalars(select(Asset).where(Asset.id.in_(loaner_ids)))).all()
+        loaner_map = {a.id: a for a in loaners}
+    return [_request_to_out(r, loaner_asset=loaner_map.get(r.loaner_asset_id) if r.loaner_asset_id else None) for r in rows]
+
+
+@router.get("/assets/{asset_id}/tickets", response_model=list[RepairRequestWithAttachments])
+async def list_asset_tickets(
+    asset_id: int,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+) -> list[RepairRequestWithAttachments]:
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+
+    if user.get("role") != "ADMIN" and asset.owner_id != user.get("user_id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    rows = (await db.scalars(
+        select(RepairRequest)
+        .where(RepairRequest.asset_id == asset_id)
+        .order_by(RepairRequest.created_at.desc())
+    )).all()
+
+    request_ids = [r.id for r in rows]
+    attachments_map: dict[int, AttachmentOut] = {}
+    if request_ids:
+        att_rows = (await db.scalars(
+            select(Attachment)
+            .where(
+                Attachment.attachable_type == "REPAIR_REQUEST",
+                Attachment.attachable_id.in_(request_ids),
+            )
+            .order_by(Attachment.id.desc())
+        )).all()
+        for a in att_rows:
+            attachments_map.setdefault(a.attachable_id, _attachment_to_out(a))
+
+    requester_ids = {r.requester_id for r in rows}
+    requester_map: dict[int, User] = {}
+    if requester_ids:
+        requesters = (await db.scalars(select(User).where(User.id.in_(requester_ids)))).all()
+        requester_map = {u.id: u for u in requesters}
+
+    loaner_ids = {r.loaner_asset_id for r in rows if r.loaner_asset_id}
+    loaner_map: dict[int, Asset] = {}
+    if loaner_ids:
+        loaners = (await db.scalars(select(Asset).where(Asset.id.in_(loaner_ids)))).all()
+        loaner_map = {a.id: a for a in loaners}
+
+    result = []
+    for r in rows:
+        requester = requester_map.get(r.requester_id)
+        result.append(RepairRequestWithAttachments(
+            request=_request_to_out(
+                r,
+                requester_name=requester.name if requester else None,
+                loaner_asset=loaner_map.get(r.loaner_asset_id) if r.loaner_asset_id else None,
+            ),
+            attachment=attachments_map.get(r.id),
+        ))
+    return result
 
 
 @router.get("/tickets/list/{employee_id}", response_model=list[RepairRequestWithAttachments])
@@ -263,9 +358,12 @@ async def list_user_tickets(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     # 找employee_id對應的user_id，前提是employee_id不會重複
-    requester_user_id = (await db.scalars(select(User.id).where(User.employee_id == employee_id))).first()
-    if requester_user_id is None:
+    requester_row = (await db.execute(select(User).where(User.employee_id == employee_id))).scalar_one_or_none()
+    if requester_row is None:
         raise HTTPException(status_code=404, detail="user not found")
+
+    requester_user_id = requester_row.id
+    requester_name = requester_row.name
 
     rows = (
         await db.scalars(
@@ -295,9 +393,22 @@ async def list_user_tickets(
     for a in attachments_rows:
         attachments_map.setdefault(a.attachable_id, _attachment_to_out(a))
 
+    loaner_ids = {r.loaner_asset_id for r in rows if r.loaner_asset_id}
+    loaner_map: dict[int, Asset] = {}
+    if loaner_ids:
+        loaners = (await db.scalars(select(Asset).where(Asset.id.in_(loaner_ids)))).all()
+        loaner_map = {a.id: a for a in loaners}
+
     result: list[RepairRequestWithAttachments] = []
     for r in rows:
-        result.append(RepairRequestWithAttachments(request=_request_to_out(r), attachment=attachments_map.get(r.id)))
+        result.append(RepairRequestWithAttachments(
+            request=_request_to_out(
+                r,
+                requester_name=requester_name,
+                loaner_asset=loaner_map.get(r.loaner_asset_id) if r.loaner_asset_id else None,
+            ),
+            attachment=attachments_map.get(r.id),
+        ))
 
     return result
 
@@ -313,6 +424,9 @@ async def get_ticket(
         # 權限判斷：ADMIN 可讀取所有表單，USER 只能讀取自己的表單
         if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
             raise HTTPException(status_code=403, detail="Forbidden")
+        if request_row.requester_name is None:
+            requester = await db.get(User, request_row.requester_id)
+            request_row.requester_name = requester.name if requester else None
         return request_row
 
     row = await db.get(RepairRequest, ticket_id)
@@ -323,7 +437,9 @@ async def get_ticket(
     if user.get("role") != "ADMIN" and row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    result = _request_to_out(row)
+    requester = await db.get(User, row.requester_id)
+    loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
+    result = _request_to_out(row, requester_name=requester.name if requester else None, loaner_asset=loaner_asset)
     await redis.setex(cache_key, CACHE_TTL_SECONDS, result.model_dump_json())
     return result
 
@@ -352,7 +468,7 @@ async def create_ticket(
         action=Action.CREATE,
         target_type=TargetType.TICKET,
         target_id=row.id,
-        target_name=f"報修單 #{row.id}",
+        target_name=f"#{str(row.id).zfill(4)}",
         detail={"after": payload.model_dump(mode="json")},
     )
     await db.commit()
@@ -382,10 +498,16 @@ async def update_ticket(
     row.description = payload.description
     row.need_backup = payload.need_backup
     row.backup_spec = payload.backup_spec
-    row.status = payload.status
     row.expected_completion_date = payload.expected_completion_date
     row.pickup_location = payload.pickup_location
     row.version += 1
+
+    # 若工單是「已退回」狀態，重送後自動重設為「待審核」並清除退回原因
+    if row.status == "RETURNED":
+        row.status = "OPEN"
+        row.reject_reason = None
+    else:
+        row.status = payload.status
 
     after = _request_to_out(row).model_dump(mode="json")
     await log_action(
@@ -395,13 +517,14 @@ async def update_ticket(
         action=Action.UPDATE,
         target_type=TargetType.TICKET,
         target_id=ticket_id,
-        target_name=f"報修單 #{ticket_id}",
+        target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": before, "after": after},
     )
     await db.commit()
     await db.refresh(row)
 
-    result = _request_to_out(row)
+    loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
+    result = _request_to_out(row, loaner_asset=loaner_asset)
     await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
     return result
 
@@ -420,6 +543,57 @@ async def update_ticket_status(
     old_status = row.status
     row.status = payload.status
     row.version += 1
+
+    # 同步資產狀態
+    asset_row = await db.get(Asset, row.asset_id)
+    if asset_row is not None:
+        if payload.status == "IN_PROGRESS":
+            asset_row.status = AssetStatus.MAINTENANCE
+            asset_row.version += 1
+            if payload.expected_completion_date:
+                row.expected_completion_date = payload.expected_completion_date
+            # 指定備用機：將備用機設為已借出，並記錄借用人
+            if row.need_backup and payload.loaner_asset_id:
+                loaner = await db.get(Asset, payload.loaner_asset_id)
+                if loaner is None:
+                    raise HTTPException(status_code=404, detail="備用機資產不存在")
+                if loaner.status != AssetStatus.AVAILABLE:
+                    raise HTTPException(status_code=400, detail="備用機目前不可借用（非閒置狀態）")
+                if loaner.owner_id != user["user_id"]:
+                    raise HTTPException(status_code=403, detail="只能借出自己保管的閒置資產")
+                loaner.status = AssetStatus.BORROWED
+                loaner.borrower_id = row.requester_id
+                loaner.version += 1
+                row.loaner_asset_id = payload.loaner_asset_id
+        elif payload.status in ("DONE", "CANCELLED"):
+            # 若保管人為管理員則設閒置，否則設使用中
+            owner = await db.get(User, asset_row.owner_id) if asset_row.owner_id else None
+            is_admin_owner = owner and owner.role == Role.ADMIN
+            asset_row.status = AssetStatus.AVAILABLE if (is_admin_owner or not asset_row.owner_id) else AssetStatus.IN_USE
+            asset_row.version += 1
+
+    if payload.status == "RETURNED":
+        row.reject_reason = payload.reject_reason
+
+    requester = await db.get(User, row.requester_id)
+
+    # Email 通知
+    if requester:
+        asset_label = f"{asset_row.name}（{asset_row.asset_code}）" if asset_row else f"資產 #{row.asset_id}"
+        if payload.status == "IN_PROGRESS":
+            backup_note = "，<b>備用機已備妥，請至服務台領取</b>" if row.need_backup else ""
+            send_email(
+                subject=f"【維修申請核准】{asset_label} 維修工單已核准",
+                body=f"<p>您好 {requester.name}，</p><p>您的維修申請（工單 #{ticket_id}）已核准。</p><p>請繳回資產 <b>{asset_label}</b>{backup_note}。</p><p>預計完成時間：{payload.expected_completion_date or '待定'}</p>",
+                receiver=requester.email,
+            )
+        elif payload.status == "RETURNED":
+            send_email(
+                subject=f"【維修申請退回】{asset_label} 維修工單已退回",
+                body=f"<p>您好 {requester.name}，</p><p>您的維修申請（工單 #{ticket_id}）已被退回。</p><p>退回原因：{payload.reject_reason or '無說明'}</p><p>您可登入系統修改後重新送出。</p>",
+                receiver=requester.email,
+            )
+
     await log_action(
         db,
         user_id=user["user_id"],
@@ -427,13 +601,167 @@ async def update_ticket_status(
         action=Action.UPDATE,
         target_type=TargetType.TICKET,
         target_id=ticket_id,
-        target_name=f"報修單 #{ticket_id}",
+        target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": {"status": old_status}, "after": {"status": payload.status}},
     )
     await db.commit()
     await db.refresh(row)
 
-    result = _request_to_out(row)
+    loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
+    result = _request_to_out(row, requester_name=requester.name if requester else None, loaner_asset=loaner_asset)
+    await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
+    return result
+
+
+@router.post("/tickets/{ticket_id}/close", response_model=RepairRequestOut)
+async def close_ticket(
+    ticket_id: int,
+    payload: CloseTicketPayload,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required),
+) -> RepairRequestOut:
+    row = await db.get(RepairRequest, ticket_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="ticket not found")
+    if row.status != "IN_PROGRESS":
+        raise HTTPException(status_code=400, detail="只有「維修中」的工單才能結案")
+
+    # 建立或更新維修紀錄
+    existing_record = (await db.scalars(
+        select(RepairRecord).where(RepairRecord.request_id == ticket_id)
+    )).first()
+    if existing_record:
+        existing_record.issue_description = payload.issue_description
+        existing_record.solution = payload.solution
+        existing_record.vendor = payload.vendor
+        existing_record.cost = payload.cost
+        existing_record.repair_date = date.today()
+    else:
+        record = RepairRecord(
+            request_id=ticket_id,
+            repair_date=date.today(),
+            issue_description=payload.issue_description,
+            solution=payload.solution,
+            cost=payload.cost,
+            vendor=payload.vendor,
+        )
+        db.add(record)
+
+    asset_row = await db.get(Asset, row.asset_id)
+    requester = await db.get(User, row.requester_id)
+
+    # 若有備用機借出，切換至等待歸還狀態；否則直接結案
+    has_loaner = bool(row.loaner_asset_id)
+    if has_loaner:
+        row.status = "WAITING_LOANER_RETURN"
+        new_status = "WAITING_LOANER_RETURN"
+    else:
+        row.status = "DONE"
+        new_status = "DONE"
+        # 更新資產狀態（管理員保管人 → 閒置，員工保管人 → 使用中）
+        if asset_row:
+            owner = await db.get(User, asset_row.owner_id) if asset_row.owner_id else None
+            is_admin_owner = owner and owner.role == Role.ADMIN
+            asset_row.status = AssetStatus.AVAILABLE if (is_admin_owner or not asset_row.owner_id) else AssetStatus.IN_USE
+            asset_row.version += 1
+
+    row.version += 1
+
+    if requester and asset_row:
+        asset_label = f"{asset_row.name}（{asset_row.asset_code}）"
+        backup_note = "，<b>請繳回備用機以完成結案</b>" if has_loaner else ""
+        send_email(
+            subject=f"【維修完成】{asset_label} 維修已結案",
+            body=f"<p>您好 {requester.name}，</p><p>您的資產 <b>{asset_label}</b> 維修已完成，請前往領取{backup_note}。</p><p>維修摘要：{payload.solution}</p>",
+            receiver=requester.email,
+        )
+
+    await log_action(
+        db,
+        user_id=user["user_id"],
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.TICKET,
+        target_id=ticket_id,
+        target_name=f"#{str(ticket_id).zfill(4)}",
+        detail={"before": {"status": "IN_PROGRESS"}, "after": {"status": new_status}},
+    )
+    await db.commit()
+    await db.refresh(row)
+
+    loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
+    result = _request_to_out(row, requester_name=requester.name if requester else None, loaner_asset=loaner_asset)
+    await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
+    return result
+
+
+@router.post("/tickets/{ticket_id}/confirm-loaner-return", response_model=RepairRequestOut)
+async def confirm_loaner_return(
+    ticket_id: int,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+) -> RepairRequestOut:
+    """雙方確認備用機歸還：出借方（loaner 保管人）和借用方（申請人）各自確認一次。"""
+    row = await db.get(RepairRequest, ticket_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="ticket not found")
+    if row.status != "WAITING_LOANER_RETURN":
+        raise HTTPException(status_code=400, detail="此工單目前不在等待備用機歸還狀態")
+    if not row.loaner_asset_id:
+        raise HTTPException(status_code=400, detail="此工單無備用機紀錄")
+
+    loaner = await db.get(Asset, row.loaner_asset_id)
+    if loaner is None:
+        raise HTTPException(status_code=404, detail="備用機資產不存在")
+
+    my_id = user["user_id"]
+    is_lender = loaner.owner_id == my_id   # 出借方：loaner 保管人
+    is_borrower = row.requester_id == my_id  # 借用方：維修申請人
+
+    if not is_lender and not is_borrower:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if is_lender:
+        row.loaner_return_lender_confirmed = True
+    if is_borrower:
+        row.loaner_return_borrower_confirmed = True
+
+    # 雙方均確認 → 完成歸還
+    if row.loaner_return_lender_confirmed and row.loaner_return_borrower_confirmed:
+        loaner.status = AssetStatus.AVAILABLE
+        loaner.borrower_id = None
+        loaner.version += 1
+
+        asset_row = await db.get(Asset, row.asset_id)
+        if asset_row:
+            owner = await db.get(User, asset_row.owner_id) if asset_row.owner_id else None
+            is_admin_owner = owner and owner.role == Role.ADMIN
+            asset_row.status = AssetStatus.AVAILABLE if (is_admin_owner or not asset_row.owner_id) else AssetStatus.IN_USE
+            asset_row.version += 1
+
+        row.status = "DONE"
+
+    row.version += 1
+
+    await log_action(
+        db,
+        user_id=my_id,
+        actor_name=user["name"],
+        action=Action.UPDATE,
+        target_type=TargetType.TICKET,
+        target_id=ticket_id,
+        target_name=f"#{str(ticket_id).zfill(4)}",
+        detail={"after": {
+            "loaner_return_lender_confirmed": row.loaner_return_lender_confirmed,
+            "loaner_return_borrower_confirmed": row.loaner_return_borrower_confirmed,
+            "loaner_asset_id": row.loaner_asset_id,
+        }},
+    )
+    await db.commit()
+    await db.refresh(row)
+
+    requester = await db.get(User, row.requester_id)
+    result = _request_to_out(row, requester_name=requester.name if requester else None, loaner_asset=loaner)
     await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
     return result
 
@@ -457,7 +785,7 @@ async def delete_ticket(ticket_id: int, db: AsyncSession = Depends(get_db), user
         action=Action.DELETE,
         target_type=TargetType.TICKET,
         target_id=ticket_id,
-        target_name=f"報修單 #{ticket_id}",
+        target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": before},
     )
     await db.commit()
@@ -688,13 +1016,21 @@ async def list_ticket_attachments(
     if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # 取得該票單對應的驗收單 ID（若有）
+    # 取得維修紀錄 ID（若有）
+    record_row = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
+    record_id = record_row.id if record_row else None
+
+    # 取得驗收單 ID（若有）
     inspection_row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
     inspection_id = inspection_row.id if inspection_row else None
 
     conditions = [
         (Attachment.attachable_type == "REPAIR_REQUEST") & (Attachment.attachable_id == ticket_id)
     ]
+    if record_id is not None:
+        conditions.append(
+            (Attachment.attachable_type == "REPAIR_RECORD") & (Attachment.attachable_id == record_id)
+        )
     if inspection_id is not None:
         conditions.append(
             (Attachment.attachable_type == "REPAIR_INSPECTION") & (Attachment.attachable_id == inspection_id)

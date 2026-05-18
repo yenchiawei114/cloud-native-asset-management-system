@@ -46,5 +46,15 @@ export const useUsers = (keyword?: string) => {
     }
   };
 
-  return { users, loading, error, refresh: fetchUsers, deleteUser, createUser };
+  const updateUser = async (employeeId: string, payload: Partial<UserCreatePayload>) => {
+    try {
+      const updated = await api.updateUser(employeeId, payload);
+      await fetchUsers();
+      return updated;
+    } catch (err: any) {
+      throw new Error(err.message || 'Update failed');
+    }
+  };
+
+  return { users, loading, error, refresh: fetchUsers, deleteUser, createUser, updateUser };
 };

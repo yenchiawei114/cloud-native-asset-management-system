@@ -25,6 +25,9 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="帳號已停用")
+
     token = create_access_token({
         "user_id": user.id,
         "role": user.role.name,

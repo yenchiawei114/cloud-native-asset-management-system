@@ -1,10 +1,13 @@
 import React from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useTickets } from '../modules/ticketing/hooks/useTickets';
 import { NewRepairRequestForm } from '../modules/ticketing/components/NewRepairRequestForm';
+import { fmtDate } from '../lib/locale';
 
 export const RepairHistory: React.FC = () => {
+  const { t } = useTranslation();
   const { tickets, loading, stats, refresh } = useTickets();
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get('view') === 'new' ? 'new' : 'list';
@@ -26,30 +29,30 @@ export const RepairHistory: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
               <div>
-                <h1 className="text-3xl font-extrabold tracking-tight text-on-surface font-headline">維修紀錄</h1>
-                <p className="text-on-surface-variant text-sm mt-1">追蹤您所有設備的報修進度與維修歷史。</p>
+                <h1 className="text-3xl font-extrabold tracking-tight text-on-surface font-headline">{t('repairHistory.title')}</h1>
+                <p className="text-on-surface-variant text-sm mt-1">{t('repairHistory.subtitle')}</p>
               </div>
-              <button 
+              <button
                 onClick={() => setView('new')}
                 className="bg-primary text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
               >
                 <span className="material-symbols-outlined text-sm">add</span>
-                建立新申請
+                {t('repairHistory.newRequest')}
               </button>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm border border-slate-100">
-                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-2">總申請數</p>
+                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-2">{t('repairHistory.totalTickets')}</p>
                 <p className="text-3xl font-black text-on-surface">{loading ? '--' : stats.total}</p>
               </div>
               <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm border border-slate-100">
-                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-2">進行中</p>
+                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-2">{t('repairHistory.inProgress')}</p>
                 <p className="text-3xl font-black text-primary">{loading ? '--' : stats.inProgress}</p>
               </div>
               <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm border border-slate-100">
-                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-2">已完成</p>
+                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-2">{t('repairHistory.completed')}</p>
                 <p className="text-3xl font-black text-green-600">{loading ? '--' : (stats.total - stats.inProgress)}</p>
               </div>
             </div>
@@ -65,20 +68,20 @@ export const RepairHistory: React.FC = () => {
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mx-auto mb-4">
                     <span className="material-symbols-outlined text-3xl">history_toggle_off</span>
                   </div>
-                  <h3 className="text-lg font-bold text-on-surface">尚無維修紀錄</h3>
-                  <p className="text-sm text-slate-400 mt-1">您目前沒有任何維修申請紀錄。</p>
+                  <h3 className="text-lg font-bold text-on-surface">{t('repairHistory.noRecords')}</h3>
+                  <p className="text-sm text-slate-400 mt-1">{t('repairHistory.noRecordsDesc')}</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-50/50">
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">工單編號</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">設備資訊</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">申請日期</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">預計完工</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">目前狀態</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">操作</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('repairHistory.ticketIdHeader')}</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('repairHistory.deviceInfo')}</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('ticketing.requestDateLabel')}</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('ticketing.expectedCompletionLabel')}</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('repairHistory.statusHeader')}</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('ticketing.action')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -96,10 +99,10 @@ export const RepairHistory: React.FC = () => {
                             </Link>
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-500">
-                            {new Date(ticket.created_at).toLocaleDateString('zh-TW')}
+                            {fmtDate(ticket.created_at)}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-500">
-                            {ticket.expected_completion_date ? new Date(ticket.expected_completion_date).toLocaleDateString('zh-TW') : '未設定'}
+                            {ticket.expected_completion_date ? fmtDate(ticket.expected_completion_date) : t('ticketing.notSet')}
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
@@ -114,7 +117,7 @@ export const RepairHistory: React.FC = () => {
                                 ticket.status === 'CANCELLED' ? 'bg-slate-400' :
                                 'bg-amber-500'
                               }`}></span>
-                              {ticket.status}
+                              {t(`ticketing.status.${ticket.status}`, { defaultValue: ticket.status })}
                             </span>
                           </td>
                           <td className="px-6 py-4">
@@ -122,7 +125,7 @@ export const RepairHistory: React.FC = () => {
                               to={`/repair-history/${ticket.id}`}
                               className="text-primary hover:underline text-sm font-bold"
                             >
-                              查看詳情
+                              {t('repairHistory.viewDetail')}
                             </Link>
                           </td>
                         </tr>

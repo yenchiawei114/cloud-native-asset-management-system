@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAuditDetail } from '../modules/audit/hooks/useAuditDetail';
+import { fmtDateTime } from '../lib/locale';
 
 export const AuditLogDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -78,7 +79,7 @@ export const AuditLogDetailPage: React.FC = () => {
                     {t(`audit.actionType.${log.action}`)}
                   </span>
                 </div>
-                <InfoRow label={t('audit.timestamp')} value={new Date(log.timestamp).toLocaleString()} />
+                <InfoRow label={t('audit.timestamp')} value={fmtDateTime(log.timestamp)} />
                 <InfoRow label={t('audit.summary.ip')} value="127.0.0.1" isMono />
               </div>
             </section>
@@ -97,7 +98,7 @@ export const AuditLogDetailPage: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-[10px] text-outline font-bold uppercase mb-1">{t('audit.targetName')}</div>
-                  <div className="text-sm font-bold text-primary">{log.target_name || 'N/A'}</div>
+                  <div className="text-sm font-bold text-primary">{log.target_name?.replace(/^[一-鿿]+\s*/, '') || 'N/A'}</div>
                 </div>
                 <button 
                   onClick={() => navigate(`/${log.target_type.toLowerCase()}s/${log.target_id}`)}
@@ -156,7 +157,7 @@ export const AuditLogDetailPage: React.FC = () => {
                       if (changedFields.length === 0) {
                         return (
                           <div className="bg-surface-container-low/30 rounded-2xl p-8 text-center text-outline">
-                            <p className="text-sm font-medium">沒有檢測到明顯的資料變動</p>
+                            <p className="text-sm font-medium">{t('audit.noChanges')}</p>
                           </div>
                         );
                       }

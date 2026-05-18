@@ -23,27 +23,98 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface Department {
+  id: number;
+  name: string;
+}
+
+export interface OfficeLocation {
+  id: number;
+  name: string;
+}
+
+export interface Vendor {
+  id: number;
+  name: string;
+}
+
 export interface User {
   id: number;
   employee_id: string;
   name: string;
-  sex: 'M' | 'F';
+  sex: 'MALE' | 'FEMALE';
   department_id: number;
-  role: 'employee' | 'admin';
+  location: string | null;
+  role: 'EMPLOYEE' | 'ADMIN';
   email: string;
   must_change_password: boolean;
   last_password_changed_at: string | null;
+  hire_date: string | null;
+  termination_date: string | null;
+  is_active: boolean;
   created_at: string;
+}
+
+export interface OffboardingAssetItem {
+  id: number;
+  asset_code: string;
+  name: string;
+  status: string;
+}
+
+export interface OffboardingTicketItem {
+  id: number;
+  description: string;
+  status: string;
+  has_loaner: boolean;
+}
+
+export interface OffboardingTransferItem {
+  id: number;
+  asset_id: number;
+  asset_name: string | null;
+  asset_code: string | null;
+}
+
+export interface OffboardingTransferStatus {
+  transfer_id: number;
+  asset_id: number;
+  asset_code: string;
+  asset_name: string;
+  to_owner_name: string;
+  to_owner_employee_id: string;
+  status: 'PENDING' | 'COMPLETED';
+  to_confirmed: boolean;
+}
+
+export interface OffboardingChecklist {
+  can_proceed: boolean;
+  hard_blocker_reason: string | null;
+  owned_assets: OffboardingAssetItem[];
+  borrowed_loaners: OffboardingAssetItem[];
+  in_progress_tickets: OffboardingTicketItem[];
+  pending_transfers: OffboardingTransferItem[];
+  open_tickets: OffboardingTicketItem[];
+  is_offboarding_in_progress: boolean;
+  offboarding_transfers: OffboardingTransferStatus[];
+  all_transfers_complete: boolean;
+}
+
+export interface OffboardPayload {
+  asset_successor_id: number | null;
+  termination_date: string;
 }
 
 export interface UserCreatePayload {
   employee_id: string;
   password: string;
   name: string;
-  sex: 'M' | 'F';
+  sex: 'MALE' | 'FEMALE';
   department_id: number;
+  location?: string | null;
   email: string;
-  role: 'employee' | 'admin';
+  role: 'EMPLOYEE' | 'ADMIN';
+  hire_date?: string | null;
 }
 
 export interface Asset {
@@ -58,11 +129,15 @@ export interface Asset {
   purchase_price: number;
   storage_location: string | null;
   owner_id: number | null;
+  borrower_id?: number | null;
   activation_date: string;
   warranty_expiry: string;
   status: string;
   created_at: string;
   version: number;
+  owner_name?: string | null;
+  owner_employee_id?: string | null;
+  office_location?: string | null;
 }
 
 export interface AssetCreatePayload {
@@ -89,8 +164,14 @@ export interface RepairRequest {
   need_backup: boolean;
   backup_spec: string | null;
   status: string;
+  reject_reason?: string | null;
   expected_completion_date: string | null;
   pickup_location: string | null;
+  loaner_asset_id?: number | null;
+  loaner_asset_code?: string | null;
+  loaner_asset_name?: string | null;
+  loaner_return_borrower_confirmed?: boolean;
+  loaner_return_lender_confirmed?: boolean;
   created_at: string;
   version: number;
   priority: string;
@@ -101,6 +182,22 @@ export interface RepairRequest {
 }
 
 export type Ticket = RepairRequest;
+
+export interface AssetTransfer {
+  id: number;
+  asset_id: number;
+  initiator_id: number;
+  from_owner_id: number;
+  to_owner_id: number;
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  from_confirmed: boolean;
+  to_confirmed: boolean;
+  created_at: string;
+  asset_name?: string | null;
+  asset_code?: string | null;
+  from_owner_name?: string | null;
+  to_owner_name?: string | null;
+}
 
 export interface NotificationPreference {
   id: number;
@@ -139,6 +236,10 @@ export const api = {
   }),
   logout: () => http<any>("/api/logout", { method: "POST" }),
 
+  getDepartments: () => http<Department[]>("/api/departments"),
+  getOfficeLocations: () => http<OfficeLocation[]>("/api/office-locations"),
+  listVendors: () => http<Vendor[]>("/api/vendors"),
+
   getMe: () => http<User>("/api/users/me"),
   listUsers: (keyword?: string) =>
     http<User[]>(`/api/users${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
@@ -158,12 +259,36 @@ export const api = {
     http<User>(`/api/users/${employeeId}`),
   deleteUser: (employeeId: string) =>
     http<void>(`/api/users/${employeeId}`, { method: 'DELETE' }),
+  getOffboardingChecklist: (employeeId: string) =>
+    http<OffboardingChecklist>(`/api/users/${employeeId}/offboarding-checklist`),
+  offboardUser: (employeeId: string, payload: OffboardPayload) =>
+    http<User>(`/api/users/${employeeId}/offboard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  finalizeOffboarding: (employeeId: string) =>
+    http<User>(`/api/users/${employeeId}/offboard/finalize`, { method: 'POST' }),
+
+  verifyPassword: (currentPassword: string) =>
+    http<{ valid: boolean }>("/api/users/me/verify-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_password: currentPassword })
+    }),
 
   changePassword: (payload: any) =>
     http<any>("/api/users/me/password", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
+    }),
+
+  updateMyEmail: (email: string) =>
+    http<User>("/api/users/me/email", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
     }),
 
   getNotificationPreferences: () =>
@@ -176,7 +301,19 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
-  listAssets: (params?: { keyword?: string; status?: string; owner_employee_id?: string }) => {
+  listAssets: (params?: {
+    keyword?: string;
+    status?: string;
+    owner_employee_id?: string;
+    asset_code_q?: string;
+    name_q?: string;
+    model_q?: string;
+    spec_q?: string;
+    vendor_q?: string;
+    owner_q?: string;
+    office_location_q?: string;
+    asset_type?: string;
+  }) => {
     const cleanParams = Object.fromEntries(
       Object.entries(params || {}).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "undefined")
     );
@@ -196,8 +333,19 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }),
-  deleteAsset: (id: number) => http<void>(`/api/assets/${id}`, { method: "DELETE" }),
+  deactivateAsset: (id: number) =>
+    http<Asset>(`/api/assets/${id}/deactivate`, { method: "POST" }),
+  activateAsset: (id: number) =>
+    http<Asset>(`/api/assets/${id}/activate`, { method: "POST" }),
+  toggleAssetStatus: (id: number) =>
+    http<Asset>(`/api/assets/${id}/toggle-status`, { method: "POST" }),
+  listIdleAssets: () => http<Asset[]>('/api/assets/idle'),
+  listMyIdleAssets: () => http<Asset[]>('/api/assets/idle?owner_only=true'),
+  confirmLoanerReturn: (ticketId: number) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}/confirm-loaner-return`, { method: "POST" }),
 
+  getAssetTickets: (assetId: number) =>
+    http<{ request: RepairRequest; attachment: { id: number; file_url: string; file_name: string } | null }[]>(`/api/assets/${assetId}/tickets`),
   listTickets: (status?: string) =>
     http<RepairRequest[]>(`/api/tickets${status && status !== 'ALL' ? `?status=${status}` : ''}`),
   listMyTickets: async (employeeId: string): Promise<RepairRequest[]> => {
@@ -212,11 +360,21 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }),
-  approveTicket: (ticketId: number, status: string = 'DONE') =>
+  approveTicket: (ticketId: number, expectedCompletionDate?: string, loanerAssetId?: number | null) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({
+        status: 'IN_PROGRESS',
+        expected_completion_date: expectedCompletionDate || null,
+        loaner_asset_id: loanerAssetId ?? null,
+      })
+    }),
+  returnTicket: (ticketId: number, reason: string) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: 'RETURNED', reject_reason: reason })
     }),
   rejectTicket: (ticketId: number, reason?: string) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
@@ -224,6 +382,34 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: 'CANCELLED', note: reason })
     }),
+  updateTicket: (ticketId: number, payload: { asset_id: number; requester_id: number; description: string; need_backup: boolean; backup_spec?: string | null; pickup_location?: string | null }) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, status: 'OPEN' })
+    }),
+  closeTicket: (ticketId: number, payload: { issue_description: string; solution: string; vendor: string; cost: number }) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }),
+  initiateTransfer: (assetId: number, toOwnerId: number) =>
+    http<AssetTransfer>(`/api/assets/${assetId}/transfers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to_owner_id: toOwnerId })
+    }),
+  getPendingTransfers: () =>
+    http<AssetTransfer[]>('/api/transfers/pending'),
+  confirmTransfer: (transferId: number) =>
+    http<AssetTransfer>(`/api/transfers/${transferId}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    }),
+  cancelTransfer: (transferId: number) =>
+    http<void>(`/api/transfers/${transferId}`, { method: "DELETE" }),
   getTicketRecord: (ticketId: number) =>
     http<any>(`/api/tickets/${ticketId}/record`),
   getTicketInspection: (ticketId: number) =>
@@ -238,6 +424,8 @@ export const api = {
       method: "POST",
       body: formData
     }),
+  deleteAttachment: (attachmentId: number) =>
+    http<void>(`/api/attachments/${attachmentId}`, { method: "DELETE" }),
   createTicketRecord: (ticketId: number, payload: any) =>
     http<any>(`/api/tickets/${ticketId}/record`, {
       method: "POST",
@@ -263,7 +451,7 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
-  listAuditLogs: (params?: { target_type?: string; action?: string; from_date?: string; to_date?: string; page?: number; page_size?: number }) => {
+  listAuditLogs: (params?: { target_type?: string; action?: string; from_date?: string; to_date?: string; user_id?: number; page?: number; page_size?: number }) => {
     const cleanParams = Object.fromEntries(
       Object.entries(params || {}).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "undefined")
     );

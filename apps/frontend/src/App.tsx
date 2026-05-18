@@ -15,6 +15,7 @@ import { AssetDetailPage } from "./pages/AssetDetailPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { AuditLogDetailPage } from "./pages/AuditLogDetailPage";
 import { UserDetailPage } from "./pages/UserDetailPage";
+import { AdminAssetRepairsPage } from "./pages/AdminAssetRepairsPage";
 import { useAuth } from "./modules/auth/hooks/useAuth";
 
 type Status = { kind: "loading" } | { kind: "ok"; text: string } | { kind: "err"; text: string };
@@ -84,6 +85,9 @@ export default function App() {
       } />
       <Route path="/audit-logs/:id" element={
         isAuthenticated && isAdmin ? <AuditLogDetailPage /> : <Navigate to="/dashboard" replace />
+      } />
+      <Route path="/all-assets/:id/repairs" element={
+        isAuthenticated && isAdmin ? <AdminAssetRepairsPage /> : <Navigate to="/dashboard" replace />
       } />
       <Route path="/all-assets/new" element={
         isAuthenticated && isAdmin ? <AssetCreatePage /> : <Navigate to="/dashboard" replace />

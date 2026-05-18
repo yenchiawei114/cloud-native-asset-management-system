@@ -1,27 +1,32 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.security import verify_token
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(token: HTTPAuthorizationCredentials = Depends(security),):
+    if token is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated",
+        )
+
     try:
-        payload = verify_token(token.credentials)
-        return payload
+        return verify_token(token.credentials)
     except Exception:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=401,
             detail="Invalid or expired token",
         )
 
 
 def require_role(required_role: str):
     def role_checker(user=Depends(get_current_user)):
-        if user.get("role") != required_role:
+        if not user or user.get("role") != required_role:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=403,
                 detail="Forbidden",
             )
         return user

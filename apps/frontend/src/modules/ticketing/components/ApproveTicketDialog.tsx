@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, Asset, RepairRequest } from '../../../lib/api';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApproved }) => {
+  const { t } = useTranslation();
   const [expectedDate, setExpectedDate] = useState('');
   const [loanerAsset, setLoanerAsset] = useState<Asset | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -72,7 +74,7 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
     e.preventDefault();
     if (!ticket) return;
     if (ticket.need_backup && !loanerAsset) {
-      setError('此工單需要備用機，請從列表中選擇一台閒置資產');
+      setError(t('ticketing.backupRequired'));
       return;
     }
     setError('');
@@ -86,7 +88,7 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
       onApproved();
       onClose();
     } catch (err: any) {
-      setError(err.message || '操作失敗');
+      setError(err.message || t('common.operationFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -98,7 +100,7 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-sm">
         <div className="flex items-center justify-between p-5 border-b border-outline-variant/20">
-          <h2 className="text-base font-bold text-on-surface">核准維修申請</h2>
+          <h2 className="text-base font-bold text-on-surface">{t('ticketing.approveDialogTitle')}</h2>
           <button onClick={onClose} className="p-2 hover:bg-surface-container rounded-full transition-colors">
             <span className="material-symbols-outlined text-sm">close</span>
           </button>
@@ -106,12 +108,12 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <p className="text-sm text-on-surface-variant">
-            核准工單 <span className="font-bold text-primary">#TKT-{String(ticket.id).padStart(4, '0')}</span>，工單狀態將更新為「維修中」，並 email 通知申請人。
+            {t('ticketing.approveDialogDescPre')} <span className="font-bold text-primary">#TKT-{String(ticket.id).padStart(4, '0')}</span>{t('ticketing.approveDialogDescPost')}
           </p>
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-on-surface-variant">
-              預計完成日期 <span className="text-on-surface-variant/60 font-normal">（選填）</span>
+              {t('ticketing.detail.expectedDate')} <span className="text-on-surface-variant/60 font-normal">{t('ticketing.optional')}</span>
             </label>
             <input
               type="date"
@@ -125,12 +127,12 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-on-surface-variant flex items-center gap-1">
                 <span className="material-symbols-outlined text-sm text-amber-500">devices</span>
-                備用機資產 <span className="text-error">*</span>
-                <span className="text-on-surface-variant/50 font-normal text-[10px]">（限自己保管的閒置資產）</span>
+                {t('ticketing.loanerAssetLabel')} <span className="text-error">*</span>
+                <span className="text-on-surface-variant/50 font-normal text-[10px]">{t('ticketing.loanerAssetRestriction')}</span>
               </label>
 
               {loadingAssets ? (
-                <p className="text-xs text-on-surface-variant/60 py-2">載入閒置資產中…</p>
+                <p className="text-xs text-on-surface-variant/60 py-2">{t('ticketing.loadingAssets')}</p>
               ) : (
                 <div className="relative" ref={dropdownRef}>
                   <div className="flex items-center gap-1 bg-surface-container-highest rounded-lg px-3 py-2">
@@ -174,7 +176,7 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
 
                   {dropdownOpen && filteredAssets.length === 0 && searchText && (
                     <div className="absolute z-10 w-full mt-1 bg-surface rounded-lg shadow-lg border border-outline-variant/20 px-3 py-2">
-                      <p className="text-xs text-on-surface-variant/60">找不到符合的資產</p>
+                      <p className="text-xs text-on-surface-variant/60">{t('ticketing.noAssetsFound')}</p>
                     </div>
                   )}
                 </div>
@@ -183,13 +185,13 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
               {loanerAsset && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
                   <span className="material-symbols-outlined text-sm text-green-600">check_circle</span>
-                  <span className="text-xs text-green-700 font-semibold">已選擇：{loanerAsset.asset_code} — {loanerAsset.name}</span>
+                  <span className="text-xs text-green-700 font-semibold">{t('ticketing.loanerSelected', { code: loanerAsset.asset_code, name: loanerAsset.name })}</span>
                 </div>
               )}
 
               {idleAssets.length === 0 && !loadingAssets && (
                 <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
-                  您目前沒有可借出的閒置資產
+                  {t('ticketing.noIdleAssets')}
                 </p>
               )}
             </div>
@@ -199,14 +201,14 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
 
           <div className="flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors">
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={submitting || (ticket.need_backup && idleAssets.length === 0 && !loadingAssets)}
               className="px-5 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {submitting ? '處理中...' : '確認核准'}
+              {submitting ? t('common.processing') : t('ticketing.confirmApprove')}
             </button>
           </div>
         </form>

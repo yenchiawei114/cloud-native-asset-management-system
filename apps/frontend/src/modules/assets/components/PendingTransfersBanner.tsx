@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, AssetTransfer } from '../../../lib/api';
 import { useAuth } from '../../auth/hooks/useAuth';
+import { fmtDate } from '../../../lib/locale';
 
 interface Props {
   onConfirmed?: () => void;
@@ -12,6 +14,7 @@ interface BannerMsg {
 }
 
 export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
 
@@ -53,8 +56,8 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       const text = msg.includes('已結束') || msg.includes('400')
-        ? '此轉移已被撤銷或已完成，無法確認，清單已自動更新。'
-        : '操作失敗，請稍後再試。';
+        ? t('assets.transfer.cancelledError')
+        : t('assets.transfer.operationFailed');
       showMsg({ type: 'error', text });
       await fetchTransfers();
       onConfirmed?.();
@@ -74,7 +77,7 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
       if (msg.includes('已結束') || msg.includes('400') || msg.includes('403') || msg.includes('只有發起者')) {
         setCancelErrorDialog(true);
       } else {
-        showMsg({ type: 'error', text: '操作失敗，請稍後再試。' });
+        showMsg({ type: 'error', text: t('assets.transfer.operationFailed') });
         await fetchTransfers();
         onConfirmed?.();
       }
@@ -101,7 +104,7 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-amber-600 text-lg">swap_horiz</span>
             <p className="text-sm font-bold text-amber-800">
-              待確認資產轉移（{transfers.length} 筆）
+              {t('assets.transfer.bannerTitle', { count: transfers.length })}
             </p>
           </div>
           <span className={`material-symbols-outlined text-amber-600 text-lg transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}>
@@ -124,25 +127,25 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
 
         {!collapsed && transfers.length > 0 && (
           <div className="space-y-2">
-            {transfers.map(t => {
+            {transfers.map(transfer => {
               const myId = user?.id;
-              const iAmFrom = myId === t.from_owner_id;
-              const iAmTo = myId === t.to_owner_id;
-              const iHaveConfirmed = (iAmFrom && t.from_confirmed) || (iAmTo && t.to_confirmed);
-              const otherName = iAmFrom ? t.to_owner_name : t.from_owner_name;
+              const iAmFrom = myId === transfer.from_owner_id;
+              const iAmTo = myId === transfer.to_owner_id;
+              const iHaveConfirmed = (iAmFrom && transfer.from_confirmed) || (iAmTo && transfer.to_confirmed);
+              const otherName = iAmFrom ? transfer.to_owner_name : transfer.from_owner_name;
 
               return (
-                <div key={t.id} className="bg-white rounded-lg px-4 py-3 flex items-center justify-between gap-4 border border-amber-100 shadow-sm">
+                <div key={transfer.id} className="bg-white rounded-lg px-4 py-3 flex items-center justify-between gap-4 border border-amber-100 shadow-sm">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-on-surface truncate">
-                      {t.asset_name ?? `資產 #${t.asset_id}`}
+                      {transfer.asset_name ?? t('assets.transfer.assetFallback', { id: transfer.asset_id })}
                     </p>
                     <p className="text-xs text-on-surface-variant mt-0.5">
-                      <span className="font-medium">{t.from_owner_name ?? '—'}</span>
+                      <span className="font-medium">{transfer.from_owner_name ?? '—'}</span>
                       <span className="mx-1.5">→</span>
-                      <span className="font-medium">{t.to_owner_name ?? '—'}</span>
+                      <span className="font-medium">{transfer.to_owner_name ?? '—'}</span>
                       <span className="mx-1.5 text-on-surface-variant/40">·</span>
-                      {new Date(t.created_at).toLocaleDateString('zh-TW')}
+                      {fmtDate(transfer.created_at)}
                     </p>
                   </div>
 
@@ -150,25 +153,25 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
                     {iHaveConfirmed ? (
                       <span className="text-xs font-medium text-green-600 flex items-center gap-1">
                         <span className="material-symbols-outlined text-sm">check_circle</span>
-                        已確認，等待{otherName ?? '對方'}
+                        {t('assets.transfer.confirmedWaiting', { name: otherName ?? t('assets.transfer.otherParty') })}
                       </span>
                     ) : (
                       <button
-                        onClick={() => handleConfirm(t.id)}
-                        disabled={confirming === t.id}
+                        onClick={() => handleConfirm(transfer.id)}
+                        disabled={confirming === transfer.id}
                         className="px-3 py-1.5 bg-primary text-on-primary text-xs font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
                       >
-                        {confirming === t.id ? '確認中...' : '確認轉移'}
+                        {confirming === transfer.id ? t('assets.transfer.confirming') : t('assets.transfer.confirm')}
                       </button>
                     )}
 
-                    {isAdmin && user?.id === t.initiator_id && (
+                    {isAdmin && user?.id === transfer.initiator_id && (
                       <button
-                        onClick={() => handleCancel(t.id)}
-                        disabled={cancelling === t.id}
+                        onClick={() => handleCancel(transfer.id)}
+                        disabled={cancelling === transfer.id}
                         className="px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 rounded-lg transition-colors disabled:opacity-50"
                       >
-                        {cancelling === t.id ? '撤銷中...' : '撤銷'}
+                        {cancelling === transfer.id ? t('assets.transfer.cancelling') : t('assets.transfer.cancel')}
                       </button>
                     )}
                   </div>
@@ -186,9 +189,9 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
               <div className="flex items-start gap-3">
                 <span className="material-symbols-outlined text-error text-2xl shrink-0 mt-0.5">cancel</span>
                 <div>
-                  <p className="font-bold text-on-surface">無法撤銷此資產轉移</p>
+                  <p className="font-bold text-on-surface">{t('assets.transfer.cannotCancelTitle')}</p>
                   <p className="text-sm text-on-surface-variant mt-1">
-                    此轉移已完成，無法撤銷。
+                    {t('assets.transfer.completedCantCancel')}
                   </p>
                 </div>
               </div>
@@ -197,7 +200,7 @@ export const PendingTransfersBanner: React.FC<Props> = ({ onConfirmed }) => {
                   onClick={handleDismissCancelError}
                   className="px-5 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity"
                 >
-                  我知道了
+                  {t('common.understood')}
                 </button>
               </div>
             </div>

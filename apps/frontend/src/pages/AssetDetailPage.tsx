@@ -7,6 +7,7 @@ import { useAssetDetail } from '../modules/assets/hooks/useAssetDetail';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
 import { api } from '../lib/api';
+import { fmtDate, fmtNumber } from '../lib/locale';
 
 const ASSET_STATUS_BADGE: Record<string, string> = {
   available: 'bg-green-100 text-green-700',
@@ -53,7 +54,7 @@ export const AssetDetailPage: React.FC = () => {
       await api.toggleAssetStatus(asset.id);
       await refresh();
     } catch (err: any) {
-      showFeedback({ title: '切換失敗', message: err.message || '切換狀態失敗', type: 'error', onConfirm: closeFeedback });
+      showFeedback({ title: t('assets.detail.toggleFailed'), message: err.message || t('assets.detail.toggleFailedMsg'), type: 'error', onConfirm: closeFeedback });
     } finally {
       setIsTogglingStatus(false);
     }
@@ -66,13 +67,13 @@ export const AssetDetailPage: React.FC = () => {
       setIsEditing(false);
       await refresh();
       showFeedback({ 
-        title: t('common.saveSuccessTitle') || '更新成功', 
-        message: t('common.saveSuccessMsg') || '資產資料已成功更新', 
+        title: t('common.saveSuccessTitle'),
+        message: t('common.saveSuccessMsg'),
         type: 'success', 
         onConfirm: closeFeedback 
       });
     } catch (err: any) {
-      showFeedback({ title: '儲存失敗', message: err.message || '儲存失敗', type: 'error', onConfirm: closeFeedback });
+      showFeedback({ title: t('assets.detail.saveFailed'), message: err.message || t('assets.detail.saveFailedMsg'), type: 'error', onConfirm: closeFeedback });
     } finally {
       setIsSubmitting(false);
     }
@@ -98,7 +99,7 @@ export const AssetDetailPage: React.FC = () => {
             onClick={() => navigate(isAdmin ? '/all-assets' : '/dashboard')}
             className="px-6 py-2 bg-primary text-white rounded-lg font-bold"
           >
-            返回列表
+            {t('assets.detail.backToList')}
           </button>
         </div>
       </DashboardLayout>
@@ -147,7 +148,7 @@ export const AssetDetailPage: React.FC = () => {
                 className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-high text-on-surface rounded-lg font-bold shadow hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-sm">swap_vert</span>
-                {asset.status === 'available' ? '標記使用中' : '標記閒置'}
+                {asset.status === 'available' ? t('assets.detail.markInUse') : t('assets.detail.markAvailable')}
               </button>
             )}
             {isAdmin && !isEditing && (
@@ -272,7 +273,7 @@ export const AssetDetailPage: React.FC = () => {
                       onChange={e => setForm({ ...form, purchase_price: parseInt(e.target.value) || 0 })}
                     />
                   ) : (
-                    <span className="text-sm font-bold text-primary">TWD {asset.purchase_price?.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-primary">TWD {fmtNumber(asset.purchase_price)}</span>
                   )}
                 </div>
               </div>
@@ -349,7 +350,7 @@ export const AssetDetailPage: React.FC = () => {
                     <div className="space-y-1">
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold">{h.description}</span>
-                        <span className="text-xs text-slate-400">{new Date(h.created_at).toLocaleDateString()}</span>
+                        <span className="text-xs text-slate-400">{fmtDate(h.created_at)}</span>
                       </div>
                       <p className="text-xs text-slate-500 leading-relaxed">{t(`ticketing.status.${h.status}`)}</p>
                     </div>

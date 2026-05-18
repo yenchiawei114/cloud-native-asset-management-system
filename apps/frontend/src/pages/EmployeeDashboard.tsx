@@ -12,16 +12,17 @@ import { PendingTransfersBanner } from '../modules/assets/components/PendingTran
 
 // 封鎖提示彈窗：資產已有未完成維修單，不允許再建立新申請
 function BlockedRepairDialog({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
         <div className="flex items-start gap-3">
           <span className="material-symbols-outlined text-amber-500 text-2xl mt-0.5">warning</span>
           <div>
-            <h3 className="text-base font-bold text-on-surface">已有進行中的維修申請</h3>
+            <h3 className="text-base font-bold text-on-surface">{t('employeeDashboard.openTicketTitle')}</h3>
             <p className="text-sm text-on-surface-variant mt-1">
-              {asset.name}（{asset.asset_code}）目前已有未完成的維修單，無法再建立新的申請。<br />
-              請等待現有維修單完成後再行申請。
+              {asset.name}（{asset.asset_code}）{t('employeeDashboard.openTicketMsg')}<br />
+              {t('employeeDashboard.openTicketNote')}
             </p>
           </div>
         </div>
@@ -30,7 +31,7 @@ function BlockedRepairDialog({ asset, onClose }: { asset: Asset; onClose: () => 
             onClick={onClose}
             className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:opacity-90 transition-opacity"
           >
-            我知道了
+            {t('employeeDashboard.understood')}
           </button>
         </div>
       </div>
@@ -109,7 +110,7 @@ export const EmployeeDashboard: React.FC = () => {
       await api.confirmLoanerReturn(ticketId);
       await Promise.all([refreshAssets(), refreshTickets()]);
     } catch (err: any) {
-      alert(`確認歸還失敗：${err.message}`);
+      alert(t('employeeDashboard.returnFailed') + err.message);
     }
   }, [refreshAssets, refreshTickets]);
 
@@ -176,13 +177,13 @@ export const EmployeeDashboard: React.FC = () => {
           {/* 第二列：下拉選單 + 搜尋/清空 */}
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1">
-              <label className={searchLabelCls}>廠商</label>
+              <label className={searchLabelCls}>{t('employeeDashboard.vendorHeader')}</label>
               <select
                 className={searchSelectCls}
                 value={inputs.vendor}
                 onChange={e => setInputs(prev => ({ ...prev, vendor: e.target.value }))}
               >
-                <option value="">全部廠商</option>
+                <option value="">{t('employeeDashboard.allVendors')}</option>
                 {vendors.map(v => (
                   <option key={v.id} value={v.name}>{v.name}</option>
                 ))}
@@ -220,7 +221,7 @@ export const EmployeeDashboard: React.FC = () => {
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
               >
                 <span className="material-symbols-outlined text-[16px]">close</span>
-                清空
+                {t('employeeDashboard.clearAll')}
               </button>
               <button
                 onClick={handleSearch}
@@ -289,7 +290,7 @@ export const EmployeeDashboard: React.FC = () => {
                               loanerTicket.loaner_return_borrower_confirmed ? (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-green-50 text-green-600 cursor-default">
                                   <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                                  已確認歸還
+                                  {t('employeeDashboard.alreadyConfirmed')}
                                 </span>
                               ) : (
                                 <button
@@ -297,11 +298,11 @@ export const EmployeeDashboard: React.FC = () => {
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
                                 >
                                   <span className="material-symbols-outlined text-[16px]">keyboard_return</span>
-                                  確認歸還
+                                  {t('employeeDashboard.confirmReturnBtn')}
                                 </button>
                               )
                             ) : (
-                              <span className="text-xs text-on-surface-variant/50 italic">借用中</span>
+                              <span className="text-xs text-on-surface-variant/50 italic">{t('employeeDashboard.borrowed')}</span>
                             )
                           ) : (
                             <>
@@ -310,14 +311,14 @@ export const EmployeeDashboard: React.FC = () => {
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                               >
                                 <span className="material-symbols-outlined text-[16px]">build</span>
-                                申請維修
+                                {t('employeeDashboard.requestRepair')}
                               </button>
                               <button
                                 onClick={() => setHistoryModalAsset(asset)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                               >
                                 <span className="material-symbols-outlined text-[16px]">history</span>
-                                維修紀錄
+                                {t('employeeDashboard.repairHistory')}
                               </button>
                             </>
                           )}
@@ -332,7 +333,7 @@ export const EmployeeDashboard: React.FC = () => {
                         <div className="flex items-center gap-1.5">
                           {asset.name}
                           {isLoanerAsset && (
-                            <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">借用</span>
+                            <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">{t('employeeDashboard.borrowed')}</span>
                           )}
                         </div>
                       </td>
@@ -393,9 +394,9 @@ export const EmployeeDashboard: React.FC = () => {
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-purple-500 text-2xl mt-0.5">keyboard_return</span>
               <div>
-                <h3 className="text-base font-bold text-on-surface">確認歸還備用機</h3>
+                <h3 className="text-base font-bold text-on-surface">{t('employeeDashboard.confirmReturnTitle')}</h3>
                 <p className="text-sm text-on-surface-variant mt-1">
-                  請確認您已將備用機實際歸還。確認後此操作無法撤銷。
+                  {t('employeeDashboard.confirmReturnMsg')}
                 </p>
               </div>
             </div>
@@ -404,13 +405,13 @@ export const EmployeeDashboard: React.FC = () => {
                 onClick={() => setPendingReturnTicketId(null)}
                 className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => handleConfirmLoanerReturn(pendingReturnTicketId)}
                 className="px-5 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-colors"
               >
-                確認已歸還
+                {t('employeeDashboard.confirmReturn')}
               </button>
             </div>
           </div>

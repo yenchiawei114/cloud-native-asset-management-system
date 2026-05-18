@@ -10,38 +10,11 @@ import { api, Asset, Vendor, OfficeLocation, User, RepairRequest } from "../lib/
 import { UserSearchCombobox } from "../modules/core/components/UserSearchCombobox";
 import { PendingTransfersBanner } from "../modules/assets/components/PendingTransfersBanner";
 
-const ASSET_TYPES = [
-  { value: "", label: "所有類別" },
-  { value: "laptop", label: "筆電" },
-  { value: "desktop", label: "桌機" },
-  { value: "phone", label: "手機" },
-  { value: "tablet", label: "平板" },
-  { value: "server", label: "伺服器" },
-  { value: "network", label: "網路設備" },
-  { value: "other", label: "其他" },
-];
-
-const ASSET_TYPE_OPTIONS = ASSET_TYPES.filter((t) => t.value);
-
-const ASSET_STATUSES = [
-  { value: "", label: "所有狀態" },
-  { value: "in_use", label: "使用中" },
-  { value: "available", label: "閒置" },
-  { value: "maintenance", label: "維修中" },
-  { value: "borrowed", label: "已借出" },
-  { value: "deactivated", label: "已停用" },
-];
-
-const ASSET_STATUS_OPTIONS = ASSET_STATUSES.filter((s) => s.value);
+const ASSET_TYPE_VALUES = ["laptop", "desktop", "phone", "tablet", "server", "network", "other"] as const;
+const ASSET_STATUS_VALUES = ["available", "in_use", "maintenance", "borrowed", "deactivated"] as const;
 
 const ACTIVE_TICKET_STATUSES = ["OPEN", "IN_PROGRESS", "WAITING_LOANER_RETURN"] as const;
 type ActiveTicketStatus = (typeof ACTIVE_TICKET_STATUSES)[number];
-
-const TICKET_STATUS_LABELS: Record<ActiveTicketStatus, string> = {
-  OPEN: "待審核",
-  IN_PROGRESS: "維修中",
-  WAITING_LOANER_RETURN: "待備用機歸還",
-};
 
 const TICKET_BADGE_COLORS: Record<ActiveTicketStatus, string> = {
   OPEN: "bg-amber-100 text-amber-700 border-amber-200",
@@ -200,7 +173,7 @@ export const AdminDashboard: React.FC = () => {
         (r) => r.status === "rejected",
       ).length;
       if (updateFailed > 0) {
-        setSaveError(`${updateFailed} 筆更新失敗`);
+        setSaveError(t('assets.updateFailed', { count: updateFailed }));
       }
       setPendingEdits({});
       setEditMode(false);
@@ -211,13 +184,12 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleDeactivate = async (id: number) => {
-    if (!confirm("確定要停用此資產？停用後將清除保管人與辦公地點資訊。"))
-      return;
+    if (!window.confirm(t('assets.confirmDeactivate'))) return;
     try {
       await api.deactivateAsset(id);
       refresh();
     } catch (err: any) {
-      alert(`停用失敗：${err.message}`);
+      window.alert(`${t('assets.deactivateFailed')}${err.message}`);
     }
   };
 
@@ -226,7 +198,7 @@ export const AdminDashboard: React.FC = () => {
       await api.activateAsset(id);
       refresh();
     } catch (err: any) {
-      alert(`啟用失敗：${err.message}`);
+      window.alert(`${t('assets.activateFailed')}${err.message}`);
     }
   };
 
@@ -270,14 +242,16 @@ export const AdminDashboard: React.FC = () => {
                     save
                   </span>
                   {saving
-                    ? "儲存中..."
-                    : `存檔${editCount > 0 ? `（更新 ${editCount} 筆）` : ""}`}
+                    ? t('common.saving')
+                    : editCount > 0
+                      ? t('assets.saveBtnWithCount', { count: editCount })
+                      : t('assets.saveBtn')}
                 </button>
                 <button
                   onClick={cancelEdit}
                   className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
               </>
             ) : (
@@ -289,7 +263,7 @@ export const AdminDashboard: React.FC = () => {
                   <span className="material-symbols-outlined text-sm">
                     edit
                   </span>
-                  編輯
+                  {t('assets.editBtn')}
                 </button>
                 <button
                   onClick={() => setAddOpen(true)}
@@ -318,7 +292,7 @@ export const AdminDashboard: React.FC = () => {
           <section className="bg-surface-container-low rounded-xl px-5 py-3 border border-outline-variant/10 flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2 text-xs font-bold text-on-surface-variant shrink-0">
               <span className="material-symbols-outlined text-sm">build_circle</span>
-              待處理維修工單
+              {t('assets.pendingRepairTickets')}
             </div>
             <div className="flex items-center gap-2 flex-wrap flex-1">
               {ACTIVE_TICKET_STATUSES.map((status) => {
@@ -332,7 +306,7 @@ export const AdminDashboard: React.FC = () => {
                     onClick={() => toggleTicketFilter(status)}
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${isActive ? colors.active : colors.inactive}`}
                   >
-                    {TICKET_STATUS_LABELS[status]}
+                    {t(`ticketing.status.${status}`)}
                     <span
                       className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${isActive ? "bg-white/25" : "bg-black/8"}`}
                     >
@@ -348,7 +322,7 @@ export const AdminDashboard: React.FC = () => {
                 className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-on-surface transition-colors shrink-0"
               >
                 <span className="material-symbols-outlined text-sm">close</span>
-                清除篩選
+                {t('assets.clearFilter')}
               </button>
             )}
           </section>
@@ -358,12 +332,12 @@ export const AdminDashboard: React.FC = () => {
         <section className="bg-surface-container-low rounded-xl p-5 border border-outline-variant/10">
           {/* 第一列：文字輸入框 + 保管人 */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
-            <SearchInput label="資產編號" value={draft.asset_code_q} onChange={(v) => draftField("asset_code_q", v)} />
-            <SearchInput label="資產名稱" value={draft.name_q} onChange={(v) => draftField("name_q", v)} />
-            <SearchInput label="型號" value={draft.model_q} onChange={(v) => draftField("model_q", v)} />
-            <SearchInput label="規格" value={draft.spec_q} onChange={(v) => draftField("spec_q", v)} />
+            <SearchInput label={t('dashboard.table.assetCode')} value={draft.asset_code_q} onChange={(v) => draftField("asset_code_q", v)} />
+            <SearchInput label={t('dashboard.table.assetName')} value={draft.name_q} onChange={(v) => draftField("name_q", v)} />
+            <SearchInput label={t('dashboard.table.model')} value={draft.model_q} onChange={(v) => draftField("model_q", v)} />
+            <SearchInput label={t('dashboard.table.specs')} value={draft.spec_q} onChange={(v) => draftField("spec_q", v)} />
             <UserSearchCombobox
-              label="保管人"
+              label={t('dashboard.table.custodian')}
               selectedUser={selectedOwner}
               onSelect={setSelectedOwner}
             />
@@ -372,52 +346,54 @@ export const AdminDashboard: React.FC = () => {
           {/* 第二列：下拉選單 + 搜尋/清空 */}
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">廠商</label>
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{t('assets.vendor')}</label>
               <select
                 value={draft.vendor_q}
                 onChange={(e) => draftField("vendor_q", e.target.value)}
                 className="min-w-[8rem] bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
-                <option value="">全部廠商</option>
+                <option value="">{t('assets.selectVendor')}</option>
                 {vendors.map((v) => (
                   <option key={v.id} value={v.name}>{v.name}</option>
                 ))}
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">辦公地點</label>
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{t('assets.officeLocation')}</label>
               <select
                 value={draft.office_location_q}
                 onChange={(e) => draftField("office_location_q", e.target.value)}
                 className="min-w-[8rem] bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
-                <option value="">全部地點</option>
+                <option value="">{t('dashboard.table.location')}</option>
                 {officeLocations.map((l) => (
                   <option key={l.id} value={l.name}>{l.name}</option>
                 ))}
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">分類</label>
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{t('dashboard.table.type')}</label>
               <select
                 value={draft.asset_type}
                 onChange={(e) => draftField("asset_type", e.target.value)}
                 className="min-w-[8rem] bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
-                {ASSET_TYPES.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                <option value="">{t('assets.allTypes')}</option>
+                {ASSET_TYPE_VALUES.map((v) => (
+                  <option key={v} value={v}>{t(`assets.type.${v}`)}</option>
                 ))}
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">狀態</label>
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{t('assets.statusLabel')}</label>
               <select
                 value={draft.status}
                 onChange={(e) => draftField("status", e.target.value)}
                 className="min-w-[8rem] bg-surface-container-highest border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none appearance-none"
               >
-                {ASSET_STATUSES.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                <option value="">{t('assets.allStatuses')}</option>
+                {ASSET_STATUS_VALUES.map((v) => (
+                  <option key={v} value={v}>{t(`assets.status.${v}`)}</option>
                 ))}
               </select>
             </div>
@@ -427,14 +403,14 @@ export const AdminDashboard: React.FC = () => {
                 className="py-2 px-4 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1"
               >
                 <span className="material-symbols-outlined text-sm">search</span>
-                搜尋
+                {t('common.search')}
               </button>
               <button
                 onClick={handleClear}
                 className="py-2 px-4 bg-surface-container-highest text-on-surface-variant text-sm font-semibold rounded-lg hover:bg-surface-container transition-colors flex items-center gap-1"
               >
                 <span className="material-symbols-outlined text-sm">clear_all</span>
-                清空
+                {t('assets.clearAll')}
               </button>
             </div>
           </div>
@@ -446,17 +422,17 @@ export const AdminDashboard: React.FC = () => {
             <table className="min-w-max w-full text-left text-sm">
               <thead>
                 <tr className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
-                  {!editMode && <th className="px-4 py-3">操作</th>}
-                  <th className="px-4 py-3">資產編號</th>
-                  <th className="px-4 py-3">資產名稱</th>
-                  <th className="px-4 py-3 text-center">狀態</th>
-                  <th className="px-4 py-3">分類</th>
-                  <th className="px-4 py-3">廠商</th>
-                  <th className="px-4 py-3">型號</th>
-                  <th className="px-4 py-3">規格</th>
-                  <th className="px-4 py-3">保管人</th>
-                  <th className="px-4 py-3">辦公地點</th>
-                  <th className="px-4 py-3">維修工單</th>
+                  {!editMode && <th className="px-4 py-3">{t('dashboard.table.actions')}</th>}
+                  <th className="px-4 py-3">{t('dashboard.table.assetCode')}</th>
+                  <th className="px-4 py-3">{t('dashboard.table.assetName')}</th>
+                  <th className="px-4 py-3 text-center">{t('assets.statusLabel')}</th>
+                  <th className="px-4 py-3">{t('dashboard.table.type')}</th>
+                  <th className="px-4 py-3">{t('assets.vendor')}</th>
+                  <th className="px-4 py-3">{t('dashboard.table.model')}</th>
+                  <th className="px-4 py-3">{t('dashboard.table.specs')}</th>
+                  <th className="px-4 py-3">{t('dashboard.table.custodian')}</th>
+                  <th className="px-4 py-3">{t('dashboard.table.location')}</th>
+                  <th className="px-4 py-3">{t('assets.repairTicket')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/5">
@@ -479,7 +455,7 @@ export const AdminDashboard: React.FC = () => {
                             {!isDeactivated && (
                               <ActionBtn
                                 icon="build"
-                                label="維修紀錄"
+                                label={t('assets.repairHistory')}
                                 onClick={() =>
                                   navigate(`/all-assets/${asset.id}/repairs`)
                                 }
@@ -489,7 +465,7 @@ export const AdminDashboard: React.FC = () => {
                               (asset.status === "available" || asset.status === "in_use") && (
                               <ActionBtn
                                 icon="swap_horiz"
-                                label="資產轉移"
+                                label={t('assets.transferAsset')}
                                 onClick={() => setTransferAsset(asset)}
                               />
                             )}
@@ -498,14 +474,14 @@ export const AdminDashboard: React.FC = () => {
                               asset.owner_id === user?.id && (
                               <ActionBtn
                                 icon="power_off"
-                                label="停用"
+                                label={t('assets.deactivate')}
                                 onClick={() => handleDeactivate(asset.id)}
                               />
                             )}
                             {isDeactivated && (
                               <ActionBtn
                                 icon="power"
-                                label="啟用"
+                                label={t('assets.activate')}
                                 onClick={() => handleActivate(asset.id)}
                               />
                             )}
@@ -549,9 +525,7 @@ export const AdminDashboard: React.FC = () => {
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyle(asset.status)}`}
                         >
-                          {ASSET_STATUS_OPTIONS.find(
-                            (s) => s.value === asset.status,
-                          )?.label ?? asset.status}
+                          {t(`assets.status.${asset.status}`, { defaultValue: asset.status })}
                         </span>
                       </td>
 
@@ -563,16 +537,14 @@ export const AdminDashboard: React.FC = () => {
                             onChange={(e) => set("type", e.target.value)}
                             className={inlineCls}
                           >
-                            {ASSET_TYPE_OPTIONS.map((t) => (
-                              <option key={t.value} value={t.value}>
-                                {t.label}
+                            {ASSET_TYPE_VALUES.map((typeVal) => (
+                              <option key={typeVal} value={typeVal}>
+                                {t(`assets.type.${typeVal}`)}
                               </option>
                             ))}
                           </select>
                         ) : (
-                          (ASSET_TYPE_OPTIONS.find(
-                            (t) => t.value === asset.type,
-                          )?.label ?? asset.type)
+                          t(`assets.type.${asset.type}`, { defaultValue: asset.type })
                         )}
                       </td>
 
@@ -609,7 +581,7 @@ export const AdminDashboard: React.FC = () => {
                             value={val("model")}
                             onChange={(e) => set("model", e.target.value)}
                             className={inlineCls}
-                            placeholder="型號"
+                            placeholder={t('dashboard.table.model')}
                           />
                         ) : (
                           <span className="whitespace-nowrap">
@@ -627,7 +599,7 @@ export const AdminDashboard: React.FC = () => {
                               set("specification", e.target.value)
                             }
                             className={inlineCls}
-                            placeholder="規格"
+                            placeholder={t('dashboard.table.specs')}
                           />
                         ) : (
                           <span className="whitespace-nowrap">
@@ -670,10 +642,10 @@ export const AdminDashboard: React.FC = () => {
                           return (
                             <button
                               onClick={() => navigate(`/all-assets/${asset.id}/repairs`)}
-                              title="查看維修工單"
+                              title={t('assets.repairTicket')}
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-opacity hover:opacity-75 ${TICKET_BADGE_COLORS[status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}
                             >
-                              {TICKET_STATUS_LABELS[status] ?? status}
+                              {t(`ticketing.status.${status}`, { defaultValue: status })}
                             </button>
                           );
                         })()}
@@ -693,7 +665,7 @@ export const AdminDashboard: React.FC = () => {
                       </span>
                       <p className="font-bold">
                         {ticketStatusFilter
-                          ? `目前沒有「${TICKET_STATUS_LABELS[ticketStatusFilter]}」的資產`
+                          ? t('assets.noAssetsForStatus', { status: t(`ticketing.status.${ticketStatusFilter}`) })
                           : t("dashboard.employee.noAssets")}
                       </p>
                     </td>

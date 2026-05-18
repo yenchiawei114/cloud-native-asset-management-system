@@ -52,7 +52,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
           {collapsed ? (
             <button
               onClick={toggleCollapse}
-              title="展開導覽列"
+              title={t('dashboard.expandNav')}
               className="w-10 h-10 bg-primary-container rounded-xl flex items-center justify-center hover:opacity-80 transition-opacity"
             >
               <span className="material-symbols-outlined text-on-primary-fixed" style={{ fontVariationSettings: "'FILL' 1" }}>architecture</span>
@@ -64,11 +64,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, acti
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-black tracking-tighter text-blue-800 dark:text-blue-200 whitespace-nowrap">Executive Architect</h2>
-                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Enterprise Asset Control</p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">{t('dashboard.subBrand')}</p>
               </div>
               <button
                 onClick={toggleCollapse}
-                title="收合導覽列"
+                title={t('dashboard.collapseNav')}
                 className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors shrink-0"
               >
                 <span className="material-symbols-outlined text-[20px]">chevron_left</span>

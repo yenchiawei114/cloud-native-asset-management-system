@@ -36,11 +36,11 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
 
   const handleSubmit = async () => {
     if (!selectedAssetId) {
-      showFeedback({ title: '請選擇設備', message: '請選擇要維修的設備', type: 'error', onConfirm: closeFeedback });
+      showFeedback({ title: t('ticketing.form.selectAssetTitle'), message: t('ticketing.form.selectAssetMsg'), type: 'error', onConfirm: closeFeedback });
       return;
     }
     if (!description.trim()) {
-      showFeedback({ title: '請填寫描述', message: '請填寫故障描述', type: 'error', onConfirm: closeFeedback });
+      showFeedback({ title: t('ticketing.form.descRequired'), message: t('ticketing.form.descRequiredMsg'), type: 'error', onConfirm: closeFeedback });
       return;
     }
 
@@ -61,17 +61,17 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
         await ticketService.uploadAttachment(ticket.id, file);
       }
 
-      showFeedback({ 
-        title: '提交成功', 
-        message: '您的維修申請已成功送出，工作人員將儘速處理。', 
-        type: 'success', 
+      showFeedback({
+        title: t('ticketing.form.submitSuccess'),
+        message: t('ticketing.form.submitSuccessMsg'),
+        type: 'success',
         onConfirm: () => {
           closeFeedback();
           onSuccess();
         }
       });
     } catch (err: any) {
-      showFeedback({ title: '提交失敗', message: err.message || '提交失敗，請重試', type: 'error', onConfirm: closeFeedback });
+      showFeedback({ title: t('ticketing.form.submitFailed'), message: err.message || t('ticketing.form.submitFailedRetry'), type: 'error', onConfirm: closeFeedback });
     } finally {
       setSubmitting(false);
     }
@@ -80,8 +80,8 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-8">
-        <h1 className="text-3xl font-extrabold tracking-tight text-on-surface">建立維修申請單</h1>
-        <p className="text-on-surface-variant mt-1">請填寫以下資訊，我們將儘速為您安排維修服務。</p>
+        <h1 className="text-3xl font-extrabold tracking-tight text-on-surface">{t('ticketing.form.title')}</h1>
+        <p className="text-on-surface-variant mt-1">{t('ticketing.form.subtitle')}</p>
       </div>
 
 
@@ -90,7 +90,7 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
         <section className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-6">
             <span className="h-6 w-1 bg-primary rounded-full"></span>
-            <h2 className="text-lg font-bold tracking-tight text-on-surface">第一步：設備選擇</h2>
+            <h2 className="text-lg font-bold tracking-tight text-on-surface">{t('ticketing.form.step1')}</h2>
           </div>
           
           {assetsLoading ? (
@@ -138,19 +138,19 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
         <section className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-6">
             <span className="h-6 w-1 bg-primary rounded-full"></span>
-            <h2 className="text-lg font-bold tracking-tight text-on-surface">第二步：故障描述</h2>
+            <h2 className="text-lg font-bold tracking-tight text-on-surface">{t('ticketing.form.step2')}</h2>
           </div>
           <div>
-            <label className="block text-sm font-bold text-on-surface mb-3">詳細描述故障狀況 <span className="text-error">*</span></label>
-            <textarea 
-              className="w-full bg-slate-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-primary/20 text-on-surface placeholder:text-slate-400 min-h-[120px]" 
-              placeholder="請描述設備出現的問題，例如：螢幕閃爍、無法開機、電池膨脹等..."
+            <label className="block text-sm font-bold text-on-surface mb-3">{t('ticketing.form.descriptionLabel')} <span className="text-error">*</span></label>
+            <textarea
+              className="w-full bg-slate-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-primary/20 text-on-surface placeholder:text-slate-400 min-h-[120px]"
+              placeholder={t('ticketing.form.descriptionPlaceholder')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
             <p className="text-[11px] text-slate-400 mt-2 italic flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">info</span>
-              請儘可能詳細填寫，以便維修工程師進行初步判斷。
+              {t('ticketing.form.descriptionTip')}
             </p>
           </div>
         </section>
@@ -159,13 +159,13 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
         <section className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-6">
             <span className="h-6 w-1 bg-primary rounded-full"></span>
-            <h2 className="text-lg font-bold tracking-tight text-on-surface">第三步：附件上傳</h2>
+            <h2 className="text-lg font-bold tracking-tight text-on-surface">{t('ticketing.form.step3')}</h2>
           </div>
           <label className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center bg-slate-50/50 hover:bg-slate-50 transition-colors cursor-pointer group block">
             <input type="file" className="hidden" multiple accept="image/*" onChange={handleFileChange} />
             <span className="material-symbols-outlined text-4xl text-slate-300 group-hover:text-primary transition-colors mb-2">cloud_upload</span>
-            <p className="text-on-surface font-bold">點擊或拖拽照片至此處</p>
-            <p className="text-xs text-slate-400 mt-1">支援 JPG, PNG 格式，每個檔案不超過 5MB</p>
+            <p className="text-on-surface font-bold">{t('ticketing.form.uploadClick')}</p>
+            <p className="text-xs text-slate-400 mt-1">{t('ticketing.form.uploadFormats')}</p>
           </label>
           
           <div className="mt-6 space-y-3">
@@ -195,27 +195,27 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
         <section className="bg-surface-container-lowest p-6 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-6">
             <span className="h-6 w-1 bg-primary rounded-full"></span>
-            <h2 className="text-lg font-bold tracking-tight text-on-surface">第四步：備用機需求</h2>
+            <h2 className="text-lg font-bold tracking-tight text-on-surface">{t('ticketing.form.step4')}</h2>
           </div>
           <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl mb-6">
-            <input 
-              checked={needBackup} 
+            <input
+              checked={needBackup}
               onChange={(e) => setNeedBackup(e.target.checked)}
-              className="w-5 h-5 text-primary border-slate-300 rounded focus:ring-primary/20" 
-              id="spare-needed" 
+              className="w-5 h-5 text-primary border-slate-300 rounded focus:ring-primary/20"
+              id="spare-needed"
               type="checkbox"
             />
-            <label className="text-on-surface font-bold text-sm cursor-pointer" htmlFor="spare-needed">我需要申請備用機</label>
+            <label className="text-on-surface font-bold text-sm cursor-pointer" htmlFor="spare-needed">{t('ticketing.form.needBackup')}</label>
           </div>
           
           {needBackup && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-on-surface">最低效能需求與說明</label>
-                <input 
-                  className="w-full bg-slate-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-primary/20 text-on-surface" 
-                  type="text" 
-                  placeholder="例如：32GB RAM, M1 Pro 或同等級..."
+                <label className="block text-sm font-bold text-on-surface">{t('ticketing.form.backupSpecLabel')}</label>
+                <input
+                  className="w-full bg-slate-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-primary/20 text-on-surface"
+                  type="text"
+                  placeholder={t('ticketing.form.backupSpecPlaceholder')}
                   value={backupSpec}
                   onChange={(e) => setBackupSpec(e.target.value)}
                 />
@@ -226,18 +226,18 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
 
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-4 py-8">
-          <button 
+          <button
             onClick={onCancel}
             className="px-8 py-3 text-slate-500 font-bold hover:bg-slate-100 rounded-xl transition-all"
           >
-            取消申請
+            {t('ticketing.form.cancel')}
           </button>
-          <button 
+          <button
             onClick={handleSubmit}
             disabled={submitting}
             className="px-10 py-3 bg-gradient-to-br from-primary to-primary-container text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100"
           >
-            {submitting ? '提交中...' : '送出維修申請'}
+            {submitting ? t('ticketing.form.submitting') : t('ticketing.form.submit')}
           </button>
         </div>
         <FeedbackDialog 

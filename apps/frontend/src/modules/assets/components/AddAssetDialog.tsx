@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, User, Vendor } from '../../../lib/api';
 import { useAuth } from '../../auth/hooks/useAuth';
 
@@ -11,6 +12,7 @@ interface Props {
 const ASSET_TYPES = ['laptop', 'desktop', 'phone', 'tablet', 'server', 'network', 'other'];
 
 export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) => {
+  const { t } = useTranslation();
   const { user: authUser } = useAuth();
   const [form, setForm] = useState({
     asset_code: '',
@@ -67,7 +69,7 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
       onClose();
       resetForm();
     } catch (err: any) {
-      setError(err.message || '新增失敗');
+      setError(err.message || t('assets.dialog.failedCreate'));
     } finally {
       setSubmitting(false);
     }
@@ -97,7 +99,7 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-outline-variant/20">
-          <h2 className="text-lg font-bold text-on-surface">新增資產</h2>
+          <h2 className="text-lg font-bold text-on-surface">{t('assets.dialog.title')}</h2>
           <button onClick={onClose} className="p-2 hover:bg-surface-container rounded-full transition-colors">
             <span className="material-symbols-outlined">close</span>
           </button>
@@ -105,65 +107,65 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Field label="資產名稱" required>
+            <Field label={t('assets.dialog.assetName')} required>
               <input required value={form.name} onChange={e => field('name', e.target.value)}
                 className={inputCls} placeholder="MacBook Pro 14" />
             </Field>
-            <Field label="資產編號" required>
+            <Field label={t('assets.dialog.assetCode')} required>
               <input required value={form.asset_code} onChange={e => field('asset_code', e.target.value)}
                 className={inputCls} placeholder="A0000001" maxLength={10} />
             </Field>
-            <Field label="資產類別" required>
+            <Field label={t('assets.dialog.category')} required>
               <select required value={form.type} onChange={e => field('type', e.target.value)} className={inputCls}>
-                {ASSET_TYPES.map(t => (
-                  <option key={t} value={t}>{t === 'laptop' ? '筆電' : t === 'desktop' ? '桌機' : t === 'phone' ? '手機' : t === 'tablet' ? '平板' : t === 'server' ? '伺服器' : t === 'network' ? '網路設備' : '其他'}</option>
+                {ASSET_TYPES.map(type => (
+                  <option key={type} value={type}>{t(`assets.type.${type}`)}</option>
                 ))}
               </select>
             </Field>
-            <Field label="廠商" required>
+            <Field label={t('assets.dialog.vendor')} required>
               <select required value={form.vendor} onChange={e => field('vendor', e.target.value)} className={inputCls}>
-                <option value="">請選擇廠商</option>
+                <option value="">{t('assets.selectVendor')}</option>
                 {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
               </select>
             </Field>
-            <Field label="型號" required>
+            <Field label={t('assets.dialog.model')} required>
               <input required value={form.model} onChange={e => field('model', e.target.value)}
                 className={inputCls} placeholder="MBP14-M3" />
             </Field>
-            <Field label="辦公地點">
+            <Field label={t('assets.dialog.location')}>
               <input
                 readOnly
-                value={selectedOwner?.location ?? '（將隨保管人自動帶入）'}
+                value={selectedOwner?.location ?? t('assets.dialog.autoLocation')}
                 className={inputCls + ' cursor-not-allowed opacity-60'}
               />
             </Field>
           </div>
 
-          <Field label="詳細規格" required>
+          <Field label={t('assets.dialog.specification')} required>
             <textarea required value={form.specification} onChange={e => field('specification', e.target.value)}
               className={inputCls + ' resize-none h-16'} placeholder="M3 Pro / 16GB / 512GB SSD" />
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="採購日期" required>
+            <Field label={t('assets.dialog.purchaseDate')} required>
               <input required type="date" value={form.purchase_date} onChange={e => field('purchase_date', e.target.value)} className={inputCls} />
             </Field>
-            <Field label="採購金額（元）" required>
+            <Field label={t('assets.dialog.purchaseAmount')} required>
               <input required type="number" min="0" value={form.purchase_price} onChange={e => field('purchase_price', e.target.value)} className={inputCls} />
             </Field>
-            <Field label="啟用日期" required>
+            <Field label={t('assets.dialog.activationDate')} required>
               <input required type="date" value={form.activation_date} onChange={e => field('activation_date', e.target.value)} className={inputCls} />
             </Field>
-            <Field label="到期日期" required>
+            <Field label={t('assets.dialog.expiryDate')} required>
               <input required type="date" value={form.warranty_expiry} onChange={e => field('warranty_expiry', e.target.value)} className={inputCls} />
             </Field>
-            <Field label="資產狀態">
-              <input readOnly value="閒置" className={inputCls + ' cursor-not-allowed opacity-60'} />
+            <Field label={t('assets.dialog.assetStatus')}>
+              <input readOnly value={t('assets.dialog.assetStatusValue')} className={inputCls + ' cursor-not-allowed opacity-60'} />
             </Field>
-            <Field label="保管人">
+            <Field label={t('assets.dialog.custodian')}>
               <input
                 readOnly
-                value={selectedOwner ? `${selectedOwner.name}（${selectedOwner.employee_id}）` : '載入中...'}
+                value={selectedOwner ? `${selectedOwner.name}（${selectedOwner.employee_id}）` : t('common.loading')}
                 className={inputCls + ' cursor-not-allowed opacity-60'}
               />
             </Field>
@@ -173,10 +175,10 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
 
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors">
-              取消
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={submitting} className="px-5 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50">
-              {submitting ? '新增中...' : '新增資產'}
+              {submitting ? t('assets.dialog.submitting') : t('assets.dialog.submit')}
             </button>
           </div>
         </form>

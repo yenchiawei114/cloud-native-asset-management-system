@@ -5,9 +5,18 @@ import { DashboardLayout } from "../modules/dashboard/components/DashboardLayout
 import { useAuditLogs } from "../modules/audit/hooks/useAuditLogs";
 import { UserSearchCombobox } from "../modules/core/components/UserSearchCombobox";
 import type { User } from "../lib/api";
+import { fmtDateTime, fmtNumber } from "../lib/locale";
+
+const sanitizeTargetName = (name: string | null | undefined): string => {
+  if (!name) return '—';
+  // Strip legacy Chinese prefix stored before i18n migration (e.g. "報修單 #0001")
+  return name.replace(/^[一-鿿]+\s*/, '');
+};
 
 export const AuditLogPage: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isEn = i18n.language === 'en-US';
+  const dateLang = isEn ? 'en' : 'zh-TW';
   const navigate = useNavigate();
   const [params, setParams] = useState({
     page: 1,
@@ -87,25 +96,45 @@ export const AuditLogPage: React.FC = () => {
               {t("audit.filters.dateRange")}
             </label>
             <div className="flex items-center gap-3">
-              <input
-                type="date"
-                className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none px-3 py-2"
-                value={params.from_date}
-                onChange={(e) =>
-                  setParams({ ...params, from_date: e.target.value, page: 1 })
-                }
-              />
-              <span className="text-outline text-xs">
+              <div className="relative flex-1 group">
+                <input
+                  key={`from-${dateLang}`}
+                  type="date"
+                  lang={dateLang}
+                  className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none px-3 py-2"
+                  style={isEn && !params.from_date ? { color: 'transparent' } : undefined}
+                  value={params.from_date}
+                  onChange={(e) =>
+                    setParams({ ...params, from_date: e.target.value, page: 1 })
+                  }
+                />
+                {isEn && !params.from_date && (
+                  <span className="absolute inset-0 flex items-center px-3 text-sm text-on-surface-variant/40 pointer-events-none group-focus-within:hidden">
+                    mm / dd / yyyy
+                  </span>
+                )}
+              </div>
+              <span className="text-outline text-xs shrink-0">
                 {t("audit.filters.to")}
               </span>
-              <input
-                type="date"
-                className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none px-3 py-2"
-                value={params.to_date}
-                onChange={(e) =>
-                  setParams({ ...params, to_date: e.target.value, page: 1 })
-                }
-              />
+              <div className="relative flex-1 group">
+                <input
+                  key={`to-${dateLang}`}
+                  type="date"
+                  lang={dateLang}
+                  className="w-full bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary outline-none px-3 py-2"
+                  style={isEn && !params.to_date ? { color: 'transparent' } : undefined}
+                  value={params.to_date}
+                  onChange={(e) =>
+                    setParams({ ...params, to_date: e.target.value, page: 1 })
+                  }
+                />
+                {isEn && !params.to_date && (
+                  <span className="absolute inset-0 flex items-center px-3 text-sm text-on-surface-variant/40 pointer-events-none group-focus-within:hidden">
+                    mm / dd / yyyy
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -172,7 +201,7 @@ export const AuditLogPage: React.FC = () => {
                       className="group hover:bg-surface-container-low transition-colors cursor-pointer"
                     >
                       <td className="px-6 py-4 text-sm text-on-surface-variant font-medium">
-                        {new Date(log.timestamp).toLocaleString()}
+                        {fmtDateTime(log.timestamp)}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -196,7 +225,7 @@ export const AuditLogPage: React.FC = () => {
                             {t(`audit.type.${log.target_type}`)}
                           </span>
                           <span className="text-[10px] text-outline line-clamp-1">
-                            {log.target_name}
+                            {sanitizeTargetName(log.target_name)}
                           </span>
                         </div>
                       </td>
@@ -224,7 +253,7 @@ export const AuditLogPage: React.FC = () => {
               {t("audit.pagination", {
                 start: (params.page - 1) * params.page_size + 1,
                 end: Math.min(params.page * params.page_size, total),
-                total: total.toLocaleString(),
+                total: fmtNumber(total),
               })}
             </span>
             <div className="flex gap-1">

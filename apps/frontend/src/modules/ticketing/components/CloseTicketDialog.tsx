@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../lib/api';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed }) => {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     issue_description: '',
     solution: '',
@@ -27,7 +29,6 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
     setError('');
     setSubmitting(true);
     try {
-      // 先結案（會建立 RepairRecord）
       await api.closeTicket(ticketId, {
         issue_description: form.issue_description,
         solution: form.solution,
@@ -35,7 +36,6 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
         cost: Number(form.cost) || 0,
       });
 
-      // 取得剛建立的維修紀錄 ID，再上傳過程照片
       if (photos.length > 0) {
         const record = await api.getTicketRecord(ticketId).catch(() => null);
         if (record?.id) {
@@ -54,7 +54,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
       setForm({ issue_description: '', solution: '', vendor: '', cost: '' });
       setPhotos([]);
     } catch (err: any) {
-      setError(err.message || '操作失敗');
+      setError(err.message || t('common.operationFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -66,7 +66,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-outline-variant/20">
-          <h2 className="text-base font-bold text-on-surface">結案維修工單</h2>
+          <h2 className="text-base font-bold text-on-surface">{t('ticketing.close.title')}</h2>
           <button onClick={onClose} className="p-2 hover:bg-surface-container rounded-full transition-colors">
             <span className="material-symbols-outlined text-sm">close</span>
           </button>
@@ -74,30 +74,30 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <p className="text-sm text-on-surface-variant">
-            結案工單 <span className="font-bold text-primary">#TKT-{String(ticketId).padStart(4, '0')}</span>，資產狀態將改為「使用中」，並 email 通知申請人領回。
+            {t('ticketing.close.title')} <span className="font-bold text-primary">#TKT-{String(ticketId).padStart(4, '0')}</span>{t('ticketing.close.infoSuffix')}
           </p>
 
-          <Field label="故障原因判斷" required>
+          <Field label={t('ticketing.close.issueAnalysis')} required>
             <textarea required value={form.issue_description} onChange={e => field('issue_description', e.target.value)}
-              className={textareaCls} placeholder="例：硬碟讀寫磁頭損壞..." />
+              className={textareaCls} placeholder={t('ticketing.close.issueAnalysisPlaceholder')} />
           </Field>
-          <Field label="維修方案與結果" required>
+          <Field label={t('ticketing.close.solutionResult')} required>
             <textarea required value={form.solution} onChange={e => field('solution', e.target.value)}
-              className={textareaCls} placeholder="例：更換硬碟，資料已備份恢復..." />
+              className={textareaCls} placeholder={t('ticketing.close.solutionResultPlaceholder')} />
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="承辦廠商" required>
+            <Field label={t('ticketing.close.vendor')} required>
               <input required value={form.vendor} onChange={e => field('vendor', e.target.value)}
-                className={inputCls} placeholder="XX 資訊股份有限公司" />
+                className={inputCls} placeholder={t('ticketing.close.vendorPlaceholder')} />
             </Field>
-            <Field label="維修總費用（元）" required>
+            <Field label={t('ticketing.close.totalCost')} required>
               <input required type="number" min="0" value={form.cost} onChange={e => field('cost', e.target.value)}
                 className={inputCls} placeholder="0" />
             </Field>
           </div>
 
-          <Field label="維修過程照片（選填）">
+          <Field label={t('ticketing.close.processPhotos')}>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -106,7 +106,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
               className="w-full text-sm text-on-surface-variant file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary-container file:text-on-primary-container hover:file:bg-primary/20 cursor-pointer"
             />
             {photos.length > 0 && (
-              <p className="text-xs text-on-surface-variant mt-1">已選擇 {photos.length} 張照片</p>
+              <p className="text-xs text-on-surface-variant mt-1">{t('ticketing.close.photosSelected', { count: photos.length })}</p>
             )}
           </Field>
 
@@ -114,10 +114,10 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
 
           <div className="flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors">
-              取消
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={submitting} className="px-5 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50">
-              {submitting ? '結案中...' : '確認結案'}
+              {submitting ? t('ticketing.close.submitting') : t('ticketing.close.submit')}
             </button>
           </div>
         </form>

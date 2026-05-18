@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, Asset, User } from '../../../lib/api';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransferInitiated }) => {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<User[]>([]);
   const [ownerSearch, setOwnerSearch] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -51,7 +53,7 @@ export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransfe
       setDone(true);
       onTransferInitiated();
     } catch (err: any) {
-      setError(err.message || '操作失敗');
+      setError(err.message || t('common.operationFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -63,7 +65,7 @@ export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransfe
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-outline-variant/20">
-          <h2 className="text-base font-bold text-on-surface">資產轉移</h2>
+          <h2 className="text-base font-bold text-on-surface">{t('assets.transfer.title')}</h2>
           <button onClick={onClose} className="p-2 hover:bg-surface-container rounded-full transition-colors">
             <span className="material-symbols-outlined text-sm">close</span>
           </button>
@@ -71,15 +73,15 @@ export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransfe
 
         <div className="p-5 space-y-4">
           <div className="bg-surface-container-low rounded-xl p-4">
-            <p className="text-xs text-on-surface-variant font-semibold mb-1">資產</p>
+            <p className="text-xs text-on-surface-variant font-semibold mb-1">{t('assets.transfer.assetLabel')}</p>
             <p className="font-bold text-on-surface">{asset.name}</p>
             <p className="text-xs text-on-surface-variant font-mono">{asset.asset_code}</p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-on-surface-variant">目前保管人</label>
+            <label className="text-xs font-semibold text-on-surface-variant">{t('assets.transfer.currentOwner')}</label>
             <p className="text-sm text-on-surface bg-surface-container-highest rounded-lg px-3 py-2">
-              {currentOwner ? `${currentOwner.name}（${currentOwner.employee_id}）` : '無'}
+              {currentOwner ? `${currentOwner.name}（${currentOwner.employee_id}）` : t('assets.transfer.noOwner')}
             </p>
           </div>
 
@@ -87,14 +89,14 @@ export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransfe
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
               <span className="material-symbols-outlined text-green-600">check_circle</span>
               <div>
-                <p className="font-semibold text-green-800 text-sm">轉移申請已送出</p>
-                <p className="text-xs text-green-700 mt-0.5">Email 已通知雙方，請登入系統確認轉移。</p>
+                <p className="font-semibold text-green-800 text-sm">{t('assets.transfer.requestSent')}</p>
+                <p className="text-xs text-green-700 mt-0.5">{t('assets.transfer.emailNotification')}</p>
               </div>
             </div>
           ) : (
             <>
               <div className="space-y-1.5" ref={ref}>
-                <label className="text-xs font-semibold text-on-surface-variant">轉移給</label>
+                <label className="text-xs font-semibold text-on-surface-variant">{t('assets.transfer.transferTo')}</label>
                 <div className="relative">
                   <input
                     value={selectedUser ? `${selectedUser.name}（${selectedUser.employee_id}）` : ownerSearch}
@@ -126,7 +128,7 @@ export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransfe
 
         <div className="flex justify-end gap-3 px-5 pb-5">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors">
-            {done ? '關閉' : '取消'}
+            {done ? t('common.close') : t('common.cancel')}
           </button>
           {!done && (
             <button
@@ -134,7 +136,7 @@ export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransfe
               disabled={!selectedUser || submitting}
               className="px-5 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {submitting ? '處理中...' : '確認轉移'}
+              {submitting ? t('assets.transfer.processing') : t('assets.transfer.confirm')}
             </button>
           )}
         </div>

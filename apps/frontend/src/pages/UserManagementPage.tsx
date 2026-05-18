@@ -8,8 +8,8 @@ import { FeedbackDialog } from "../modules/core/components/FeedbackDialog";
 import { useFeedback } from "../modules/core/hooks/useFeedback";
 import { api, User, Department, OfficeLocation } from "../lib/api";
 import { OffboardingModal } from "../modules/users/components/OffboardingModal";
+import { fmtDate } from "../lib/locale";
 
-const SEX_LABELS: Record<string, string> = { MALE: "男", FEMALE: "女" };
 
 const inlineCls =
   "w-full bg-surface-container-highest rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary";
@@ -136,7 +136,7 @@ export const UserManagementPage: React.FC = () => {
         ),
       );
       const failed = results.filter((r) => r.status === "rejected").length;
-      if (failed > 0) setSaveError(`${failed} 筆更新失敗`);
+      if (failed > 0) setSaveError(t('users.management.saveFailed', { count: failed }));
       setPendingEdits({});
       setEditMode(false);
       refresh();
@@ -184,14 +184,16 @@ export const UserManagementPage: React.FC = () => {
                     save
                   </span>
                   {saving
-                    ? "儲存中..."
-                    : `存檔${editCount > 0 ? `（更新 ${editCount} 筆）` : ""}`}
+                    ? t('common.saving')
+                    : editCount > 0
+                      ? t('assets.saveBtnWithCount', { count: editCount })
+                      : t('assets.saveBtn')}
                 </button>
                 <button
                   onClick={cancelEdit}
                   className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
               </>
             ) : (
@@ -203,7 +205,7 @@ export const UserManagementPage: React.FC = () => {
                   <span className="material-symbols-outlined text-sm">
                     edit
                   </span>
-                  編輯
+                  {t('assets.editBtn')}
                 </button>
                 <button
                   onClick={() => navigate("/users/new")}
@@ -230,7 +232,7 @@ export const UserManagementPage: React.FC = () => {
           {/* 文字搜尋 */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className={labelCls}>員工編號</label>
+              <label className={labelCls}>{t('profile.employeeId')}</label>
               <input
                 value={draft.employee_id}
                 onChange={(e) => setDraftField("employee_id", e.target.value)}
@@ -240,7 +242,7 @@ export const UserManagementPage: React.FC = () => {
               />
             </div>
             <div>
-              <label className={labelCls}>姓名</label>
+              <label className={labelCls}>{t('profile.name')}</label>
               <input
                 value={draft.name}
                 onChange={(e) => setDraftField("name", e.target.value)}
@@ -250,7 +252,7 @@ export const UserManagementPage: React.FC = () => {
               />
             </div>
             <div>
-              <label className={labelCls}>電子郵件</label>
+              <label className={labelCls}>{t('profile.email')}</label>
               <input
                 value={draft.email}
                 onChange={(e) => setDraftField("email", e.target.value)}
@@ -264,25 +266,25 @@ export const UserManagementPage: React.FC = () => {
           {/* 下拉篩選 + 按鈕 */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
             <div>
-              <label className={labelCls}>性別</label>
+              <label className={labelCls}>{t('profile.gender')}</label>
               <select
                 value={draft.sex}
                 onChange={(e) => setDraftField("sex", e.target.value)}
                 className={selectCls}
               >
-                <option value="">全部</option>
-                <option value="MALE">男</option>
-                <option value="FEMALE">女</option>
+                <option value="">{t('users.management.filterAll')}</option>
+                <option value="MALE">{t('users.management.filterMale')}</option>
+                <option value="FEMALE">{t('users.management.filterFemale')}</option>
               </select>
             </div>
             <div>
-              <label className={labelCls}>部門</label>
+              <label className={labelCls}>{t('profile.department')}</label>
               <select
                 value={draft.department_id}
                 onChange={(e) => setDraftField("department_id", e.target.value)}
                 className={selectCls}
               >
-                <option value="">全部</option>
+                <option value="">{t('users.management.filterAll')}</option>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
@@ -291,13 +293,13 @@ export const UserManagementPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className={labelCls}>辦公地點</label>
+              <label className={labelCls}>{t('profile.officeLocation')}</label>
               <select
                 value={draft.location}
                 onChange={(e) => setDraftField("location", e.target.value)}
                 className={selectCls}
               >
-                <option value="">全部</option>
+                <option value="">{t('users.management.filterAll')}</option>
                 {officeLocations.map((l) => (
                   <option key={l.id} value={l.name}>
                     {l.name}
@@ -306,19 +308,19 @@ export const UserManagementPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className={labelCls}>系統角色</label>
+              <label className={labelCls}>{t('users.detail.roleLabel')}</label>
               <select
                 value={draft.role}
                 onChange={(e) => setDraftField("role", e.target.value)}
                 className={selectCls}
               >
-                <option value="">全部</option>
-                <option value="ADMIN">管理員</option>
-                <option value="EMPLOYEE">一般員工</option>
+                <option value="">{t('users.management.filterAll')}</option>
+                <option value="ADMIN">{t('users.management.filterAdmin')}</option>
+                <option value="EMPLOYEE">{t('users.management.filterEmployee')}</option>
               </select>
             </div>
             <div>
-              <label className={labelCls}>須改密碼</label>
+              <label className={labelCls}>{t('users.management.filterMustChangePwd')}</label>
               <select
                 value={draft.must_change_password}
                 onChange={(e) =>
@@ -326,9 +328,9 @@ export const UserManagementPage: React.FC = () => {
                 }
                 className={selectCls}
               >
-                <option value="">全部</option>
-                <option value="yes">是</option>
-                <option value="no">否</option>
+                <option value="">{t('users.management.filterAll')}</option>
+                <option value="yes">{t('users.management.filterYes')}</option>
+                <option value="no">{t('users.management.filterNo')}</option>
               </select>
             </div>
             <div className="flex gap-2">
@@ -339,7 +341,7 @@ export const UserManagementPage: React.FC = () => {
                 <span className="material-symbols-outlined text-sm">
                   search
                 </span>
-                搜尋
+                {t('common.search')}
               </button>
               <button
                 onClick={handleClear}
@@ -348,7 +350,7 @@ export const UserManagementPage: React.FC = () => {
                 <span className="material-symbols-outlined text-sm">
                   clear_all
                 </span>
-                清空
+                {t('assets.clearAll')}
               </button>
             </div>
           </div>
@@ -370,25 +372,25 @@ export const UserManagementPage: React.FC = () => {
                     {t("profile.email")}
                   </th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">
-                    性別
+                    {t('users.management.colSex')}
                   </th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">
-                    部門
+                    {t('users.management.colDept')}
                   </th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">
-                    辦公地點
+                    {t('users.management.colLocation')}
                   </th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">
                     {t("profile.role")}
                   </th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">
-                    須改密碼
+                    {t('users.management.colMustChangePwd')}
                   </th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">
-                    建立時間
+                    {t('users.management.colCreatedAt')}
                   </th>
                   <th className="px-4 py-4 border-b border-outline-variant/10">
-                    操作
+                    {t('dashboard.table.actions')}
                   </th>
                 </tr>
               </thead>
@@ -434,10 +436,10 @@ export const UserManagementPage: React.FC = () => {
                                   {user.name}
                                 </span>
                                 {user.is_active === false && (
-                                  <span className="text-[10px] font-black px-1.5 py-0.5 bg-error/10 text-error rounded-full border border-error/20">已離職</span>
+                                  <span className="text-[10px] font-black px-1.5 py-0.5 bg-error/10 text-error rounded-full border border-error/20">{t('users.detail.offboarded')}</span>
                                 )}
                                 {user.is_active && user.termination_date && (
-                                  <span className="text-[10px] font-black px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full border border-amber-300">離職中</span>
+                                  <span className="text-[10px] font-black px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full border border-amber-300">{t('users.management.offboarding')}</span>
                                 )}
                               </div>
                             </div>
@@ -470,11 +472,11 @@ export const UserManagementPage: React.FC = () => {
                               }
                               className={inlineSelectCls}
                             >
-                              <option value="MALE">男</option>
-                              <option value="FEMALE">女</option>
+                              <option value="MALE">{t('users.detail.sexMale')}</option>
+                              <option value="FEMALE">{t('users.detail.sexFemale')}</option>
                             </select>
                           ) : (
-                            SEX_LABELS[user.sex] ?? user.sex
+                            user.sex === 'MALE' ? t('users.detail.sexMale') : user.sex === 'FEMALE' ? t('users.detail.sexFemale') : user.sex
                           )}
                         </td>
 
@@ -536,7 +538,7 @@ export const UserManagementPage: React.FC = () => {
                         <td className="px-4 py-3 whitespace-nowrap text-center">
                           {user.must_change_password ? (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
-                              是
+                              {t('users.management.mustChangePwdYes')}
                             </span>
                           ) : (
                             <span className="text-on-surface-variant/40 text-xs">
@@ -547,9 +549,7 @@ export const UserManagementPage: React.FC = () => {
 
                         {/* 建立時間 */}
                         <td className="px-4 py-3 whitespace-nowrap text-on-surface-variant text-xs font-mono">
-                          {new Date(user.created_at).toLocaleDateString(
-                            "zh-TW",
-                          )}
+                          {fmtDate(user.created_at)}
                         </td>
 
                         {/* 操作 */}
@@ -563,7 +563,7 @@ export const UserManagementPage: React.FC = () => {
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-error bg-error/10 hover:bg-error/20 rounded-lg transition-colors active:scale-95"
                               >
                                 <span className="material-symbols-outlined text-xs">person_off</span>
-                                離職
+                                {t('users.management.offboardBtn')}
                               </button>
                             )}
                           {user.role === "EMPLOYEE" &&
@@ -574,7 +574,7 @@ export const UserManagementPage: React.FC = () => {
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors active:scale-95"
                               >
                                 <span className="material-symbols-outlined text-xs">pending_actions</span>
-                                查看進度
+                                {t('users.management.viewProgress')}
                               </button>
                             )}
                         </td>

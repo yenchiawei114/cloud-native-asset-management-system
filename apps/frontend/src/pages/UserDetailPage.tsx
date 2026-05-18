@@ -6,6 +6,7 @@ import { api, User } from '../lib/api';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
 import { useAuth } from '../modules/auth/hooks/useAuth';
+import { fmtDate, fmtDateTime } from '../lib/locale';
 
 export const UserDetailPage: React.FC = () => {
   const { employeeId } = useParams<{ employeeId: string }>();
@@ -57,9 +58,9 @@ export const UserDetailPage: React.FC = () => {
       const updated = await api.updateUser(employeeId, payload as any);
       setUser(updated);
       setIsEditing(false);
-      showFeedback({ title: '更新成功', message: '使用者資料已儲存', type: 'success', onConfirm: closeFeedback });
+      showFeedback({ title: t('users.detail.updateSuccess'), message: t('users.detail.updateSuccessMsg'), type: 'success', onConfirm: closeFeedback });
     } catch (err: any) {
-      showFeedback({ title: '更新失敗', message: err.message || 'Failed to update user', type: 'error', onConfirm: closeFeedback });
+      showFeedback({ title: t('users.detail.updateFailed'), message: err.message || t('users.detail.updateFailed'), type: 'error', onConfirm: closeFeedback });
     } finally {
       setIsSubmitting(false);
     }
@@ -82,14 +83,14 @@ export const UserDetailPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       await api.deleteUser(employeeId);
-      showFeedback({ 
-        title: '刪除成功', 
-        message: '使用者已成功移除', 
-        type: 'success', 
-        onConfirm: () => navigate('/users') 
+      showFeedback({
+        title: t('users.detail.deleteSuccess'),
+        message: t('users.detail.deleteSuccessMsg'),
+        type: 'success',
+        onConfirm: () => navigate('/users')
       });
     } catch (err: any) {
-      showFeedback({ title: '刪除失敗', message: err.message || 'Failed to delete user', type: 'error', onConfirm: closeFeedback });
+      showFeedback({ title: t('users.detail.deleteFailed'), message: err.message || t('users.detail.deleteFailed'), type: 'error', onConfirm: closeFeedback });
     } finally {
       setIsSubmitting(false);
     }
@@ -157,7 +158,7 @@ export const UserDetailPage: React.FC = () => {
             {!user.is_active && (
               <span className="flex items-center gap-1.5 px-3 py-1.5 bg-error/10 text-error text-xs font-black rounded-full border border-error/20">
                 <span className="material-symbols-outlined text-xs">person_off</span>
-                已離職
+                {t('users.detail.offboarded')}
               </span>
             )}
 
@@ -223,18 +224,18 @@ export const UserDetailPage: React.FC = () => {
                   <span className="font-bold text-on-surface">{user.department_id}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-outline font-medium">入職日期</span>
+                  <span className="text-outline font-medium">{t('users.detail.hireDateLabel')}</span>
                   <span className="font-bold text-on-surface">{user.hire_date ?? '—'}</span>
                 </div>
                 {user.termination_date && (
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-outline font-medium">離職日期</span>
+                    <span className="text-outline font-medium">{t('users.detail.terminationDateLabel')}</span>
                     <span className="font-bold text-error">{user.termination_date}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-outline font-medium">建立日期</span>
-                  <span className="font-bold text-on-surface">{new Date(user.created_at).toLocaleDateString('zh-TW')}</span>
+                  <span className="text-outline font-medium">{t('users.detail.createdAtLabel')}</span>
+                  <span className="font-bold text-on-surface">{fmtDate(user.created_at)}</span>
                 </div>
               </div>
             </section>
@@ -245,12 +246,12 @@ export const UserDetailPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${user.must_change_password ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`}></div>
                   <span className="text-sm font-bold text-on-surface">
-                    {user.must_change_password ? '需要變更密碼' : '密碼狀態正常'}
+                    {user.must_change_password ? t('users.detail.passwordNeedsChange') : t('users.detail.passwordOk')}
                   </span>
                 </div>
                 {user.last_password_changed_at && (
                   <div className="text-[11px] text-outline">
-                    最後更新：{new Date(user.last_password_changed_at).toLocaleString()}
+                    {t('users.detail.lastPasswordChanged', { date: fmtDateTime(user.last_password_changed_at) })}
                   </div>
                 )}
               </div>
@@ -262,7 +263,7 @@ export const UserDetailPage: React.FC = () => {
             <section className="bg-surface-container-lowest p-10 rounded-3xl shadow-sm border border-outline-variant/10 min-h-[500px]">
               <h2 className="text-2xl font-black tracking-tighter flex items-center gap-3 text-on-surface font-headline mb-10">
                 <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>person_check</span>
-                基本資料設定
+                {t('users.detail.basicSettings')}
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
@@ -287,17 +288,17 @@ export const UserDetailPage: React.FC = () => {
                     {t('profile.gender')}
                   </label>
                   {isEditing ? (
-                    <select 
+                    <select
                       className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20"
                       value={editData.sex}
                       onChange={(e) => setEditData({ ...editData, sex: e.target.value as any })}
                     >
-                      <option value="MALE">男 (Male)</option>
-                      <option value="FEMALE">女 (Female)</option>
+                      <option value="MALE">{t('users.detail.sexMale')}</option>
+                      <option value="FEMALE">{t('users.detail.sexFemale')}</option>
                     </select>
                   ) : (
                     <div className="p-4 bg-surface-container-low/30 rounded-xl text-sm font-bold text-on-surface">
-                      {user.sex === 'MALE' ? '男 (Male)' : '女 (Female)'}
+                      {user.sex === 'MALE' ? t('users.detail.sexMale') : t('users.detail.sexFemale')}
                     </div>
                   )}
                 </div>
@@ -305,16 +306,16 @@ export const UserDetailPage: React.FC = () => {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-outline flex items-center gap-2">
                     <span className="material-symbols-outlined text-sm">manage_accounts</span>
-                    系統角色
+                    {t('users.detail.roleLabel')}
                   </label>
                   {isEditing ? (
-                    <select 
+                    <select
                       className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20"
                       value={editData.role}
                       onChange={(e) => setEditData({ ...editData, role: e.target.value as any })}
                     >
-                      <option value="EMPLOYEE">一般員工 (Employee)</option>
-                      <option value="ADMIN">系統管理員 (Admin)</option>
+                      <option value="EMPLOYEE">{t('users.detail.roleEmployee')}</option>
+                      <option value="ADMIN">{t('users.detail.roleAdmin')}</option>
                     </select>
                   ) : (
                     <div className="p-4 bg-surface-container-low/30 rounded-xl text-sm font-bold text-on-surface text-capitalize">
@@ -338,7 +339,7 @@ export const UserDetailPage: React.FC = () => {
                   <div className="flex gap-4">
                     <span className="material-symbols-outlined text-primary">info</span>
                     <p className="text-xs text-primary font-medium leading-relaxed italic">
-                      正在編輯模式。部分核心欄位（如員工編號）不可修改。變更將在儲存並通過稽核後生效。
+                      {t('users.detail.editingNote')}
                     </p>
                   </div>
                 </div>

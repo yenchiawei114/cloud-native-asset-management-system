@@ -1,5 +1,7 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { RepairRequest } from '../../../lib/api';
+import { fmtDate, fmtNumber } from '../../../lib/locale';
 
 interface Attachment {
   id: number;
@@ -33,11 +35,6 @@ interface Props {
   onClose: () => void;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: '待審核', IN_PROGRESS: '維修中', DONE: '已完成', CANCELLED: '已取消', RETURNED: '已退回',
-  WAITING_LOANER_RETURN: '待備用機歸還',
-};
-
 const STATUS_COLORS: Record<string, string> = {
   OPEN: 'bg-amber-100 text-amber-700',
   IN_PROGRESS: 'bg-blue-100 text-blue-700',
@@ -54,6 +51,8 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
   inspection,
   onClose,
 }) => {
+  const { t } = useTranslation();
+
   if (!ticket) return null;
 
   const reqPhotos = attachments.filter(
@@ -75,7 +74,7 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
             <span className="text-xs font-mono text-primary font-bold">
               #TKT-{String(ticket.id).padStart(4, '0')}
             </span>
-            <h2 className="text-base font-bold text-on-surface mt-0.5">維修申請詳情</h2>
+            <h2 className="text-base font-bold text-on-surface mt-0.5">{t('ticketing.detail.title')}</h2>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-surface-container rounded-full transition-colors">
             <span className="material-symbols-outlined text-sm">close</span>
@@ -83,126 +82,128 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
         </div>
 
         <div className="p-5 space-y-5">
-          {/* 狀態 */}
+          {/* Status badge */}
           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_COLORS[ticket.status] ?? 'bg-slate-100 text-slate-600'}`}>
-            {STATUS_LABELS[ticket.status] ?? ticket.status}
+            {t(`ticketing.status.${ticket.status}`, { defaultValue: ticket.status })}
           </span>
 
-          {/* 基本資訊 */}
-          <Section title="基本資訊">
-            <InfoRow label="申請人" value={ticket.requester_name || `用戶 #${ticket.requester_id}`} />
-            <InfoRow label="申請日期" value={new Date(ticket.created_at).toLocaleDateString('zh-TW')} />
+          {/* Basic info */}
+          <Section title={t('ticketing.detail.basicInfo')}>
+            <InfoRow label={t('ticketing.detail.requester')} value={ticket.requester_name || `${t('ticketing.user')} #${ticket.requester_id}`} />
+            <InfoRow label={t('ticketing.detail.requestDate')} value={fmtDate(ticket.created_at)} />
             <InfoRow
-              label="備用機需求"
-              value={ticket.need_backup ? `需要${ticket.backup_spec ? `（${ticket.backup_spec}）` : ''}` : '不需要'}
+              label={t('ticketing.detail.backupNeeded')}
+              value={ticket.need_backup
+                ? `${t('ticketing.detail.backupNeededYes')}${ticket.backup_spec ? `（${ticket.backup_spec}）` : ''}`
+                : t('ticketing.detail.backupNeededNo')}
             />
             {ticket.loaner_asset_id && (
               <InfoRow
-                label="備用機"
+                label={t('ticketing.detail.backupAsset')}
                 value={ticket.loaner_asset_code && ticket.loaner_asset_name
                   ? `${ticket.loaner_asset_code} — ${ticket.loaner_asset_name}`
-                  : `資產 #${ticket.loaner_asset_id}`}
+                  : `${t('ticketing.assetLabel')} #${ticket.loaner_asset_id}`}
               />
             )}
             {ticket.pickup_location && (
-              <InfoRow label="收件地點" value={ticket.pickup_location} />
+              <InfoRow label={t('ticketing.detail.pickupLocation')} value={ticket.pickup_location} />
             )}
             {ticket.expected_completion_date && (
               <InfoRow
-                label="預計完成日期"
-                value={new Date(ticket.expected_completion_date).toLocaleDateString('zh-TW')}
+                label={t('ticketing.detail.expectedDate')}
+                value={fmtDate(ticket.expected_completion_date)}
               />
             )}
           </Section>
 
-          {/* 備用機歸還確認狀態 */}
+          {/* Loaner return confirmation */}
           {ticket.status === 'WAITING_LOANER_RETURN' && (
-            <Section title="備用機歸還確認" titleClass="text-purple-700">
+            <Section title={t('ticketing.detail.loanerReturnTitle')} titleClass="text-purple-700">
               <div className="space-y-2">
                 <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_lender_confirmed ? 'bg-green-50 text-green-700' : 'bg-surface-container text-on-surface-variant'}`}>
                   <span className="material-symbols-outlined text-sm">{ticket.loaner_return_lender_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
-                  出借方確認歸還{ticket.loaner_return_lender_confirmed ? '（已確認）' : '（待確認）'}
+                  {ticket.loaner_return_lender_confirmed ? t('ticketing.detail.lenderConfirmed') : t('ticketing.detail.lenderPending')}
                 </div>
                 <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_borrower_confirmed ? 'bg-green-50 text-green-700' : 'bg-surface-container text-on-surface-variant'}`}>
                   <span className="material-symbols-outlined text-sm">{ticket.loaner_return_borrower_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
-                  借用方確認歸還{ticket.loaner_return_borrower_confirmed ? '（已確認）' : '（待確認）'}
+                  {ticket.loaner_return_borrower_confirmed ? t('ticketing.detail.borrowerConfirmed') : t('ticketing.detail.borrowerPending')}
                 </div>
               </div>
             </Section>
           )}
 
-          {/* 故障描述 */}
-          <Section title="故障描述">
+          {/* Fault description */}
+          <Section title={t('ticketing.detail.faultDescription')}>
             <p className="text-sm text-on-surface bg-surface-container-low rounded-lg px-3 py-2 whitespace-pre-wrap leading-relaxed">
               {ticket.description}
             </p>
           </Section>
 
-          {/* 退回原因 */}
+          {/* Reject reason */}
           {ticket.status === 'RETURNED' && ticket.reject_reason && (
-            <Section title="退回原因" titleClass="text-error">
+            <Section title={t('ticketing.detail.rejectReason')} titleClass="text-error">
               <p className="text-sm text-error bg-error-container/20 rounded-lg px-3 py-2 whitespace-pre-wrap">
                 {ticket.reject_reason}
               </p>
             </Section>
           )}
 
-          {/* 申請附件 */}
+          {/* Request attachments */}
           {reqPhotos.length > 0 && (
-            <Section title="申請附件照片">
+            <Section title={t('ticketing.detail.attachmentPhotos')}>
               <PhotoGrid photos={reqPhotos} />
             </Section>
           )}
 
-          {/* ── 結案內容（DONE / WAITING_LOANER_RETURN 才顯示） ── */}
+          {/* Closed repair record */}
           {(ticket.status === 'DONE' || ticket.status === 'WAITING_LOANER_RETURN') && record && (
             <>
               <div className="border-t border-outline-variant/20 pt-4">
-                <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-3">結案維修紀錄</p>
+                <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-3">{t('ticketing.detail.repairRecord')}</p>
                 <div className="space-y-3">
                   <div className="bg-surface-container-low rounded-xl p-4 space-y-1">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">故障原因判斷</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">{t('ticketing.detail.issueAnalysis')}</p>
                     <p className="text-sm text-on-surface leading-relaxed whitespace-pre-wrap">{record.issue_description}</p>
                   </div>
                   <div className="bg-surface-container-low rounded-xl p-4 space-y-1">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">維修方案與結果</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">{t('ticketing.detail.solutionResult')}</p>
                     <p className="text-sm text-on-surface leading-relaxed whitespace-pre-wrap">{record.solution}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-surface-container-low rounded-xl p-4 space-y-1">
-                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">承辦廠商</p>
+                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">{t('ticketing.detail.vendor')}</p>
                       <p className="text-sm font-semibold text-on-surface">{record.vendor || '—'}</p>
                     </div>
                     <div className="bg-surface-container-low rounded-xl p-4 space-y-1">
-                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">完工日期</p>
+                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">{t('ticketing.detail.completionDate')}</p>
                       <p className="text-sm font-semibold text-on-surface">
-                        {record.repair_date ? new Date(record.repair_date).toLocaleDateString('zh-TW') : '—'}
+                        {fmtDate(record.repair_date)}
                       </p>
                     </div>
                   </div>
                   <div className="bg-primary/5 rounded-xl p-4 flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-primary uppercase tracking-wide">維修總費用</p>
-                    <p className="text-lg font-black text-primary">TWD ${record.cost.toLocaleString()}</p>
+                    <p className="text-[10px] font-bold text-primary uppercase tracking-wide">{t('ticketing.detail.totalCost')}</p>
+                    <p className="text-lg font-black text-primary">TWD ${fmtNumber(record.cost)}</p>
                   </div>
                 </div>
               </div>
 
-              {/* 維修過程照片 */}
               {processPhotos.length > 0 && (
-                <Section title="維修過程照片">
+                <Section title={t('ticketing.detail.processPhotos')}>
                   <PhotoGrid photos={processPhotos} />
                 </Section>
               )}
 
-              {/* 驗收結果 */}
               {inspection && (
                 <div className="border-t border-outline-variant/20 pt-4 space-y-3">
-                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">驗收結果</p>
+                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{t('ticketing.detail.inspectionResult')}</p>
                   <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${inspection.status ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                     <span className="material-symbols-outlined text-lg">
                       {inspection.status ? 'check_circle' : 'cancel'}
                     </span>
-                    <span className="text-sm font-bold">{inspection.status ? '驗收通過' : '驗收不通過'}</span>
+                    <span className="text-sm font-bold">
+                      {inspection.status ? t('ticketing.detail.inspectionPassed') : t('ticketing.detail.inspectionFailed')}
+                    </span>
                   </div>
                   {inspection.note && (
                     <p className="text-sm text-on-surface-variant bg-surface-container-low rounded-lg px-3 py-2 italic leading-relaxed">
@@ -211,7 +212,7 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
                   )}
                   {inspectionPhotos.length > 0 && (
                     <div className="space-y-1.5">
-                      <p className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide">驗收證明照片</p>
+                      <p className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide">{t('ticketing.detail.inspectionPhotos')}</p>
                       <PhotoGrid photos={inspectionPhotos} />
                     </div>
                   )}
@@ -220,25 +221,25 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
             </>
           )}
 
-          {/* 維修中：維修紀錄草稿（IN_PROGRESS） */}
+          {/* In-progress repair draft */}
           {ticket.status === 'IN_PROGRESS' && record && (
             <div className="border-t border-outline-variant/20 pt-4 space-y-3">
-              <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">維修進度紀錄（進行中）</p>
+              <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">{t('ticketing.detail.inProgressRecord')}</p>
               {record.issue_description && (
                 <div className="bg-surface-container-low rounded-xl p-4 space-y-1">
-                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">故障原因判斷</p>
+                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">{t('ticketing.detail.issueAnalysis')}</p>
                   <p className="text-sm text-on-surface leading-relaxed">{record.issue_description}</p>
                 </div>
               )}
               {record.solution && (
                 <div className="bg-surface-container-low rounded-xl p-4 space-y-1">
-                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">維修方案</p>
+                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">{t('ticketing.detail.repairPlan')}</p>
                   <p className="text-sm text-on-surface leading-relaxed">{record.solution}</p>
                 </div>
               )}
               {processPhotos.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide">維修過程照片</p>
+                  <p className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide">{t('ticketing.detail.processPhotos')}</p>
                   <PhotoGrid photos={processPhotos} />
                 </div>
               )}
@@ -251,7 +252,7 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"
           >
-            關閉
+            {t('ticketing.detail.close')}
           </button>
         </div>
       </div>

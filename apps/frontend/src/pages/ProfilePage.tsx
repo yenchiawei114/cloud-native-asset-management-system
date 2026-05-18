@@ -7,7 +7,6 @@ import { api, Department, OfficeLocation } from '../lib/api';
 
 type StatusMsg = { type: 'success' | 'error'; text: string };
 
-const SEX_LABELS: Record<string, string> = { MALE: '男', FEMALE: '女' };
 
 export const ProfilePage: React.FC = () => {
   const { t } = useTranslation();
@@ -52,11 +51,11 @@ export const ProfilePage: React.FC = () => {
   const handleSaveInfo = async () => {
     if (!user) return;
     if (!editData.name.trim()) {
-      setInfoStatus({ type: 'error', text: '姓名不能為空' });
+      setInfoStatus({ type: 'error', text: t('profile.nameRequired') });
       return;
     }
     if (!editData.email || !editData.email.includes('@')) {
-      setInfoStatus({ type: 'error', text: '請輸入有效的電子郵件' });
+      setInfoStatus({ type: 'error', text: t('profile.emailInvalid') });
       return;
     }
     setInfoSubmitting(true);
@@ -70,10 +69,10 @@ export const ProfilePage: React.FC = () => {
         location: editData.location || null,
       });
       await refreshUser();
-      setInfoStatus({ type: 'success', text: '個人資料已更新' });
+      setInfoStatus({ type: 'success', text: t('profile.infoUpdated') });
       setIsEditingInfo(false);
     } catch (err: any) {
-      setInfoStatus({ type: 'error', text: err.message || '更新失敗' });
+      setInfoStatus({ type: 'error', text: err.message || t('profile.updateFailed') });
     } finally {
       setInfoSubmitting(false);
     }
@@ -89,7 +88,7 @@ export const ProfilePage: React.FC = () => {
 
   const handleVerifyOldPw = async () => {
     if (!oldPw.trim()) {
-      setPwStatus({ type: 'error', text: '請輸入目前密碼' });
+      setPwStatus({ type: 'error', text: t('profile.currentPassword') });
       return;
     }
     setPwSubmitting(true);
@@ -98,7 +97,7 @@ export const ProfilePage: React.FC = () => {
       await api.verifyPassword(oldPw);
       setPwStep(2);
     } catch {
-      setPwStatus({ type: 'error', text: '目前密碼不正確' });
+      setPwStatus({ type: 'error', text: t('profile.passwordWrong') });
       setOldPw('');
     } finally {
       setPwSubmitting(false);
@@ -107,7 +106,7 @@ export const ProfilePage: React.FC = () => {
 
   const handleChangePassword = async () => {
     if (!newPw || !confirmPw) {
-      setPwStatus({ type: 'error', text: '請輸入新密碼' });
+      setPwStatus({ type: 'error', text: t('profile.newPassword') });
       return;
     }
     if (newPw !== confirmPw) {
@@ -120,7 +119,7 @@ export const ProfilePage: React.FC = () => {
     setPwSubmitting(false);
     if (result.success) {
       await refreshUser();
-      setPwStatus({ type: 'success', text: '密碼已成功修改' });
+      setPwStatus({ type: 'success', text: t('profile.passwordUpdated') });
       setOldPw('');
       setNewPw('');
       setConfirmPw('');
@@ -144,8 +143,8 @@ export const ProfilePage: React.FC = () => {
           <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
             <span className="material-symbols-outlined text-amber-500 mt-0.5 shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
             <div>
-              <p className="text-sm font-bold text-amber-800">請更新您的密碼</p>
-              <p className="text-xs text-amber-700 mt-0.5">您尚未修改系統預設密碼，建議立即前往下方「修改密碼」區段更新，以確保帳號安全。</p>
+              <p className="text-sm font-bold text-amber-800">{t('profile.changePasswordWarningTitle')}</p>
+              <p className="text-xs text-amber-700 mt-0.5">{t('profile.changePasswordWarningMsg')}</p>
             </div>
           </div>
         )}
@@ -163,7 +162,7 @@ export const ProfilePage: React.FC = () => {
                 className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
               >
                 <span className="material-symbols-outlined text-sm">edit</span>
-                編輯資料
+                {t('profile.editInfo')}
               </button>
             )}
           </div>
@@ -207,19 +206,19 @@ export const ProfilePage: React.FC = () => {
                 </div>
                 {/* 性別 */}
                 <div className="space-y-1.5">
-                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">性別</label>
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">{t('profile.sex')}</label>
                   <select
                     className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
                     value={editData.sex}
                     onChange={e => setEditData({ ...editData, sex: e.target.value })}
                   >
-                    <option value="MALE">男</option>
-                    <option value="FEMALE">女</option>
+                    <option value="MALE">{t('profile.sexMale')}</option>
+                    <option value="FEMALE">{t('profile.sexFemale')}</option>
                   </select>
                 </div>
                 {/* 部門 */}
                 <div className="space-y-1.5">
-                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">部門</label>
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">{t('profile.department')}</label>
                   <select
                     className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
                     value={editData.department_id}
@@ -232,7 +231,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
                 {/* 辦公地點 */}
                 <div className="space-y-1.5">
-                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">辦公地點</label>
+                  <label className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">{t('profile.officeLocation')}</label>
                   <select
                     className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
                     value={editData.location}
@@ -261,13 +260,13 @@ export const ProfilePage: React.FC = () => {
                   disabled={infoSubmitting}
                   className="px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl shadow-sm shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-opacity"
                 >
-                  {infoSubmitting ? '儲存中...' : '儲存變更'}
+                  {infoSubmitting ? t('common.saving') : t('common.save')}
                 </button>
                 <button
                   onClick={cancelEditInfo}
                   className="px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -276,9 +275,9 @@ export const ProfilePage: React.FC = () => {
               <Field label={t('profile.name')} value={user?.name} />
               <Field label={t('profile.employeeId')} value={user?.employee_id} />
               <Field label={t('profile.role')} value={user?.role === 'ADMIN' ? t('profile.admin') : t('profile.employee')} />
-              <Field label="性別" value={SEX_LABELS[user?.sex] ?? user?.sex} />
-              <Field label="部門" value={deptName} />
-              <Field label="辦公地點" value={user?.location ?? '—'} />
+              <Field label={t('profile.sex')} value={user?.sex === 'MALE' ? t('profile.sexMale') : user?.sex === 'FEMALE' ? t('profile.sexFemale') : user?.sex} />
+              <Field label={t('profile.department')} value={deptName} />
+              <Field label={t('profile.officeLocation')} value={user?.location ?? '—'} />
               <div className="space-y-1 col-span-2">
                 <span className="text-[0.65rem] uppercase tracking-wider font-bold text-outline block">{t('profile.email')}</span>
                 <p className="text-base font-medium text-on-surface">{user?.email ?? '---'}</p>
@@ -320,14 +319,14 @@ export const ProfilePage: React.FC = () => {
                 disabled={pwSubmitting}
                 className="px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl shadow-sm shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
-                {pwSubmitting ? '驗證中...' : '驗證'}
+                {pwSubmitting ? t('profile.verifying') : t('profile.verify')}
               </button>
             </div>
           ) : (
             <div className="space-y-4 max-w-sm">
               <p className="text-xs text-green-600 font-semibold flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-sm">check_circle</span>
-                驗證通過，請設定新密碼
+                {t('profile.verifySuccess')}
               </p>
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-on-surface-variant">
@@ -361,13 +360,13 @@ export const ProfilePage: React.FC = () => {
                   disabled={pwSubmitting}
                   className="px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl shadow-sm shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-opacity"
                 >
-                  {pwSubmitting ? '修改中...' : '確認修改'}
+                  {pwSubmitting ? t('profile.updatingPassword') : t('profile.confirmChange')}
                 </button>
                 <button
                   onClick={() => { setPwStep(1); setOldPw(''); setNewPw(''); setConfirmPw(''); setPwStatus(null); }}
                   className="px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>

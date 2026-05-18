@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Asset, RepairRequest, api } from '../../../lib/api';
 import { useAuth } from '../../auth/hooks/useAuth';
+import { fmtDate } from '../../../lib/locale';
 
 interface Props {
   asset: Asset;
@@ -43,7 +44,7 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({ asset, open, onClose 
       results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setTickets(results);
     } catch (err: any) {
-      setError(err.message || '載入失敗');
+      setError(err.message || t('ticketing.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,7 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({ asset, open, onClose 
       <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between">
           <div>
-            <h2 className="text-base font-bold text-on-surface">維修紀錄</h2>
+            <h2 className="text-base font-bold text-on-surface">{t('assets.repairHistory')}</h2>
             <p className="text-xs text-on-surface-variant mt-0.5">
               {asset.asset_code} · {asset.name}
             </p>
@@ -91,13 +92,20 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({ asset, open, onClose 
           ) : tickets.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center">
               <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">history</span>
-              <p className="text-sm text-on-surface-variant">尚無維修申請紀錄</p>
+              <p className="text-sm text-on-surface-variant">{t('ticketing.noRepairHistory')}</p>
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/70 border-b border-slate-100">
-                  {['工單編號', '狀態', '申請日期', '故障描述', '備用機', ''].map((col, i) => (
+                  {[
+                    t('ticketing.ticketId'),
+                    t('assets.statusLabel'),
+                    t('ticketing.requestDate'),
+                    t('ticketing.faultDescription'),
+                    t('ticketing.loanerColLabel'),
+                    '',
+                  ].map((col, i) => (
                     <th key={i} className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">
                       {col}
                     </th>
@@ -118,14 +126,14 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({ asset, open, onClose 
                       </span>
                     </td>
                     <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
-                      {new Date(ticket.created_at).toLocaleDateString()}
+                      {fmtDate(ticket.created_at)}
                     </td>
                     <td className="px-5 py-4 text-sm text-on-surface max-w-[240px] truncate">
                       {ticket.description}
                     </td>
                     <td className="px-5 py-4">
                       <span className={`text-xs font-semibold ${ticket.need_backup ? 'text-primary' : 'text-on-surface-variant'}`}>
-                        {ticket.need_backup ? '需要' : '不需要'}
+                        {ticket.need_backup ? t('ticketing.backupNeeded') : t('ticketing.backupNotNeeded')}
                       </span>
                     </td>
                     <td className="px-5 py-4">
@@ -134,7 +142,7 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({ asset, open, onClose 
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-colors whitespace-nowrap"
                       >
                         <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-                        詳細資訊
+                        {t('assets.repairs.actions.detail')}
                       </button>
                     </td>
                   </tr>

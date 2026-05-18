@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { userService } from '../services/userService';
 
 export const useProfile = () => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<any[]>([]);
@@ -26,7 +28,7 @@ export const useProfile = () => {
       await userService.changePassword(oldPassword, newPassword);
       return { success: true };
     } catch (err: any) {
-      setError(err.message || '密碼更新失敗');
+      setError(err.message || t('profile.passwordError'));
       return { success: false, message: err.message };
     } finally {
       setLoading(false);

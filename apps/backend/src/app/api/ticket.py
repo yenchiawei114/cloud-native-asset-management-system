@@ -468,7 +468,7 @@ async def create_ticket(
         action=Action.CREATE,
         target_type=TargetType.TICKET,
         target_id=row.id,
-        target_name=f"報修單 #{row.id}",
+        target_name=f"#{str(row.id).zfill(4)}",
         detail={"after": payload.model_dump(mode="json")},
     )
     await db.commit()
@@ -517,7 +517,7 @@ async def update_ticket(
         action=Action.UPDATE,
         target_type=TargetType.TICKET,
         target_id=ticket_id,
-        target_name=f"報修單 #{ticket_id}",
+        target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": before, "after": after},
     )
     await db.commit()
@@ -601,7 +601,7 @@ async def update_ticket_status(
         action=Action.UPDATE,
         target_type=TargetType.TICKET,
         target_id=ticket_id,
-        target_name=f"報修單 #{ticket_id}",
+        target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": {"status": old_status}, "after": {"status": payload.status}},
     )
     await db.commit()
@@ -683,7 +683,7 @@ async def close_ticket(
         action=Action.UPDATE,
         target_type=TargetType.TICKET,
         target_id=ticket_id,
-        target_name=f"報修單 #{ticket_id}",
+        target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": {"status": "IN_PROGRESS"}, "after": {"status": new_status}},
     )
     await db.commit()
@@ -750,7 +750,7 @@ async def confirm_loaner_return(
         action=Action.UPDATE,
         target_type=TargetType.TICKET,
         target_id=ticket_id,
-        target_name=f"報修單 #{ticket_id}",
+        target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"after": {
             "loaner_return_lender_confirmed": row.loaner_return_lender_confirmed,
             "loaner_return_borrower_confirmed": row.loaner_return_borrower_confirmed,
@@ -785,7 +785,7 @@ async def delete_ticket(ticket_id: int, db: AsyncSession = Depends(get_db), user
         action=Action.DELETE,
         target_type=TargetType.TICKET,
         target_id=ticket_id,
-        target_name=f"報修單 #{ticket_id}",
+        target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": before},
     )
     await db.commit()

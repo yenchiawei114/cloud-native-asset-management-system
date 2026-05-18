@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Asset } from '../../../lib/api';
 import { ticketService } from '../services/ticketService';
 import { useAuth } from '../../auth/hooks/useAuth';
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, onSuccess }) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [description, setDescription] = useState('');
   const [needBackup, setNeedBackup] = useState(false);
@@ -27,7 +29,7 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
 
   const handleSubmit = async () => {
     if (!description.trim()) {
-      setError('請填寫故障描述');
+      setError(t('ticketing.new.descriptionRequired'));
       return;
     }
     setSubmitting(true);
@@ -47,7 +49,7 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
       }
       onSuccess();
     } catch (err: any) {
-      setError(err.message || '提交失敗，請重試');
+      setError(err.message || t('ticketing.new.submitFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -61,7 +63,7 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between">
           <div>
-            <h2 className="text-base font-bold text-on-surface">建立維修申請</h2>
+            <h2 className="text-base font-bold text-on-surface">{t('ticketing.new.title')}</h2>
             <p className="text-xs text-on-surface-variant mt-0.5">
               {asset.asset_code} · {asset.name}
             </p>
@@ -74,11 +76,11 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
         <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto">
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-on-surface">
-              故障描述 <span className="text-error">*</span>
+              {t('ticketing.new.descriptionLabel')} <span className="text-error">*</span>
             </label>
             <textarea
               className="w-full bg-surface-container-low border-none rounded-xl p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none resize-none min-h-[100px]"
-              placeholder="請描述設備出現的問題，例如：螢幕閃爍、無法開機..."
+              placeholder={t('ticketing.new.descriptionPlaceholder')}
               value={description}
               onChange={e => setDescription(e.target.value)}
             />
@@ -92,13 +94,13 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
                 checked={needBackup}
                 onChange={e => setNeedBackup(e.target.checked)}
               />
-              <span className="text-sm font-semibold text-on-surface">需要備用機</span>
+              <span className="text-sm font-semibold text-on-surface">{t('ticketing.new.needBackup')}</span>
             </label>
             {needBackup && (
               <input
                 type="text"
                 className="w-full bg-surface-container-low border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                placeholder="備用機規格需求，例如：32GB RAM, M1 Pro..."
+                placeholder={t('ticketing.new.backupSpecPlaceholder')}
                 value={backupSpec}
                 onChange={e => setBackupSpec(e.target.value)}
               />
@@ -106,11 +108,11 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
           </div>
 
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-on-surface">附件上傳</label>
+            <label className="block text-sm font-semibold text-on-surface">{t('ticketing.new.attachments')}</label>
             <label className="block border-2 border-dashed border-slate-200 rounded-xl p-5 text-center hover:border-primary/40 transition-colors cursor-pointer">
               <input type="file" className="hidden" multiple accept="image/*" onChange={handleFileChange} />
               <span className="material-symbols-outlined text-3xl text-slate-300 block mb-1">cloud_upload</span>
-              <p className="text-sm text-on-surface-variant">點擊或拖曳照片至此處</p>
+              <p className="text-sm text-on-surface-variant">{t('ticketing.new.uploadHint')}</p>
             </label>
             {files.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -139,14 +141,14 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
             onClick={onClose}
             className="px-5 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             disabled={submitting}
             className="px-6 py-2 bg-primary text-white text-sm font-bold rounded-lg shadow-sm shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-all"
           >
-            {submitting ? '送出中...' : '送出申請'}
+            {submitting ? t('ticketing.new.submitting') : t('ticketing.new.submit')}
           </button>
         </div>
       </div>

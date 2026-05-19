@@ -130,6 +130,69 @@ describe('UserSearchCombobox', () => {
         expect(onSelect).toHaveBeenCalledWith(null)
     })
 
+    test('syncs input text when selected user is cleared externally', async () => {
+        const onSelect = vi.fn()
+
+        const { rerender } = render(
+            <UserSearchCombobox
+                label="User"
+                selectedUser={{
+                    id: 1,
+                    name: 'John Doe',
+                    employee_id: 'EMP001',
+                }}
+                onSelect={onSelect}
+            />
+        )
+
+        expect(screen.getByRole('textbox')).toHaveValue('John Doe（EMP001）')
+        expect(screen.getByRole('button')).toBeInTheDocument()
+
+        rerender(
+            <UserSearchCombobox
+                label="User"
+                selectedUser={null}
+                onSelect={onSelect}
+            />
+        )
+
+        expect(screen.getByRole('textbox')).toHaveValue('')
+        expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    })
+
+    test('keeps typed text when the current selection is cleared by typing', async () => {
+        const onSelect = vi.fn()
+
+        const { rerender } = render(
+            <UserSearchCombobox
+                label="User"
+                selectedUser={{
+                    id: 1,
+                    name: 'John Doe',
+                    employee_id: 'EMP001',
+                }}
+                onSelect={onSelect}
+            />
+        )
+
+        const input = screen.getByRole('textbox')
+
+        await userEvent.type(input, 'a')
+
+        expect(onSelect).toHaveBeenCalledWith(null)
+        expect(input).toHaveValue('John Doe（EMP001）a')
+
+        rerender(
+            <UserSearchCombobox
+                label="User"
+                selectedUser={null}
+                onSelect={onSelect}
+            />
+        )
+
+        expect(screen.getByRole('textbox')).toHaveValue('John Doe（EMP001）a')
+    })
+
     test('closes dropdown when clicking outside', async () => {
         mockedListUsers.mockResolvedValue(mockUsers as any)
 

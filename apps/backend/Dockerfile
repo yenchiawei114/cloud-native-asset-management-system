@@ -26,7 +26,7 @@ FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-RUN addgroup --system app && adduser --system --ingroup app app
+RUN addgroup --system --gid 1000 app && adduser --system --uid 1000 --ingroup app app
 
 # 只拷貝 venv，不帶 builder 的源碼與工具鏈
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
@@ -42,7 +42,7 @@ ENV VIRTUAL_ENV=/app/.venv \
     PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
-USER app
+USER 1000
 
 EXPOSE 8000
 

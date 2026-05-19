@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migration
+  namespace: asset-mgmt
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: asset-mgmt-app
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z cloudsql-proxy 3306; do
+                echo "waiting for cloudsql-proxy..."
+                sleep 2
+              done
+      containers:
+        - name: migration
+          image: asia-east1-docker.pkg.dev/cloud-native-project-494008/asset-mgmt/backend:latest
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: asset-mgmt-config
+            - secretRef:
+                name: asset-mgmt-secrets
+          env:
+            - name: DB_SYNC_URL
+              value: "mysql+pymysql://app:$(DB_PASSWORD)@cloudsql-proxy:3306/asset_mgmt"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false

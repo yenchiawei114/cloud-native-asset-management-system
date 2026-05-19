@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import { describe, expect, it } from 'vitest';
-import { TextField } from '../../src/modules/core/design-system/TextField';
+import { TextField } from '../../../src/modules/core/design-system/TextField';
 
 describe('TextField', () => {
     it('renders the label and input', () => {

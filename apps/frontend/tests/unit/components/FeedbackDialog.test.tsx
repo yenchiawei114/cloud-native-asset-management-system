@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect } from 'vitest';
 import { I18nextProvider } from 'react-i18next';
-import i18n from '../../src/i18n';
-import { FeedbackDialog, FeedbackDialogProps } from '../../src/modules/core/components/FeedbackDialog';
+import i18n from '../../../src/i18n';
+import { FeedbackDialog, FeedbackDialogProps } from '../../../src/modules/core/components/FeedbackDialog';
 
 // Mock the Button component to isolate FeedbackDialog testing
 vi.mock('../../src/modules/core/design-system/Button', () => ({

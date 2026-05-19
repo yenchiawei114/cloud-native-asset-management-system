@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { ProfileInfo } from '../../src/modules/users/components/ProfileInfo.tsx'
+import { ProfileInfo } from '../../../src/modules/users/components/ProfileInfo.tsx'
 
 describe('ProfileInfo', () => {
     it('renders profile details', () => {

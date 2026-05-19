@@ -52,14 +52,25 @@ class GCSStorage(Storage):
 
     `signed_urls=True` 會簽發短期 V4 signed URL，對於私有 bucket（正式環境常見設定）為必需。
     當 `signed_urls=False` 時會退回 `public_url`，僅適用於 bucket／object 可公開讀取的情境。
+
+    GKE Workload Identity 只有 access token 沒有 private key，無法直接 sign。
+    解法：透過 IAM signBlob API，需授予 SA roles/iam.serviceAccountTokenCreator。
     """
 
     def __init__(self, bucket: str, signed_urls: bool, url_ttl_seconds: int) -> None:
+        import google.auth
+        import google.auth.transport.requests
         from google.cloud import storage as gcs
 
-        self._bucket = gcs.Client().bucket(bucket)
+        self._credentials, _ = google.auth.default()
+        self._auth_request = google.auth.transport.requests.Request()
+        self._bucket = gcs.Client(credentials=self._credentials).bucket(bucket)
         self._signed_urls = signed_urls
         self._url_ttl = timedelta(seconds=url_ttl_seconds)
+
+    def _refresh_credentials(self) -> None:
+        if not self._credentials.valid:
+            self._credentials.refresh(self._auth_request)
 
     async def upload(self, key: str, data: bytes) -> str:
         blob = self._bucket.blob(key)
@@ -69,10 +80,13 @@ class GCSStorage(Storage):
     def get_url(self, key: str) -> str:
         blob = self._bucket.blob(key)
         if self._signed_urls:
+            self._refresh_credentials()
             return blob.generate_signed_url(
                 version="v4",
                 expiration=self._url_ttl,
                 method="GET",
+                service_account_email=self._credentials.service_account_email,
+                access_token=self._credentials.token,
             )
         return blob.public_url
 

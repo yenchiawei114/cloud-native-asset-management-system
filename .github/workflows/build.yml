@@ -93,8 +93,13 @@ jobs:
       - name: Apply base manifests (without migration job)
         run: |
           kustomize build infra/k8s/overlays/production \
-            | grep -v "kind: Job" \
-            | kubectl apply -f -
+            | python3 -c "
+import sys, yaml
+for doc in yaml.safe_load_all(sys.stdin):
+    if doc and doc.get('kind') != 'Job':
+        print('---')
+        print(yaml.dump(doc, default_flow_style=False))
+" | kubectl apply -f -
 
       - name: Run database migration
         run: |

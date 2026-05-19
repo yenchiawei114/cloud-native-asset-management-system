@@ -90,16 +90,8 @@ jobs:
       - name: Delete previous migration job
         run: kubectl delete job migration -n asset-mgmt --ignore-not-found=true
 
-      - name: Apply base manifests (without migration job)
-        run: |
-          kustomize build infra/k8s/overlays/production \
-            | python3 -c "
-import sys, yaml
-for doc in yaml.safe_load_all(sys.stdin):
-    if doc and doc.get('kind') != 'Job':
-        print('---')
-        print(yaml.dump(doc, default_flow_style=False))
-" | kubectl apply -f -
+      - name: Apply manifests
+        run: kustomize build infra/k8s/overlays/production | kubectl apply -f -
 
       - name: Run database migration
         run: |

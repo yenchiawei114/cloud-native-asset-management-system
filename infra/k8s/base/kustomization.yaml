@@ -15,6 +15,5 @@ resources:
   - frontend/service.yaml
   - cloudsql-proxy/deployment.yaml
   - cloudsql-proxy/service.yaml
-  - migration/job.yaml
   - ingress/ingress.yaml
   - monitoring/service-monitor.yaml

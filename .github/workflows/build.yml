@@ -3,6 +3,7 @@ name: Build & Push Images
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 env:
   PROJECT_ID: cloud-native-project-494008

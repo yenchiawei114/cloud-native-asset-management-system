@@ -107,6 +107,10 @@ class FakeSession:
                 obj.version = 1
             if getattr(obj, "status", None) is None:
                 obj.status = "OPEN"
+            if getattr(obj, "loaner_return_borrower_confirmed", None) is None:
+                obj.loaner_return_borrower_confirmed = False
+            if getattr(obj, "loaner_return_lender_confirmed", None) is None:
+                obj.loaner_return_lender_confirmed = False
             self.tickets[obj.id] = obj
             self.pending_ticket = None
 
@@ -128,6 +132,7 @@ def _make_token(user_id: int, role: str) -> str:
             "user_id": user_id,
             "role": role,
             "employee_id": f"E{user_id:08d}",
+            "name": f"User {user_id}",
         }
     )
 
@@ -154,14 +159,15 @@ def _create_asset(client, admin_token: str, owner_id: int | None = None) -> int:
     return response.json()["id"]
 
 
-def _create_ticket(client, asset_id: int, requester_id: int, description: str = "Keyboard broken") -> dict:
+def _create_ticket(client, asset_id: int, requester_id: int, description: str = "Keyboard broken", token: str | None = None) -> dict:
     payload = {
         "asset_id": asset_id,
         "requester_id": requester_id,
         "description": description,
         "need_backup": False,
     }
-    response = client.post("/api/tickets", json=payload)
+    headers = _auth_header(token) if token else {}
+    response = client.post("/api/tickets", json=payload, headers=headers)
     assert response.status_code == 201
     return response.json()
 
@@ -211,7 +217,7 @@ def test_when_admin_lists_tickets_then_should_return_200_with_list(client):
     # arrange: admin login, create asset and ticket
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    _create_ticket(client, asset_id, requester_id=admin_user_id)
+    _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     # act: call GET /api/tickets with admin token
     response = client.get("/api/tickets", headers=_auth_header(admin_token))
@@ -243,7 +249,7 @@ def test_when_receive_valid_ticket_creation_request_then_should_return_201_with_
         "backup_spec": "Backup user profile",
     }
     # act: call POST /api/tickets with valid payload
-    response = client.post("/api/tickets", json=payload)
+    response = client.post("/api/tickets", json=payload, headers=_auth_header(admin_token))
 
     assert response.status_code == 201
     data = response.json()
@@ -265,7 +271,7 @@ def test_when_receive_ticket_request_missing_required_field_then_should_return_4
         "need_backup": False,
     }
     # act: call POST /api/tickets with missing description field
-    response = client.post("/api/tickets", json=payload)
+    response = client.post("/api/tickets", json=payload, headers=_auth_header(admin_token))
 
     assert response.status_code == 422
 
@@ -274,7 +280,7 @@ def test_when_owner_gets_ticket_then_should_return_200(client):
     # arrange: admin creates ticket, owner generates token
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     owner_token = _make_token(user_id=admin_user_id, role="EMPLOYEE")
     # act: call GET /api/tickets/{id} with owner token
@@ -288,7 +294,7 @@ def test_when_non_owner_gets_ticket_then_should_return_403(client):
     # arrange: admin creates ticket, non-owner generates token with different user_id
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     non_owner_token = _make_token(user_id=admin_user_id + 1, role="EMPLOYEE")
     # act: call GET /api/tickets/{id} with non-owner token
@@ -311,7 +317,7 @@ def test_when_owner_updates_ticket_then_should_return_200_and_increment_version(
     # arrange: admin creates ticket, owner prepares update payload
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     owner_token = _make_token(user_id=admin_user_id, role="EMPLOYEE")
     payload = {
@@ -339,7 +345,7 @@ def test_when_non_owner_updates_ticket_then_should_return_403(client):
     # arrange: admin creates ticket, non-owner generates token and prepares update payload
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     non_owner_token = _make_token(user_id=admin_user_id + 1, role="EMPLOYEE")
     payload = {
@@ -363,7 +369,7 @@ def test_when_owner_deletes_ticket_then_should_return_204(client):
     # arrange: admin creates ticket, owner generates token
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     owner_token = _make_token(user_id=admin_user_id, role="EMPLOYEE")
     # act: call DELETE /api/tickets/{id} with owner token
@@ -376,7 +382,7 @@ def test_when_non_owner_deletes_ticket_then_should_return_403(client):
     # arrange: admin creates ticket, non-owner generates token with different user_id
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     non_owner_token = _make_token(user_id=admin_user_id + 1, role="EMPLOYEE")
     # act: call DELETE /api/tickets/{id} with non-owner token
@@ -389,7 +395,7 @@ def test_when_admin_patches_ticket_status_then_should_return_200(client):
     # arrange: admin creates ticket, prepares status update payload
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     # act: call PATCH /api/tickets/{id}/status with valid status
     response = client.patch(
@@ -408,7 +414,7 @@ def test_when_non_admin_patches_ticket_status_then_should_return_403(client):
     # arrange: admin creates ticket, employee generates token
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     employee_token = _make_token(user_id=admin_user_id, role="EMPLOYEE")
     # act: call PATCH /api/tickets/{id}/status with employee token
@@ -425,7 +431,7 @@ def test_when_admin_receives_invalid_ticket_status_then_should_return_422(client
     # arrange: admin creates ticket, prepares invalid status value
     admin_token, admin_user_id = _login_admin(client)
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    created = _create_ticket(client, asset_id, requester_id=admin_user_id)
+    created = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
     # act: call PATCH /api/tickets/{id}/status with invalid status value
     response = client.patch(

@@ -12,6 +12,9 @@ from sqlalchemy import select
 from app.core.db import get_db
 from app.main import app
 from app.models import Base, User, NotificationPreference, Department, AuditLog
+from app.models.asset import Asset, AssetTransfer
+from app.models.office_location import OfficeLocation
+from app.models.ticket import RepairRequest
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -21,8 +24,43 @@ class AutoIdAsyncSession:
 
     def __init__(self, session):
         self._session = session
-        self.id_counters = {"Department": 1, "User": 3, "NotificationPreference": 2, "AuditLog": 1}
+        self.id_counters = {
+            "Department": 1,
+            "User": 3,
+            "NotificationPreference": 2,
+            "AuditLog": 1,
+            "OfficeLocation": 1,
+            "Asset": 1,
+            "AssetTransfer": 1,
+            "RepairRequest": 1,
+        }
         self._pending_objects = []
+
+    def _assign_id_if_needed(self, obj):
+        if isinstance(obj, Department) and obj.id is None:
+            obj.id = self.id_counters["Department"]
+            self.id_counters["Department"] += 1
+        elif isinstance(obj, User) and obj.id is None:
+            obj.id = self.id_counters["User"]
+            self.id_counters["User"] += 1
+        elif isinstance(obj, NotificationPreference) and obj.id is None:
+            obj.id = self.id_counters["NotificationPreference"]
+            self.id_counters["NotificationPreference"] += 1
+        elif isinstance(obj, AuditLog) and obj.id is None:
+            obj.id = self.id_counters["AuditLog"]
+            self.id_counters["AuditLog"] += 1
+        elif isinstance(obj, OfficeLocation) and obj.id is None:
+            obj.id = self.id_counters["OfficeLocation"]
+            self.id_counters["OfficeLocation"] += 1
+        elif isinstance(obj, Asset) and obj.id is None:
+            obj.id = self.id_counters["Asset"]
+            self.id_counters["Asset"] += 1
+        elif isinstance(obj, AssetTransfer) and obj.id is None:
+            obj.id = self.id_counters["AssetTransfer"]
+            self.id_counters["AssetTransfer"] += 1
+        elif isinstance(obj, RepairRequest) and obj.id is None:
+            obj.id = self.id_counters["RepairRequest"]
+            self.id_counters["RepairRequest"] += 1
 
     async def _assign_ids(self):
         """Assign IDs to new objects before flush/commit."""
@@ -30,18 +68,7 @@ class AutoIdAsyncSession:
         all_objects = list(self._session.new) + self._pending_objects
 
         for obj in all_objects:
-            if isinstance(obj, Department) and obj.id is None:
-                obj.id = self.id_counters["Department"]
-                self.id_counters["Department"] += 1
-            if isinstance(obj, User) and obj.id is None:
-                obj.id = self.id_counters["User"]
-                self.id_counters["User"] += 1
-            elif isinstance(obj, NotificationPreference) and obj.id is None:
-                obj.id = self.id_counters["NotificationPreference"]
-                self.id_counters["NotificationPreference"] += 1
-            elif isinstance(obj, AuditLog) and obj.id is None:
-                obj.id = self.id_counters["AuditLog"]
-                self.id_counters["AuditLog"] += 1
+            self._assign_id_if_needed(obj)
 
         # Clear pending after assignment
         self._pending_objects.clear()
@@ -75,14 +102,16 @@ class AutoIdAsyncSession:
 
     def add(self, obj):
         # Track objects being added for ID assignment
-        if isinstance(obj, (Department, User, NotificationPreference, AuditLog)):
+        if isinstance(obj, (Department, User, NotificationPreference, AuditLog, OfficeLocation, Asset, AssetTransfer, RepairRequest)):
+            self._assign_id_if_needed(obj)
             self._pending_objects.append(obj)
         return self._session.add(obj)
 
     def add_all(self, objs):
         # Track objects being added for ID assignment
         for obj in objs:
-            if isinstance(obj, (Department, User, NotificationPreference, AuditLog)):
+            if isinstance(obj, (Department, User, NotificationPreference, AuditLog, OfficeLocation, Asset, AssetTransfer, RepairRequest)):
+                self._assign_id_if_needed(obj)
                 self._pending_objects.append(obj)
         return self._session.add_all(objs)
 

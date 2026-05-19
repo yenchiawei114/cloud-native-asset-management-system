@@ -2,14 +2,18 @@
 Integration tests for user API endpoints.
 Tests complete flows with real database interactions.
 """
+from datetime import date, datetime, timezone, timedelta
+
 import pytest
-from sqlalchemy import delete, select
-from datetime import datetime, timezone, timedelta
+from sqlalchemy import delete, insert, select
 
 from app.core.security import create_access_token, verify_password
+from app.models.asset import Asset, AssetStatus, AssetTransfer, AssetType
 from app.models.audit_log import AuditLog
 from app.models.department import Department
+from app.models.office_location import OfficeLocation
 from app.models.notification_preference import NotificationPreference, NoteType
+from app.models.ticket import RepairRequest
 from app.models.user import Role, Sex, User
 from ..utils.utils import random_email, random_employee_id, random_lower_string, random_date
 
@@ -77,6 +81,98 @@ async def _seed_user_data(test_db_session):
         "admin": admin,
         "employee": employee,
         "admin_pref": admin_pref,
+    }
+
+
+async def _seed_offboarding_data(test_db_session, department, admin, employee):
+    owned_asset = Asset(
+        id=101,
+        asset_code="A000000101",
+        name="Employee Laptop",
+        type=AssetType.LAPTOP,
+        model="ThinkPad X1",
+        specification="16GB RAM / 512GB SSD",
+        vendor="Lenovo",
+        purchase_date=date(2025, 1, 1),
+        purchase_price=1500,
+        storage_location="HQ",
+        owner_id=employee.id,
+        borrower_id=None,
+        activation_date=date(2025, 1, 2),
+        warranty_expiry=date(2028, 1, 1),
+        status=AssetStatus.IN_USE,
+        version=1,
+    )
+    borrowed_asset = Asset(
+        id=102,
+        asset_code="A000000102",
+        name="Loaner Laptop",
+        type=AssetType.LAPTOP,
+        model="MacBook Air",
+        specification="8GB RAM / 256GB SSD",
+        vendor="Apple",
+        purchase_date=date(2025, 2, 1),
+        purchase_price=1200,
+        storage_location="HQ",
+        owner_id=admin.id,
+        borrower_id=employee.id,
+        activation_date=date(2025, 2, 2),
+        warranty_expiry=date(2028, 2, 1),
+        status=AssetStatus.BORROWED,
+        version=1,
+    )
+    test_db_session.add_all([owned_asset, borrowed_asset])
+    await test_db_session.commit()
+
+    await test_db_session.execute(
+        insert(AssetTransfer).values(
+            id=201,
+            asset_id=owned_asset.id,
+            initiator_id=admin.id,
+            from_owner_id=employee.id,
+            to_owner_id=admin.id,
+            status="PENDING",
+            from_confirmed=False,
+            to_confirmed=False,
+            is_offboarding_transfer=False,
+        )
+    )
+    await test_db_session.execute(
+        insert(RepairRequest).values(
+            id=301,
+            asset_id=owned_asset.id,
+            requester_id=employee.id,
+            description="Open repair request for offboarding",
+            need_backup=False,
+            status="OPEN",
+            loaner_asset_id=borrowed_asset.id,
+            version=1,
+        )
+    )
+    await test_db_session.execute(
+        insert(RepairRequest).values(
+            id=302,
+            asset_id=owned_asset.id,
+            requester_id=employee.id,
+            description="Active repair request for offboarding",
+            need_backup=False,
+            status="IN_PROGRESS",
+            loaner_asset_id=None,
+            version=1,
+        )
+    )
+    await test_db_session.commit()
+
+    pending_transfer = await test_db_session.get(AssetTransfer, 201)
+    open_ticket = await test_db_session.get(RepairRequest, 301)
+    active_ticket = await test_db_session.get(RepairRequest, 302)
+
+    return {
+        "owned_asset": owned_asset,
+        "borrowed_asset": borrowed_asset,
+        "pending_transfer": pending_transfer,
+        "open_ticket": open_ticket,
+        "active_ticket": active_ticket,
     }
 
 
@@ -525,3 +621,177 @@ async def test_when_create_new_notification_preference_type_then_should_return_c
     prefs = result.scalars().all()
     assert len(prefs) == 2
     assert {p.type.name for p in prefs} == {"EMAIL", "SLACK"}
+
+
+async def test_when_list_departments_and_office_locations_then_should_return_rows(
+    client,
+    admin_token,
+    seeded_user_data,
+    test_db_session,
+):
+    office_location = OfficeLocation(id=1, name="Taipei HQ")
+    test_db_session.add(office_location)
+    await test_db_session.commit()
+
+    response = await client.get("/api/departments", headers=_auth_header(admin_token))
+    assert response.status_code == 200
+    assert response.json() == [{"id": seeded_user_data["department"].id, "name": "IT"}]
+
+    response = await client.get("/api/office-locations", headers=_auth_header(admin_token))
+    assert response.status_code == 200
+    assert response.json() == [{"id": office_location.id, "name": "Taipei HQ"}]
+
+
+async def test_when_verify_password_and_change_email_then_should_return_success(
+    client,
+    admin_token,
+    seeded_user_data,
+    test_db_session,
+):
+    response = await client.post(
+        "/api/users/me/verify-password",
+        json={"current_password": "testpassword"},
+        headers=_auth_header(admin_token),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"valid": True}
+
+    new_email = random_email()
+    response = await client.put(
+        "/api/users/me/email",
+        json={"email": new_email},
+        headers=_auth_header(admin_token),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == new_email
+
+    result = await test_db_session.execute(select(User).where(User.id == seeded_user_data["admin"].id))
+    row = result.scalar_one_or_none()
+    assert row is not None
+    assert row.email == new_email
+
+
+async def test_when_admin_updates_other_admin_or_deletes_self_then_should_be_blocked(
+    client,
+    admin_token,
+    seeded_user_data,
+    test_db_session,
+):
+    second_admin = User(
+        id=3,
+        employee_id="A00000003",
+        password="secondpassword",
+        name="Second Admin",
+        sex=Sex.MALE,
+        department_id=seeded_user_data["department"].id,
+        role=Role.ADMIN,
+        email="second.admin@example.com",
+        must_change_password=False,
+        last_password_changed_at=None,
+        created_at=random_date(),
+    )
+    test_db_session.add(second_admin)
+    await test_db_session.commit()
+
+    response = await client.put(
+        f"/api/users/{second_admin.employee_id}",
+        json={"name": "Blocked Update"},
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 403
+
+    response = await client.delete(
+        f"/api/users/{seeded_user_data['admin'].employee_id}",
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 400
+
+
+async def test_when_offboarding_user_with_assets_and_tickets_then_should_track_and_finalize(
+    client,
+    admin_token,
+    seeded_user_data,
+    test_db_session,
+):
+    employee = seeded_user_data["employee"]
+    admin = seeded_user_data["admin"]
+    offboarding_data = await _seed_offboarding_data(test_db_session, seeded_user_data["department"], admin, employee)
+
+    response = await client.get(
+        f"/api/users/{employee.employee_id}/offboarding-checklist",
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 200
+    checklist = response.json()
+    assert checklist["is_offboarding_in_progress"] is False
+    assert len(checklist["owned_assets"]) == 1
+    assert len(checklist["borrowed_loaners"]) == 1
+    assert len(checklist["pending_transfers"]) == 1
+    assert len(checklist["open_tickets"]) == 1
+    assert len(checklist["in_progress_tickets"]) == 1
+
+    today = date.today().isoformat()
+    response = await client.post(
+        f"/api/users/{employee.employee_id}/offboard",
+        json={"asset_successor_id": admin.id, "termination_date": today},
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 200, response.json()
+    data = response.json()
+    assert data["termination_date"] == today
+    assert data["is_active"] is True
+
+    result = await test_db_session.execute(select(AssetTransfer).where(AssetTransfer.id == offboarding_data["pending_transfer"].id))
+    original_transfer = result.scalar_one_or_none()
+    assert original_transfer is not None
+    assert original_transfer.status == "CANCELLED"
+
+    result = await test_db_session.execute(
+        select(AssetTransfer).where(
+            AssetTransfer.from_owner_id == employee.id,
+            AssetTransfer.is_offboarding_transfer == True,
+        )
+    )
+    created_transfers = result.scalars().all()
+    assert len(created_transfers) == 1
+    created_transfer = created_transfers[0]
+
+    result = await test_db_session.execute(select(RepairRequest).where(RepairRequest.id == offboarding_data["active_ticket"].id))
+    active_ticket = result.scalar_one_or_none()
+    assert active_ticket is not None
+    assert active_ticket.requester_id == admin.id
+    assert active_ticket.version == 2
+
+    result = await test_db_session.execute(select(RepairRequest).where(RepairRequest.id == offboarding_data["open_ticket"].id))
+    open_ticket = result.scalar_one_or_none()
+    assert open_ticket is not None
+    assert open_ticket.status == "CANCELLED"
+    assert open_ticket.reject_reason == f"員工離職：{employee.name}（{employee.employee_id}）"
+
+    response = await client.get(
+        f"/api/users/{employee.employee_id}/offboarding-checklist",
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 200
+    checklist = response.json()
+    assert checklist["is_offboarding_in_progress"] is True
+    assert checklist["all_transfers_complete"] is False
+    assert checklist["offboarding_transfers"][0]["transfer_id"] == created_transfer.id
+    assert checklist["offboarding_transfers"][0]["status"] == "PENDING"
+
+    created_transfer.status = "COMPLETED"
+    await test_db_session.commit()
+
+    response = await client.post(
+        f"/api/users/{employee.employee_id}/offboard/finalize",
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 200, response.json()
+    assert response.json()["is_active"] is False
+
+    result = await test_db_session.execute(select(User).where(User.id == employee.id))
+    row = result.scalar_one_or_none()
+    assert row is not None
+    assert row.is_active is False

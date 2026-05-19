@@ -97,7 +97,7 @@ jobs:
         run: |
           kubectl apply -f infra/k8s/base/migration/job.yaml
           kubectl wait --for=condition=complete job/migration \
-            -n asset-mgmt --timeout=120s
+            -n asset-mgmt --timeout=300s
 
       - name: Rollout restart deployments
         run: |

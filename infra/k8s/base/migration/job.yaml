@@ -20,6 +20,13 @@ spec:
                 echo "waiting for cloudsql-proxy..."
                 sleep 2
               done
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
       containers:
         - name: migration
           image: asia-east1-docker.pkg.dev/cloud-native-project-494008/asset-mgmt/backend:latest

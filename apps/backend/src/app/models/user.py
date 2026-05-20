@@ -31,7 +31,7 @@ class User(Base):
         nullable=False
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False)
-    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("office_locations.id"), nullable=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -45,6 +45,10 @@ class User(Base):
 
     department: Mapped["Department"] = relationship(
         "Department", 
+        back_populates="users"
+    )
+    location: Mapped["OfficeLocation | None"] = relationship(
+        "OfficeLocation",
         back_populates="users"
     )
     assets: Mapped[list["Asset"]] = relationship(

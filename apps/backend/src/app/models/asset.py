@@ -36,7 +36,7 @@ class Asset(Base):
     type: Mapped[AssetType] = mapped_column(Enum(AssetType), nullable=False)
     model: Mapped[str] = mapped_column(String(255), nullable=False)
     specification: Mapped[str] = mapped_column(String(255), nullable=False)
-    vendor: Mapped[str] = mapped_column(String(100), nullable=False)
+    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id"), nullable=False)
     purchase_date: Mapped[date] = mapped_column(
         Date,
         nullable=False
@@ -67,6 +67,7 @@ class Asset(Base):
 
     owner: Mapped["User"] = relationship("User", back_populates="assets", foreign_keys=[owner_id])
     borrower: Mapped["User"] = relationship("User", back_populates="borrowed_assets", foreign_keys=[borrower_id])
+    vendor: Mapped["Vendor"] = relationship("Vendor", back_populates="assets", foreign_keys=[vendor_id])
     repair_requests: Mapped[list["RepairRequest"]] = relationship("RepairRequest", back_populates="target_asset", foreign_keys="RepairRequest.asset_id")
     loaner_requests: Mapped[list["RepairRequest"]] = relationship("RepairRequest", back_populates="loaner_asset", foreign_keys="RepairRequest.loaner_asset_id")
     transfers: Mapped[list["AssetTransfer"]] = relationship("AssetTransfer", back_populates="asset", foreign_keys="AssetTransfer.asset_id")

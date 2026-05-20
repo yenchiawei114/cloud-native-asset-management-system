@@ -66,7 +66,9 @@ class Asset(Base):
     }
 
     owner: Mapped["User"] = relationship("User", back_populates="assets", foreign_keys=[owner_id])
+    borrower: Mapped["User"] = relationship("User", back_populates="borrowed_assets", foreign_keys=[borrower_id])
     repair_requests: Mapped[list["RepairRequest"]] = relationship("RepairRequest", back_populates="target_asset", foreign_keys="RepairRequest.asset_id")
+    loaner_requests: Mapped[list["RepairRequest"]] = relationship("RepairRequest", back_populates="loaner_asset", foreign_keys="RepairRequest.loaner_asset_id")
     transfers: Mapped[list["AssetTransfer"]] = relationship("AssetTransfer", back_populates="asset", foreign_keys="AssetTransfer.asset_id")
 
 
@@ -95,6 +97,6 @@ class AssetTransfer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     asset: Mapped["Asset"] = relationship("Asset", back_populates="transfers", foreign_keys=[asset_id])
-    initiator: Mapped["User"] = relationship("User", foreign_keys=[initiator_id])
-    from_owner: Mapped["User"] = relationship("User", foreign_keys=[from_owner_id])
-    to_owner: Mapped["User"] = relationship("User", foreign_keys=[to_owner_id])
+    initiator: Mapped["User"] = relationship("User", back_populates="initiated_transfers", foreign_keys=[initiator_id])
+    from_owner: Mapped["User"] = relationship("User", back_populates="outgoing_transfers",foreign_keys=[from_owner_id])
+    to_owner: Mapped["User"] = relationship("User", back_populates="incoming_transfers", foreign_keys=[to_owner_id])

@@ -52,6 +52,26 @@ class User(Base):
         back_populates="owner",
         foreign_keys="Asset.owner_id"
     )
+    borrowed_assets: Mapped[list["Asset"]] = relationship(
+        "Asset",
+        back_populates="borrower",
+        foreign_keys="Asset.borrower_id"
+    )
+    initiated_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="initiator",
+        foreign_keys="AssetTransfer.initiator_id"
+    )
+    outgoing_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="from_owner",
+        foreign_keys="AssetTransfer.from_owner_id"
+    )
+    incoming_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="to_owner",
+        foreign_keys="AssetTransfer.to_owner_id"
+    )
     notification_preferences: Mapped[list["NotificationPreference"]] = relationship(
         "NotificationPreference", 
         back_populates="user"

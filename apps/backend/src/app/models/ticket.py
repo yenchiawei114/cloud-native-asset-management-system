@@ -36,7 +36,7 @@ class RepairRequest(Base):
     )
     requester: Mapped["User"] = relationship("User", back_populates="repair_requests")
     target_asset: Mapped["Asset"] = relationship("Asset", back_populates="repair_requests", foreign_keys=[asset_id])
-    loaner_asset: Mapped["Asset | None"] = relationship("Asset", foreign_keys=[loaner_asset_id])
+    loaner_asset: Mapped["Asset | None"] = relationship("Asset", back_populates="loaner_requests", foreign_keys=[loaner_asset_id])
 
 
 class RepairInspection(Base):

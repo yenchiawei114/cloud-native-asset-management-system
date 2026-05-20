@@ -3,22 +3,22 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
-from app.core.storage import storage
+from app.core.cache import redis
 from app.core.db import get_db
-from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment, User, Vendor
+from app.core.email import send_email
+from app.core.limiter import limiter
+from app.core.storage import storage
+from app.models import Attachment, RepairInspection, RepairRecord, RepairRequest, User, Vendor
 from app.models.asset import Asset, AssetStatus
 from app.models.audit_log import Action, TargetType
 from app.models.user import Role
-from app.core.cache import redis
-
-from app.core.email import send_email
-from app.api.deps import require_role, get_current_user
 
 admin_required = require_role("ADMIN")
 
@@ -1197,7 +1197,9 @@ async def get_attachment(
 
 
 @router.post("/attachments", response_model=AttachmentOut, status_code=201)
+@limiter.limit("30/minute")
 async def create_and_upload_attachment(
+    request: Request,
     attachable_type: AttachmentAttachableType = Form(...),
     attachable_id: int = Form(...),
     file: UploadFile = File(...),

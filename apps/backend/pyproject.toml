@@ -18,6 +18,7 @@ dependencies = [
     "python-jose>=3.5.0",
     "passlib[bcrypt]>=1.7.4",
     "celery[redis]>=5.4.0,<6",
+    "slowapi>=0.1.9,<0.2",
 ]
 
 [project.optional-dependencies]

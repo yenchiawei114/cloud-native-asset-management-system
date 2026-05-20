@@ -1,14 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import create_access_token
-from app.core.security import verify_password
-from app.core.db import get_db
 from app.api.deps import get_current_user
+from app.core.db import get_db
+from app.core.limiter import limiter
+from app.core.security import create_access_token, verify_password
 from app.models.user import User
-
-from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
@@ -19,7 +18,8 @@ class LoginRequest(BaseModel):
 router = APIRouter()
 
 @router.post("/login")
-async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, data: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.employee_id == data.employee_id))).scalar_one_or_none()
 
     if not user or not verify_password(data.password, user.password):

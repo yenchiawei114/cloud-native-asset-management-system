@@ -1,0 +1,23 @@
+# Service + Endpoints 手動代理至 GKE managed kube-state-metrics pod（10.30.128.15）
+# gke-managed-cim 是 GKE 管控 namespace，無法在其中建 Service，改在 monitoring namespace 橋接
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+spec:
+  ports:
+    - name: http-metrics
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+subsets:
+  - addresses:
+      - ip: 10.30.128.15
+    ports:
+      - port: 8080

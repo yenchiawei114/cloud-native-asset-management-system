@@ -94,7 +94,7 @@ class UserOut(BaseModel):
 	name: str
 	sex: str
 	department_id: int
-	location: str | None
+	location_id: int | None
 	role: str
 	email: str
 	must_change_password: bool
@@ -124,7 +124,7 @@ def _user_to_out(row: User) -> UserOut:
 		name=row.name,
 		sex=_sex_to_str(row.sex),
 		department_id=row.department_id,
-		location=row.location,
+		location_id=row.location_id,
 		role=_role_to_str(row.role),
 		email=row.email,
 		must_change_password=row.must_change_password,
@@ -156,13 +156,23 @@ async def _register_with_role(
 	if existing is not None:
 		raise HTTPException(status_code=409, detail="employee id already exists")
 
+	location = None
+	if payload.location:
+		location = (
+			await db.scalars(
+				select(OfficeLocation).where(OfficeLocation.name == payload.location)
+			)
+		).first()
+		if location is None:
+			raise HTTPException(status_code=400, detail="invalid location")
+
 	row = User(
 		employee_id=payload.employee_id,
 		password=hash_password(payload.password),
 		name=payload.name,
 		sex=Sex[payload.sex],
 		department_id=payload.department_id,
-		location=payload.location,
+		location_id=location.id if location else None,
 		role=role,
 		email=payload.email,
 		must_change_password=True,
@@ -424,7 +434,14 @@ async def admin_update_user(
 	if payload.role is not None:
 		row.role = Role[payload.role]
 	if payload.location is not None:
-		row.location = payload.location
+		location = (
+			await db.scalars(
+				select(OfficeLocation).where(OfficeLocation.name == payload.location)
+			)
+		).first()
+		if location is None:
+			raise HTTPException(status_code=400, detail="invalid location")
+		row.location_id = location.id
 	if payload.email is not None:
 		row.email = payload.email
 	if payload.password is not None:

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_action
@@ -14,6 +15,7 @@ from app.models import Asset, AssetTransfer
 from app.models.asset import AssetType, AssetStatus
 from app.models.audit_log import Action, TargetType
 from app.models.user import User, Role
+from app.models.vendor import Vendor
 
 from app.api.deps import require_role, get_current_user
 
@@ -43,7 +45,7 @@ class AssetUpdate(BaseModel):
     type: AssetType | None = None
     model: str | None = None
     specification: str | None = None
-    vendor: str | None = None
+    vendor_id: int | None = None
     purchase_date: date | None = None
     purchase_price: int | None = None
     storage_location: str | None = None
@@ -89,7 +91,7 @@ def _to_out(asset: Asset, owner: User | None = None) -> AssetOut:
         type=asset.type,
         model=asset.model,
         specification=asset.specification,
-        vendor=asset.vendor,
+        vendor=asset.vendor.name,
         purchase_date=asset.purchase_date,
         purchase_price=asset.purchase_price,
         storage_location=asset.storage_location,
@@ -102,7 +104,7 @@ def _to_out(asset: Asset, owner: User | None = None) -> AssetOut:
         version=asset.version,
         owner_name=owner.name if owner else None,
         owner_employee_id=owner.employee_id if owner else None,
-        office_location=owner.location if owner else None,
+        office_location=owner.location.name if owner and owner.location else None,
     )
 
 
@@ -129,6 +131,41 @@ def _transfer_to_out(
     )
 
 
+ASSET_OUT_OPTIONS = (
+    selectinload(Asset.vendor),
+    selectinload(Asset.owner).selectinload(User.location),
+)
+
+
+TRANSFER_OUT_OPTIONS = (
+    selectinload(AssetTransfer.asset).selectinload(Asset.vendor),
+    selectinload(AssetTransfer.from_owner).selectinload(User.location),
+    selectinload(AssetTransfer.to_owner).selectinload(User.location),
+)
+
+
+async def _get_asset_for_out(db: AsyncSession, asset_id: int) -> Asset | None:
+    return (
+        await db.scalars(
+            select(Asset)
+            .options(*ASSET_OUT_OPTIONS)
+            .where(Asset.id == asset_id)
+        )
+    ).first()
+
+def _asset_owner(asset: Asset) -> User | None:
+    return asset.owner if asset.owner_id else None
+    
+async def _get_transfer_for_out(db: AsyncSession, transfer_id: int) -> AssetTransfer | None:
+    return (
+        await db.scalars(
+            select(AssetTransfer)
+            .options(*TRANSFER_OUT_OPTIONS)
+            .where(AssetTransfer.id == transfer_id)
+        )
+    ).first()
+
+
 @router.get("/assets", response_model=list[AssetOut])
 async def list_assets(
     owner_employee_id: str | None = None,
@@ -145,7 +182,11 @@ async def list_assets(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[AssetOut]:
-    stmt = select(Asset).order_by(Asset.id.desc())
+    stmt = (
+        select(Asset)
+        .options(*ASSET_OUT_OPTIONS)
+        .order_by(Asset.id.desc())
+    )
 
     is_admin = user.get("role") == "ADMIN"
     my_employee_id = user.get("employee_id")
@@ -173,12 +214,12 @@ async def list_assets(
 
     # 舊版通用關鍵字搜尋（向下相容）
     if keyword:
-        stmt = stmt.where(
+        stmt = stmt.outerjoin(Asset.vendor).where(
             or_(
                 Asset.name.ilike(f"%{keyword}%"),
                 Asset.asset_code.ilike(f"%{keyword}%"),
                 Asset.model.ilike(f"%{keyword}%"),
-                Asset.vendor.ilike(f"%{keyword}%"),
+                Vendor.name.ilike(f"%{keyword}%"),
             )
         )
 
@@ -192,19 +233,13 @@ async def list_assets(
     if spec_q:
         stmt = stmt.where(Asset.specification.ilike(f"%{spec_q}%"))
     if vendor_q:
-        stmt = stmt.where(Asset.vendor.ilike(f"%{vendor_q}%"))
+        stmt = stmt.join(Asset.vendor).where(
+            Vendor.name.ilike(f"%{vendor_q}%")
+        )
 
     rows = (await db.scalars(stmt)).all()
-
-    # 批次取得 owner 資訊
-    owner_ids = {r.owner_id for r in rows if r.owner_id is not None}
-    owner_map: dict[int, User] = {}
-    if owner_ids:
-        owners = (await db.scalars(select(User).where(User.id.in_(owner_ids)))).all()
-        owner_map = {o.id: o for o in owners}
-
-    # owner_q 在記憶體過濾（需要 owner 名稱 / 工號）
-    result = [_to_out(r, owner_map.get(r.owner_id) if r.owner_id else None) for r in rows]
+    result = [_to_out(r, _asset_owner(r)) for r in rows]
+    
     if owner_q:
         q = owner_q.lower()
         result = [
@@ -225,24 +260,29 @@ async def list_idle_assets(
     user=Depends(get_current_user),
 ) -> list[AssetOut]:
     """列出閒置資產。owner_only=true 時只回傳當前用戶保管的閒置資產（供核准備用機時選擇）。"""
-    stmt = select(Asset).where(Asset.status == AssetStatus.AVAILABLE).order_by(Asset.id.desc())
+    stmt = (
+        select(Asset)
+        .options(*ASSET_OUT_OPTIONS)
+        .where(Asset.status == AssetStatus.AVAILABLE)
+        .order_by(Asset.id.desc())
+    )
     if owner_only:
         stmt = stmt.where(Asset.owner_id == user["user_id"])
     rows = (await db.scalars(stmt)).all()
-    return [_to_out(r) for r in rows]
+    return [_to_out(r, _asset_owner(r)) for r in rows]
 
 
 @router.get("/assets/{asset_id}", response_model=AssetOut)
 async def get_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) -> AssetOut:
-    asset = await db.get(Asset, asset_id)
+    asset = await _get_asset_for_out(db, asset_id)
+    
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
     if user.get("role") != "ADMIN" and asset.owner_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    owner = await db.get(User, asset.owner_id) if asset.owner_id else None
-    return _to_out(asset, owner)
+    return _to_out(asset, _asset_owner(asset))
 
 
 @router.post("/assets", response_model=AssetOut, status_code=201)
@@ -253,12 +293,24 @@ async def create_asset(
 ) -> AssetOut:
     payload_dict = payload.model_dump()
 
+    vendor = (
+        await db.scalars(
+            select(Vendor).where(Vendor.name == payload.vendor)
+        )
+    ).first()
+
+    if vendor is None:
+        raise HTTPException(status_code=400, detail="vendor not found")
+
+    payload_dict["vendor_id"] = vendor.id
+    payload_dict.pop("vendor")
+
     # 辦公地點跟隨保管人，若無手動指定，自動填入保管人的 location
     if not payload_dict.get("storage_location"):
         owner_id = payload_dict.get("owner_id") or user["user_id"]
         ref_user = await db.get(User, owner_id)
         if ref_user and ref_user.location:
-            payload_dict["storage_location"] = ref_user.location
+            payload_dict["storage_location"] = ref_user.location.name
 
     asset = Asset(**payload_dict)
     db.add(asset)
@@ -278,9 +330,10 @@ async def create_asset(
         detail={"after": payload.model_dump(mode="json")},
     )
     await db.commit()
-    await db.refresh(asset)
-    owner = await db.get(User, asset.owner_id) if asset.owner_id else None
-    return _to_out(asset, owner)
+    asset = await _get_asset_for_out(db, asset.id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return _to_out(asset, _asset_owner(asset))
 
 
 @router.put("/assets/{asset_id}", response_model=AssetOut)
@@ -290,7 +343,7 @@ async def update_asset(
     db: AsyncSession = Depends(get_db),
     user=Depends(admin_required),
 ) -> AssetOut:
-    asset = await db.get(Asset, asset_id)
+    asset = await _get_asset_for_out(db, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
@@ -300,7 +353,7 @@ async def update_asset(
             detail="該資產已被其他使用者修改，請重新整理後再試 (Asset has been modified by another user)"
         )
 
-    before_data = _to_out(asset).model_dump(mode="json")
+    before_data = _to_out(asset, _asset_owner(asset)).model_dump(mode="json")
     # 使用 model_fields_set 確保明確傳入 null 時能清除欄位
     update_data = payload.model_dump(exclude_unset=True, exclude={"version"})
     # 建立日誌專用的序列化數據
@@ -327,20 +380,21 @@ async def update_asset(
             status_code=409, 
             detail="該資產已被其他使用者修改，請重新整理後再試 (Asset has been modified by another user)"
         )
-    await db.refresh(asset)
-    owner = await db.get(User, asset.owner_id) if asset.owner_id else None
-    return _to_out(asset, owner)
+    asset = await _get_asset_for_out(db, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return _to_out(asset, _asset_owner(asset))
 
 
 @router.post("/assets/{asset_id}/deactivate", response_model=AssetOut)
 async def deactivate_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> AssetOut:
-    asset = await db.get(Asset, asset_id)
+    asset = await _get_asset_for_out(db, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     if asset.status == AssetStatus.DEACTIVATED:
         raise HTTPException(status_code=400, detail="資產已停用")
 
-    before = _to_out(asset).model_dump(mode="json")
+    before = _to_out(asset, _asset_owner(asset)).model_dump(mode="json")
     asset.status = AssetStatus.DEACTIVATED
     asset.owner_id = None
     asset.storage_location = None
@@ -357,13 +411,15 @@ async def deactivate_asset(asset_id: int, db: AsyncSession = Depends(get_db), us
         detail={"before": before, "after": {"status": "deactivated", "owner_id": None}},
     )
     await db.commit()
-    await db.refresh(asset)
-    return _to_out(asset)
+    asset = await _get_asset_for_out(db, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return _to_out(asset, _asset_owner(asset))
 
 
 @router.post("/assets/{asset_id}/toggle-status", response_model=AssetOut)
 async def toggle_asset_status(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> AssetOut:
-    asset = await db.get(Asset, asset_id)
+    asset = await _get_asset_for_out(db, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     if asset.owner_id != user["user_id"]:
@@ -376,7 +432,7 @@ async def toggle_asset_status(asset_id: int, db: AsyncSession = Depends(get_db),
     else:
         raise HTTPException(status_code=400, detail="只有閒置或使用中的資產可以切換狀態")
 
-    before = _to_out(asset).model_dump(mode="json")
+    before = _to_out(asset, _asset_owner(asset)).model_dump(mode="json")
     asset.status = new_status
     asset.version += 1
 
@@ -391,14 +447,15 @@ async def toggle_asset_status(asset_id: int, db: AsyncSession = Depends(get_db),
         detail={"before": before, "after": {"status": new_status.value}},
     )
     await db.commit()
-    await db.refresh(asset)
-    owner = await db.get(User, asset.owner_id)
-    return _to_out(asset, owner)
+    asset = await _get_asset_for_out(db, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return _to_out(asset, _asset_owner(asset))
 
 
 @router.post("/assets/{asset_id}/activate", response_model=AssetOut)
 async def activate_asset(asset_id: int, db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> AssetOut:
-    asset = await db.get(Asset, asset_id)
+    asset = await _get_asset_for_out(db, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     if asset.status != AssetStatus.DEACTIVATED:
@@ -407,7 +464,7 @@ async def activate_asset(asset_id: int, db: AsyncSession = Depends(get_db), user
     admin_user = await db.get(User, user["user_id"])
 
     asset.owner_id = user["user_id"]
-    asset.storage_location = admin_user.location if admin_user else None
+    asset.storage_location = admin_user.location.name if admin_user and admin_user.location else None
     asset.status = AssetStatus.AVAILABLE
     asset.version += 1
 
@@ -422,8 +479,10 @@ async def activate_asset(asset_id: int, db: AsyncSession = Depends(get_db), user
         detail={"after": {"status": "available", "owner_id": user["user_id"]}},
     )
     await db.commit()
-    await db.refresh(asset)
-    return _to_out(asset, admin_user)
+    asset = await _get_asset_for_out(db, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return _to_out(asset, _asset_owner(asset))
 
 
 # ── 資產轉移 ──────────────────────────────────────────────
@@ -482,8 +541,10 @@ async def initiate_transfer(
     )
 
     await db.commit()
-    await db.refresh(transfer)
-    return _transfer_to_out(transfer, asset, from_owner, to_user)
+    transfer = await _get_transfer_for_out(db, transfer.id)
+    if transfer is None:
+        raise HTTPException(status_code=404, detail="transfer not found")
+    return _transfer_to_out(transfer, transfer.asset, transfer.from_owner, transfer.to_owner)
 
 
 @router.get("/transfers/pending", response_model=list[AssetTransferOut])
@@ -493,19 +554,15 @@ async def list_pending_transfers(
 ) -> list[AssetTransferOut]:
     my_id = user["user_id"]
     rows = (await db.scalars(
-        select(AssetTransfer).where(
+        select(AssetTransfer)
+        .options(*TRANSFER_OUT_OPTIONS)
+        .where(
             AssetTransfer.status == "PENDING",
             or_(AssetTransfer.from_owner_id == my_id, AssetTransfer.to_owner_id == my_id),
         ).order_by(AssetTransfer.created_at.desc())
     )).all()
 
-    result = []
-    for t in rows:
-        asset = await db.get(Asset, t.asset_id)
-        from_owner = await db.get(User, t.from_owner_id)
-        to_owner = await db.get(User, t.to_owner_id)
-        result.append(_transfer_to_out(t, asset, from_owner, to_owner))
-    return result
+    return [_transfer_to_out(t, t.asset, t.from_owner, t.to_owner) for t in rows]
 
 
 @router.post("/transfers/{transfer_id}/confirm", response_model=AssetTransferOut)
@@ -514,7 +571,7 @@ async def confirm_transfer(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> AssetTransferOut:
-    transfer = await db.get(AssetTransfer, transfer_id)
+    transfer = await _get_transfer_for_out(db, transfer_id)
     if transfer is None:
         raise HTTPException(status_code=404, detail="transfer not found")
     if transfer.status != "PENDING":
@@ -530,13 +587,13 @@ async def confirm_transfer(
 
     # 雙方皆確認 → 完成轉移
     if transfer.from_confirmed and transfer.to_confirmed:
-        asset = await db.get(Asset, transfer.asset_id)
-        to_user = await db.get(User, transfer.to_owner_id)
+        asset = transfer.asset
+        to_user = transfer.to_owner
         if asset:
             asset.owner_id = transfer.to_owner_id
             # 辦公地點跟隨新保管人
             if to_user:
-                asset.storage_location = to_user.location
+                asset.storage_location = to_user.location.name if to_user.location else None
             # 維修中的資產不更動狀態，待維修結案後由工單流程設定
             if asset.status != AssetStatus.MAINTENANCE:
                 is_admin_owner = to_user and to_user.role == Role.ADMIN
@@ -545,11 +602,10 @@ async def confirm_transfer(
         transfer.status = "COMPLETED"
 
     await db.commit()
-    await db.refresh(transfer)
-    asset = await db.get(Asset, transfer.asset_id)
-    from_owner = await db.get(User, transfer.from_owner_id)
-    to_owner = await db.get(User, transfer.to_owner_id)
-    return _transfer_to_out(transfer, asset, from_owner, to_owner)
+    transfer = await _get_transfer_for_out(db, transfer_id)
+    if transfer is None:
+        raise HTTPException(status_code=404, detail="transfer not found")
+    return _transfer_to_out(transfer, transfer.asset, transfer.from_owner, transfer.to_owner)
 
 
 @router.delete("/transfers/{transfer_id}", status_code=204)

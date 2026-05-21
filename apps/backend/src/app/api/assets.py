@@ -45,7 +45,7 @@ class AssetUpdate(BaseModel):
     type: AssetType | None = None
     model: str | None = None
     specification: str | None = None
-    vendor_id: int | None = None
+    vendor: str | None = None
     purchase_date: date | None = None
     purchase_price: int | None = None
     storage_location: str | None = None
@@ -356,6 +356,20 @@ async def update_asset(
     before_data = _to_out(asset, _asset_owner(asset)).model_dump(mode="json")
     # 使用 model_fields_set 確保明確傳入 null 時能清除欄位
     update_data = payload.model_dump(exclude_unset=True, exclude={"version"})
+    vendor_name = update_data.pop("vendor", None)
+    if "vendor" in payload.model_fields_set:
+        if vendor_name is None:
+            raise HTTPException(status_code=400, detail="vendor required")
+        vendor = (
+            await db.scalars(
+                select(Vendor).where(Vendor.name == vendor_name)
+            )
+        ).first()
+
+        if vendor is None:
+            raise HTTPException(status_code=400, detail="vendor not found")
+
+        asset.vendor_id = vendor.id
     # 建立日誌專用的序列化數據
     after_data = payload.model_dump(exclude_unset=True, exclude={"version"}, mode="json")
 

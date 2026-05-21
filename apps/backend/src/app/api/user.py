@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
@@ -94,7 +95,7 @@ class UserOut(BaseModel):
 	name: str
 	sex: str
 	department_id: int
-	location_id: int | None
+	location: str | None
 	role: str
 	email: str
 	must_change_password: bool
@@ -124,7 +125,7 @@ def _user_to_out(row: User) -> UserOut:
 		name=row.name,
 		sex=_sex_to_str(row.sex),
 		department_id=row.department_id,
-		location_id=row.location_id,
+		location=row.location.name if row.location else None,
 		role=_role_to_str(row.role),
 		email=row.email,
 		must_change_password=row.must_change_password,
@@ -134,6 +135,16 @@ def _user_to_out(row: User) -> UserOut:
 		is_active=row.is_active,
 		created_at=row.created_at,
 	)
+
+
+async def _get_user_for_out(db: AsyncSession, user_id: int) -> User | None:
+	return (
+		await db.scalars(
+			select(User)
+			.options(selectinload(User.location))
+			.where(User.id == user_id)
+		)
+	).first()
 
 
 def _pref_to_out(row: NotificationPreference) -> NotificationPreferenceOut:
@@ -199,7 +210,9 @@ async def _register_with_role(
 	)
 
 	await db.commit()
-	await db.refresh(row)
+	row = await _get_user_for_out(db, row.id)
+	if row is None:
+		raise HTTPException(status_code=404, detail="user not found")
 	return _user_to_out(row)
 
 # @router.post("/admins/register", response_model=UserOut, status_code=201)
@@ -222,7 +235,7 @@ async def list_office_locations(db: AsyncSession = Depends(get_db), _=Depends(ge
 @router.get("/users/me", response_model=UserOut)
 async def get_my_profile(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> UserOut:
 	user_id = user.get("user_id")
-	row = await db.get(User, user_id)
+	row = await _get_user_for_out(db, user_id)
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 	return _user_to_out(row)
@@ -283,7 +296,7 @@ async def change_my_email(
 	db: AsyncSession = Depends(get_db),
 ) -> UserOut:
 	user_id = user.get("user_id")
-	row = await db.get(User, user_id)
+	row = await _get_user_for_out(db, user_id)
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 
@@ -300,7 +313,9 @@ async def change_my_email(
 		detail={"before": {"email": before_email}, "after": {"email": payload.email}},
 	)
 	await db.commit()
-	await db.refresh(row)
+	row = await _get_user_for_out(db, user_id)
+	if row is None:
+		raise HTTPException(status_code=404, detail="user not found")
 	return _user_to_out(row)
 
 
@@ -384,7 +399,7 @@ async def admin_list_users(
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
 ) -> list[UserOut]:
-	stmt = select(User).order_by(User.id.desc())
+	stmt = select(User).options(selectinload(User.location)).order_by(User.id.desc())
 	if keyword:
 		like = f"%{keyword}%"
 		stmt = stmt.where((User.employee_id.like(like)) | (User.name.like(like)) | (User.email.like(like)))
@@ -400,7 +415,7 @@ async def admin_get_user(
 	db: AsyncSession = Depends(get_db),
 ) -> UserOut:
 	row = (
-		await db.execute(select(User).where(User.employee_id == target_employee_id))
+		await db.execute(select(User).options(selectinload(User.location)).where(User.employee_id == target_employee_id))
 	).scalar_one_or_none()
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
@@ -415,7 +430,7 @@ async def admin_update_user(
 	db: AsyncSession = Depends(get_db),
 ) -> UserOut:
 	row = (
-		await db.execute(select(User).where(User.employee_id == target_employee_id))
+		await db.execute(select(User).options(selectinload(User.location)).where(User.employee_id == target_employee_id))
 	).scalar_one_or_none()
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
@@ -441,7 +456,7 @@ async def admin_update_user(
 		).first()
 		if location is None:
 			raise HTTPException(status_code=400, detail="invalid location")
-		row.location_id = location.id
+		row.location = location
 	if payload.email is not None:
 		row.email = payload.email
 	if payload.password is not None:
@@ -451,7 +466,23 @@ async def admin_update_user(
 	if payload.termination_date is not None:
 		row.termination_date = payload.termination_date
 
-	after = _user_to_out(row).model_dump(mode="json")
+	after = before.copy()
+	if payload.name is not None:
+		after["name"] = payload.name
+	if payload.sex is not None:
+		after["sex"] = payload.sex
+	if payload.department_id is not None:
+		after["department_id"] = payload.department_id
+	if payload.location is not None:
+		after["location"] = payload.location
+	if payload.role is not None:
+		after["role"] = payload.role
+	if payload.email is not None:
+		after["email"] = payload.email
+	if payload.hire_date is not None:
+		after["hire_date"] = payload.hire_date.isoformat()
+	if payload.termination_date is not None:
+		after["termination_date"] = payload.termination_date.isoformat()
 	await log_action(
 		db,
 		user_id=user["user_id"],
@@ -463,7 +494,9 @@ async def admin_update_user(
 		detail={"before": before, "after": after},
 	)
 	await db.commit()
-	await db.refresh(row)
+	row = await _get_user_for_out(db, row.id)
+	if row is None:
+		raise HTTPException(status_code=404, detail="user not found")
 	return _user_to_out(row)
 
 
@@ -474,7 +507,7 @@ async def admin_delete_user(
 	db: AsyncSession = Depends(get_db),
 ) -> None:
 	row = (
-		await db.execute(select(User).where(User.employee_id == target_employee_id))
+		await db.execute(select(User).options(selectinload(User.location)).where(User.employee_id == target_employee_id))
 	).scalar_one_or_none()
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
@@ -680,7 +713,9 @@ async def offboard_user(
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-	row = (await db.execute(select(User).where(User.employee_id == target_employee_id))).scalar_one_or_none()
+	row = (
+		await db.execute(select(User).options(selectinload(User.location)).where(User.employee_id == target_employee_id))
+	).scalar_one_or_none()
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 	if row.id == user["user_id"]:
@@ -799,7 +834,9 @@ async def offboard_user(
 	)
 
 	await db.commit()
-	await db.refresh(row)
+	row = await _get_user_for_out(db, row.id)
+	if row is None:
+		raise HTTPException(status_code=404, detail="user not found")
 	return _user_to_out(row)
 
 
@@ -809,7 +846,9 @@ async def finalize_offboarding(
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-	row = (await db.execute(select(User).where(User.employee_id == target_employee_id))).scalar_one_or_none()
+	row = (
+		await db.execute(select(User).options(selectinload(User.location)).where(User.employee_id == target_employee_id))
+	).scalar_one_or_none()
 	if row is None:
 		raise HTTPException(status_code=404, detail="user not found")
 	if not row.is_active:
@@ -843,5 +882,7 @@ async def finalize_offboarding(
 		detail={"action": "offboard_finalize", "termination_date": row.termination_date.isoformat()},
 	)
 	await db.commit()
-	await db.refresh(row)
+	row = await _get_user_for_out(db, row.id)
+	if row is None:
+		raise HTTPException(status_code=404, detail="user not found")
 	return _user_to_out(row)

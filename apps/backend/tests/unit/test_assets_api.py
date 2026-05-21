@@ -10,6 +10,7 @@ from app.api import assets as assets_api
 from app.models.asset import Asset, AssetStatus, AssetType
 from app.models.asset import AssetTransfer
 from app.models.user import Role, User
+from app.models.vendor import Vendor
 from .conftest import FakeResult, FakeScalarResult
 
 
@@ -22,7 +23,7 @@ class FakeSession:
                 password="testpassword",
                 name="Admin User",
                 email="admin@example.com",
-                location="HQ",
+                location=SimpleNamespace(name="HQ"),
                 must_change_password=False,
                 is_active=True,
                 role=Role.ADMIN,
@@ -33,7 +34,7 @@ class FakeSession:
                 password="testpassword",
                 name="Employee User",
                 email="employee@example.com",
-                location="Branch Office",
+                location=SimpleNamespace(name="Branch Office"),
                 must_change_password=False,
                 is_active=True,
                 role=Role.EMPLOYEE,
@@ -44,12 +45,14 @@ class FakeSession:
                 password="testpassword",
                 name="Other Employee",
                 email="other@example.com",
-                location="Remote Office",
+                location=SimpleNamespace(name="Remote Office"),
                 must_change_password=False,
                 is_active=True,
                 role=Role.EMPLOYEE,
             ),
         }
+        self.vendors: list[Vendor] = [Vendor(id=1, name="Lenovo")]
+        self.next_vendor_id = 2
         self.assets: dict[int, Asset] = {}
         self.transfers: dict[int, AssetTransfer] = {}
         self.next_asset_id = 1
@@ -57,6 +60,19 @@ class FakeSession:
         self.pending_asset: Asset | None = None
         self.pending_transfer: AssetTransfer | None = None
         self.raise_duplicate_asset_code = False
+
+    def _vendor_by_id(self, vendor_id: int | None) -> Vendor | None:
+        if vendor_id is None:
+            return None
+        for vendor in self.vendors:
+            if vendor.id == vendor_id:
+                return vendor
+        return None
+
+    def _user_by_id(self, user_id: int | None):
+        if user_id is None:
+            return None
+        return self.users.get(user_id)
 
     async def execute(self, stmt):
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
@@ -68,6 +84,13 @@ class FakeSession:
             if "E00000002" in compiled:
                 return FakeResult(self.users[3])
             return FakeResult(None)
+        if "FROM vendors" in compiled:
+            match = re.search(r"name\s*=\s*'([^']+)'", compiled, re.IGNORECASE)
+            rows = self.vendors
+            if match:
+                vendor_name = match.group(1)
+                rows = [vendor for vendor in rows if vendor.name == vendor_name]
+            return FakeScalarResult(rows)
         return FakeResult(None)
 
     async def scalars(self, stmt):
@@ -80,6 +103,9 @@ class FakeSession:
                 rows = [self.users[user_id] for user_id in ids if user_id in self.users]
                 return FakeScalarResult(rows)
             return FakeScalarResult(list(self.users.values()))
+        if "from vendors" in lowered:
+            rows = sorted(self.vendors, key=lambda row: row.name)
+            return FakeScalarResult(rows)
         if "from asset_transfers" in lowered:
             rows = list(self.transfers.values())
             asset_match = re.search(r"asset_id\s*=\s*(\d+)", lowered)
@@ -135,6 +161,11 @@ class FakeSession:
             self.pending_asset = obj
         elif isinstance(obj, AssetTransfer):
             self.pending_transfer = obj
+        elif isinstance(obj, Vendor):
+            if obj.id is None:
+                obj.id = self.next_vendor_id
+                self.next_vendor_id += 1
+            self.vendors.append(obj)
 
     async def flush(self):
         if self.raise_duplicate_asset_code and self.pending_asset is not None:
@@ -157,6 +188,12 @@ class FakeSession:
                 obj.created_at = now
             if getattr(obj, "version", None) is None:
                 obj.version = 1
+            if getattr(obj, "vendor", None) is None:
+                obj.__dict__["vendor"] = self._vendor_by_id(getattr(obj, "vendor_id", None))
+            if getattr(obj, "owner", None) is None:
+                obj.__dict__["owner"] = self._user_by_id(getattr(obj, "owner_id", None))
+            if getattr(obj, "borrower", None) is None:
+                obj.__dict__["borrower"] = self._user_by_id(getattr(obj, "borrower_id", None))
             self.assets[obj.id] = obj
             self.pending_asset = None
         elif isinstance(obj, AssetTransfer):
@@ -173,6 +210,10 @@ class FakeSession:
                 obj.to_confirmed = False
             if getattr(obj, "is_offboarding_transfer", None) is None:
                 obj.is_offboarding_transfer = False
+            obj.__dict__["asset"] = self.assets.get(obj.asset_id)
+            obj.__dict__["from_owner"] = self._user_by_id(obj.from_owner_id)
+            obj.__dict__["to_owner"] = self._user_by_id(obj.to_owner_id)
+            obj.__dict__["initiator"] = self._user_by_id(obj.initiator_id)
             self.transfers[obj.id] = obj
             self.pending_transfer = None
 
@@ -211,6 +252,7 @@ def _seed_asset(
     owner_id: int | None,
     borrower_id: int | None = None,
 ) -> None:
+    vendor = fake_db_session.vendors[0]
     fake_db_session.assets[asset_id] = Asset(
         id=asset_id,
         asset_code=f"A{asset_id:09d}"[-10:],
@@ -218,7 +260,7 @@ def _seed_asset(
         type=AssetType.LAPTOP,
         model="ThinkPad X1",
         specification="16GB RAM / 512GB SSD",
-        vendor="Lenovo",
+        vendor_id=vendor.id,
         purchase_date=datetime(2025, 1, 1).date(),
         purchase_price=1500,
         storage_location="HQ",
@@ -229,6 +271,13 @@ def _seed_asset(
         status=AssetStatus.AVAILABLE,
         created_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
         version=1,
+    )
+    fake_db_session.assets[asset_id].__dict__["vendor"] = vendor
+    fake_db_session.assets[asset_id].__dict__["owner"] = (
+        fake_db_session.users.get(owner_id) if owner_id is not None else None
+    )
+    fake_db_session.assets[asset_id].__dict__["borrower"] = (
+        fake_db_session.users.get(borrower_id) if borrower_id is not None else None
     )
 
 
@@ -256,6 +305,10 @@ def _seed_transfer(
         created_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
         is_offboarding_transfer=False,
     )
+    fake_db_session.transfers[transfer_id].__dict__["asset"] = fake_db_session.assets.get(asset_id)
+    fake_db_session.transfers[transfer_id].__dict__["from_owner"] = fake_db_session.users.get(from_owner_id)
+    fake_db_session.transfers[transfer_id].__dict__["to_owner"] = fake_db_session.users.get(to_owner_id)
+    fake_db_session.transfers[transfer_id].__dict__["initiator"] = fake_db_session.users.get(initiator_id)
 
 
 def _asset_payload(**overrides):

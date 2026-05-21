@@ -711,7 +711,7 @@ def test_when_initiate_transfer_then_should_cancel_existing_pending_transfer_and
         headers=_auth_header(token),
     )
 
-    assert response.status_code == 201
+    assert response.status_code或是 == 201
     assert fake_db_session.transfers[1].status == "PENDING"
     assert response.json()["id"] == 1
     assert response.json()["to_owner_id"] == 3

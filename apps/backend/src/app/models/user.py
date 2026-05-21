@@ -31,7 +31,7 @@ class User(Base):
         nullable=False
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False)
-    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("office_locations.id"), nullable=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -47,10 +47,34 @@ class User(Base):
         "Department", 
         back_populates="users"
     )
+    location: Mapped["OfficeLocation | None"] = relationship(
+        "OfficeLocation",
+        back_populates="users"
+    )
     assets: Mapped[list["Asset"]] = relationship(
         "Asset",
         back_populates="owner",
         foreign_keys="Asset.owner_id"
+    )
+    borrowed_assets: Mapped[list["Asset"]] = relationship(
+        "Asset",
+        back_populates="borrower",
+        foreign_keys="Asset.borrower_id"
+    )
+    initiated_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="initiator",
+        foreign_keys="AssetTransfer.initiator_id"
+    )
+    outgoing_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="from_owner",
+        foreign_keys="AssetTransfer.from_owner_id"
+    )
+    incoming_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="to_owner",
+        foreign_keys="AssetTransfer.to_owner_id"
     )
     notification_preferences: Mapped[list["NotificationPreference"]] = relationship(
         "NotificationPreference", 

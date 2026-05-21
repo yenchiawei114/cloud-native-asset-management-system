@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import log_action
 from app.core.storage import storage
 from app.core.db import get_db
-from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment, User
+from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment, User, Vendor
 from app.models.asset import Asset, AssetStatus
 from app.models.audit_log import Action, TargetType
 from app.models.user import Role
@@ -132,7 +132,7 @@ class RepairRecordOut(BaseModel):
     issue_description: str
     solution: str
     cost: int
-    vendor: str
+    vendor: str | None
     created_at: datetime
 
 
@@ -216,7 +216,7 @@ def _record_to_out(row: RepairRecord) -> RepairRecordOut:
         issue_description=row.issue_description,
         solution=row.solution,
         cost=row.cost,
-        vendor=row.vendor,
+        vendor=(row.vendor.name if getattr(row, "vendor", None) else None),
         created_at=row.created_at,
     )
 
@@ -626,6 +626,15 @@ async def close_ticket(
     if row.status != "IN_PROGRESS":
         raise HTTPException(status_code=400, detail="只有「維修中」的工單才能結案")
 
+    vendor = (
+        await db.scalars(
+            select(Vendor).where(Vendor.name == payload.vendor)
+        )
+    ).first()
+
+    if vendor is None:
+        raise HTTPException(status_code=400, detail="vendor not found")
+
     # 建立或更新維修紀錄
     existing_record = (await db.scalars(
         select(RepairRecord).where(RepairRecord.request_id == ticket_id)
@@ -633,7 +642,7 @@ async def close_ticket(
     if existing_record:
         existing_record.issue_description = payload.issue_description
         existing_record.solution = payload.solution
-        existing_record.vendor = payload.vendor
+        existing_record.vendor_id = vendor.id
         existing_record.cost = payload.cost
         existing_record.repair_date = date.today()
     else:
@@ -643,7 +652,7 @@ async def close_ticket(
             issue_description=payload.issue_description,
             solution=payload.solution,
             cost=payload.cost,
-            vendor=payload.vendor,
+            vendor_id=vendor.id,
         )
         db.add(record)
 
@@ -924,13 +933,22 @@ async def create_ticket_record(
     if existing is not None:
         raise HTTPException(status_code=409, detail="repair record already exists")
 
+    vendor = (
+        await db.scalars(
+            select(Vendor).where(Vendor.name == payload.vendor)
+        )
+    ).first()
+
+    if vendor is None:
+        raise HTTPException(status_code=400, detail="vendor not found")
+
     row = RepairRecord(
         request_id=ticket_id,
         repair_date=payload.repair_date,
         issue_description=payload.issue_description,
         solution=payload.solution,
         cost=payload.cost,
-        vendor=payload.vendor,
+        vendor_id=vendor.id,
     )
     db.add(row)
     await db.flush()
@@ -957,13 +975,22 @@ async def update_ticket_record(
     if row is None:
         raise HTTPException(status_code=404, detail="repair record not found")
 
+    vendor = (
+        await db.scalars(
+            select(Vendor).where(Vendor.name == payload.vendor)
+        )
+    ).first()
+
+    if vendor is None:
+        raise HTTPException(status_code=400, detail="vendor not found")
+
     before = _record_to_out(row).model_dump(mode="json")
 
     row.repair_date = payload.repair_date
     row.issue_description = payload.issue_description
     row.solution = payload.solution
     row.cost = payload.cost
-    row.vendor = payload.vendor
+    row.vendor_id = vendor.id
 
     after = _record_to_out(row).model_dump(mode="json")
     await log_action(

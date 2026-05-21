@@ -132,7 +132,7 @@ class RepairRecordOut(BaseModel):
     issue_description: str
     solution: str
     cost: int
-    vendor_id: int
+    vendor: str | None
     created_at: datetime
 
 
@@ -216,7 +216,7 @@ def _record_to_out(row: RepairRecord) -> RepairRecordOut:
         issue_description=row.issue_description,
         solution=row.solution,
         cost=row.cost,
-        vendor_id=row.vendor_id,
+        vendor=(row.vendor.name if getattr(row, "vendor", None) else None),
         created_at=row.created_at,
     )
 

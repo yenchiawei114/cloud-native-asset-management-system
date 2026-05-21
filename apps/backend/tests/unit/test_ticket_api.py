@@ -12,6 +12,7 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.asset import Asset, AssetStatus, AssetType
 from app.models.ticket import RepairRequest, Attachment, RepairInspection, RepairRecord, User
+from app.models.vendor import Vendor
 from .conftest import FakeResult, FakeScalarResult
 
 
@@ -56,6 +57,7 @@ class FakeSession:
             ),
         }
         self.assets: dict[int, Asset] = {}
+        self.vendors: list[Vendor] = [Vendor(id=1, name="Lenovo")]
         self.tickets: dict[int, RepairRequest] = {}
         self.pending_asset: Asset | None = None
         self.pending_ticket: RepairRequest | None = None
@@ -64,6 +66,7 @@ class FakeSession:
         self.pending_record: RepairRecord | None = None
         self.next_asset_id = 1
         self.next_ticket_id = 1
+        self.next_vendor_id = 2
         self.attachments = {}
         self.records = {}
         self.inspections = {}
@@ -84,6 +87,13 @@ class FakeSession:
     async def scalars(self, stmt):
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         lowered = compiled.lower()
+        if "from vendors" in lowered:
+            rows = self.vendors
+            match = re.search(r"name\s*=\s*'([^']+)'", compiled, re.IGNORECASE)
+            if match:
+                rows = [row for row in rows if row.name == match.group(1)]
+            rows = sorted(rows, key=lambda row: row.name)
+            return FakeScalarResult(rows)
         if "FROM repair_requests" in compiled:
             rows = list(self.tickets.values())
             requester_match = re.search(r"requester_id\s*=\s*(\d+)", lowered)
@@ -107,12 +117,18 @@ class FakeSession:
                 rows = [self.users[user_id] for user_id in ids if user_id in self.users]
                 return FakeScalarResult(rows)
             return FakeScalarResult(list(self.users.values()))
-        if "FROM assets" in compiled:
-            match = re.search(r"IN \(([^)]+)\)", compiled, re.IGNORECASE)
-            if match:
-                ids = [int(part.strip()) for part in match.group(1).split(",") if part.strip().isdigit()]
+        if "from assets" in lowered:
+            rows = list(self.assets.values())
+            in_match = re.search(r"in\s*\(([^)]+)\)", lowered, re.IGNORECASE)
+            if in_match:
+                ids = [int(part.strip()) for part in in_match.group(1).split(",") if part.strip().isdigit()]
                 rows = [self.assets[asset_id] for asset_id in ids if asset_id in self.assets]
-                return FakeScalarResult(rows)
+            else:
+                id_match = re.search(r"assets\.id\s*=\s*(\d+)", lowered, re.IGNORECASE)
+                if id_match:
+                    asset_id = int(id_match.group(1))
+                    rows = [self.assets[asset_id]] if asset_id in self.assets else []
+            return FakeScalarResult(rows)
         if "from repair_inspections" in lowered or "from repair_inspection" in lowered:
             rows = list(self.inspections.values())
             request_match = re.search(r"request_id\s*=\s*(\d+)", lowered)
@@ -127,6 +143,8 @@ class FakeSession:
             return self.tickets.get(key)
         if model is Asset:
             return self.assets.get(key)
+        if model is Vendor:
+            return next((vendor for vendor in self.vendors if vendor.id == key), None)
         if model is Attachment:
             return self.attachments.get(key)
 
@@ -177,6 +195,10 @@ class FakeSession:
                 obj.created_at = now
             if getattr(obj, "version", None) is None:
                 obj.version = 1
+            if getattr(obj, "vendor", None) is None:
+                obj.__dict__["vendor"] = next(
+                    (v for v in self.vendors if v.id == getattr(obj, "vendor_id", None)), None
+                )
             self.assets[obj.id] = obj
             self.pending_asset = None
         elif isinstance(obj, RepairRequest):
@@ -256,14 +278,15 @@ def _create_asset(client, admin_token: str, owner_id: int | None = None) -> int:
         "purchase_date": "2025-01-01",
         "purchase_price": 1500,
         "storage_location": "HQ",
-        "owner_id": owner_id,
         "activation_date": "2025-01-02",
         "warranty_expiry": "2028-01-01",
         "status": "available",
+        "owner_id": owner_id,
     }
 
     response = client.post("/api/assets", json=payload, headers=_auth_header(admin_token))
-    assert response.status_code == 201
+
+    assert response.status_code == 201, response.json()
     return response.json()["id"]
 
 
@@ -300,6 +323,13 @@ def _create_inspection(fake_db, ticket_id: int):
         action_taken="z",
     )
     fake_db.inspections[ticket_id] = inspection
+
+
+def _create_vendor(client, token):
+    payload = {"name": "Lenovo"}
+    resp = client.post("/api/vendors", json=payload, headers=_auth_header(token))
+    assert resp.status_code == 201
+    return resp.json()["id"]
 
 
 def _seed_attachment(
@@ -372,16 +402,30 @@ def _login_employee(client) -> tuple[str, int]:
 
 
 def test_when_admin_lists_tickets_then_should_return_200_with_list(client):
-    # arrange: admin login, create asset and ticket
     admin_token, admin_user_id = _login_admin(client)
-    asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
-    _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
 
-    # act: call GET /api/tickets with admin token
+    employee_token, employee_id = _login_employee(client)
+
+    asset_id = _create_asset(
+        client,
+        admin_token,
+        owner_id=employee_id,
+    )
+
+    # requester should be employee (realistic flow)
+    _create_ticket(
+        client,
+        asset_id,
+        requester_id=employee_id,
+        token=employee_token,
+    )
+
+    # act
     response = client.get("/api/tickets", headers=_auth_header(admin_token))
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+    assert len(response.json()) > 0
 
 
 def test_when_admin_lists_tickets_with_loaner_asset_then_should_include_loaner_details(
@@ -915,7 +959,7 @@ def test_when_assigning_available_loaner_then_should_borrow_asset(
         "type": "laptop",
         "model": "LoanerModel",
         "specification": "Spec",
-        "vendor": "Vendor",
+        "vendor": "Lenovo",
         "purchase_date": "2025-01-01",
         "purchase_price": 100,
         "storage_location": "IT",

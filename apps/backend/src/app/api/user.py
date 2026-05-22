@@ -23,6 +23,17 @@ router = APIRouter()
 admin_required = require_role("ADMIN")
 
 
+# Pure business logic functions (testable without DB/HTTP layer)
+def validate_password_change(current_password: str, new_password: str) -> None:
+	"""
+	Validate password change constraints.
+	
+	Raises HTTPException if validation fails.
+	"""
+	if current_password == new_password:
+		raise HTTPException(status_code=422, detail="new password must be different")
+
+
 def _normalize_note_type(value: str) -> NoteType:
 	key = value.strip().upper()
 	try:
@@ -268,8 +279,9 @@ async def change_my_password(
 		raise HTTPException(status_code=404, detail="user not found")
 	if not verify_password(payload.current_password, row.password):
 		raise HTTPException(status_code=401, detail="invalid current password")
-	if payload.current_password == payload.new_password:
-		raise HTTPException(status_code=422, detail="new password must be different")
+	
+	# Validate password change constraints (pure logic, testable)
+	validate_password_change(payload.current_password, payload.new_password)
 
 	row.password = hash_password(payload.new_password)
 	row.must_change_password = False

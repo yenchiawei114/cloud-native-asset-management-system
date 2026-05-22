@@ -524,11 +524,15 @@ NOTIFICATION_PREFERENCES = [
     }
 ]
 
+
 async def run() -> None:
     async with Session() as session:
         # Seed Vendors
         vendor_count = 0
-        for vendor_name in VENDORS:
+        vendor_names = sorted(
+            set(VENDORS) | {asset["vendor"] for asset in ASSETS} | {record["vendor"] for record in REPAIR_RECORDS}
+        )
+        for vendor_name in vendor_names:
             existing = await session.scalar(select(Vendor).where(Vendor.name == vendor_name))
             if existing:
                 continue
@@ -548,6 +552,11 @@ async def run() -> None:
         await session.commit()
         print(f"seeded: {loc_count} office location(s)")
 
+        office_locations = (await session.scalars(select(OfficeLocation))).all()
+        office_location_ids = {location.name: location.id for location in office_locations}
+        vendors = (await session.scalars(select(Vendor))).all()
+        vendor_ids = {vendor.name: vendor.id for vendor in vendors}
+
         # Seed Department
         dept_count = 0
         for dept_data in DEPARTMENTS:
@@ -558,22 +567,25 @@ async def run() -> None:
             session.add(dept)
             dept_count += 1
         await session.commit()
-        
+
         # Seed Users
         user_count = 0
         for user_data in USERS:
             existing = await session.scalar(select(User).where(User.employee_id == user_data["employee_id"]))
             if existing:
                 continue
-            
-            user_data["password"] = hash_password(user_data["password"])
-            user = User(**user_data)
+
+            user_payload = user_data.copy()
+            user_payload["password"] = hash_password(user_payload["password"])
+            location_name = user_payload.pop("location", None)
+            user_payload["location_id"] = office_location_ids.get(location_name)
+            user = User(**user_payload)
             session.add(user)
             user_count += 1
-        
+
         await session.commit()
         print(f"seeded: {dept_count} department(s), {user_count} user(s)")
-        
+
         # Seed Notification Preferences
         notif_count = 0
         users_list = (await session.scalars(select(User).order_by(User.id.asc()))).all()
@@ -631,21 +643,23 @@ async def run() -> None:
             audit_count += 1
         await session.commit()
         print(f"seeded: {audit_count} audit log(s)")
-        
+
         # Seed Assets
         asset_count = 0
-        
+
         for asset_data in ASSETS:
             existing = await session.scalar(select(Asset).where(Asset.asset_code == asset_data["asset_code"]))
             if existing:
                 continue
-                
-            session.add(Asset(**asset_data))
+            asset_payload = asset_data.copy()
+            asset_vendor_name = asset_payload.pop("vendor")
+            asset_payload["vendor_id"] = vendor_ids[asset_vendor_name]
+            session.add(Asset(**asset_payload))
             asset_count += 1
-        
+
         await session.commit()
         print(f"seeded: {asset_count} asset(s)")
-        
+
         # Seed Repair Requests, Inspections, Records, Attachments
         existing_rr = await session.scalar(select(RepairRequest).limit(1))
         if not existing_rr:
@@ -694,7 +708,7 @@ async def run() -> None:
                     issue_description=row["issue_description"],
                     solution=row["solution"],
                     cost=row["cost"],
-                    vendor=row["vendor"],
+                    vendor_id=vendor_ids[row["vendor"]],
                 )
                 session.add(repair_record)
 
@@ -709,7 +723,9 @@ async def run() -> None:
                 session.add(attachment)
 
             await session.commit()
-            print(f"seeded: {len(REPAIR_REQUESTS)} repair request(s), {len(REPAIR_INSPECTIONS)} inspection(s), {len(REPAIR_RECORDS)} record(s), {len(ATTACHMENTS)} attachment(s)")
+            print(
+                f"seeded: {len(REPAIR_REQUESTS)} repair request(s), {len(REPAIR_INSPECTIONS)} inspection(s), {len(REPAIR_RECORDS)} record(s), {len(ATTACHMENTS)} attachment(s)"
+            )
 
 
 def main() -> None:

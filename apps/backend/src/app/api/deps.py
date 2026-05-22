@@ -35,6 +35,7 @@ async def get_current_user(
                 detail="帳號已停用",
             )
 
+    payload.pop("exp", None)
     return payload
 
 

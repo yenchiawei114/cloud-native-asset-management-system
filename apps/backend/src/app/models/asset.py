@@ -1,7 +1,21 @@
-from datetime import datetime, date
+from datetime import date, datetime
 from enum import Enum as PyEnum
-from sqlalchemy import Index, BigInteger, Boolean, Integer, CHAR, String, DateTime, Date, Enum, ForeignKey, func
+
+from sqlalchemy import (
+    CHAR,
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.models.base import Base
 
 

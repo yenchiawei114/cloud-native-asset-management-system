@@ -1,7 +1,20 @@
-from sqlalchemy import Index, BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.base import Base
+
 from app.models.asset import Asset
+from app.models.base import Base
 from app.models.user import User
 
 

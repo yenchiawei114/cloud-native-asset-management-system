@@ -26,6 +26,7 @@ router = APIRouter()
 CACHE_TTL_SECONDS = 60
 MAX_ATTACHMENT_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_ACTIVE_STATUSES = ("OPEN", "IN_PROGRESS", "WAITING_LOANER_RETURN")
 
 
 def _ticket_cache_key(ticket_id: int) -> str:
@@ -504,7 +505,6 @@ async def create_ticket(
     if user.get("role") == "ADMIN" and asset_row.owner_id != user["user_id"]:
         raise HTTPException(status_code=403, detail="管理員只能對自己保管的資產提出維修申請")
 
-    _ACTIVE_STATUSES = ("OPEN", "IN_PROGRESS", "WAITING_LOANER_RETURN")
     existing_active = (await db.scalars(
         select(RepairRequest).where(
             RepairRequest.asset_id == payload.asset_id,

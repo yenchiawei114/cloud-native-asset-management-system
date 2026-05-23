@@ -1,10 +1,10 @@
-from datetime import datetime, date, timezone
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,7 +12,7 @@ from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
 from app.core.db import get_db
 from app.core.security import hash_password, verify_password
-from app.models import NotificationPreference, User, Department, OfficeLocation
+from app.models import Department, NotificationPreference, OfficeLocation, User
 from app.models.asset import Asset, AssetStatus, AssetTransfer
 from app.models.audit_log import Action, TargetType
 from app.models.notification_preference import NoteType
@@ -285,7 +285,7 @@ async def change_my_password(
 
 	row.password = hash_password(payload.new_password)
 	row.must_change_password = False
-	row.last_password_changed_at = datetime.now(timezone.utc)
+	row.last_password_changed_at = datetime.now(UTC)
 	await log_action(
 		db,
 		user_id=user_id,
@@ -544,7 +544,7 @@ async def admin_delete_user(
 		await db.commit()
 	except IntegrityError:
 		await db.rollback()
-		raise HTTPException(status_code=409, detail="cannot delete user with existing records")
+		raise HTTPException(status_code=409, detail="cannot delete user with existing records") from None
 
 
 # ── 離職流程 ──────────────────────────────────────────────
@@ -618,7 +618,7 @@ async def get_offboarding_checklist(
 		ob_transfers = (await db.scalars(
 			select(AssetTransfer).where(
 				AssetTransfer.from_owner_id == row.id,
-				AssetTransfer.is_offboarding_transfer == True,
+				AssetTransfer.is_offboarding_transfer.is_(True),
 				AssetTransfer.status.in_(["PENDING", "COMPLETED"]),
 			)
 		)).all()
@@ -666,7 +666,7 @@ async def get_offboarding_checklist(
 	pending_transfers = (await db.scalars(
 		select(AssetTransfer).where(
 			AssetTransfer.status == "PENDING",
-			AssetTransfer.is_offboarding_transfer == False,
+			AssetTransfer.is_offboarding_transfer.is_(False),
 			(AssetTransfer.from_owner_id == row.id) | (AssetTransfer.to_owner_id == row.id),
 		)
 	)).all()
@@ -740,7 +740,7 @@ async def offboard_user(
 	# 最後一個 active admin 不能被停用
 	if row.role == Role.ADMIN:
 		active_admin_count = (await db.execute(
-			select(User).where(User.role == Role.ADMIN, User.is_active == True)
+			select(User).where(User.role == Role.ADMIN, User.is_active.is_(True))
 		)).scalars().all()
 		if len(active_admin_count) <= 1:
 			raise HTTPException(status_code=400, detail="系統中至少需要一名有效的管理員帳號")
@@ -871,7 +871,7 @@ async def finalize_offboarding(
 	pending = (await db.scalars(
 		select(AssetTransfer).where(
 			AssetTransfer.from_owner_id == row.id,
-			AssetTransfer.is_offboarding_transfer == True,
+			AssetTransfer.is_offboarding_transfer.is_(True),
 			AssetTransfer.status == "PENDING",
 		)
 	)).all()

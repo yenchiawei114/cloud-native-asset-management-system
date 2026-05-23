@@ -1,9 +1,9 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import verify_token
 from app.core.db import get_db
+from app.core.security import verify_token
 from app.models.user import User
 
 security = HTTPBearer(auto_error=False)
@@ -24,7 +24,7 @@ async def get_current_user(
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired token",
-        )
+        ) from None
 
     user_id = payload.get("user_id")
     if user_id:

@@ -1,7 +1,7 @@
-from sqlalchemy import Integer, String, BigInteger
+from sqlalchemy import BigInteger, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.base import Base
 
+from app.models.base import Base
 
 
 class Department(Base):

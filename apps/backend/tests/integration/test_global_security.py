@@ -14,8 +14,8 @@ class TestUnauthenticatedAccess:
         assert response.status_code == 401
 
     async def test_delete_asset_without_token(self, client):
-        """DELETE /api/assets/{asset_id} requires admin token."""
-        response = await client.delete("/api/assets/1")
+        """POST /api/assets/{asset_id}/deactivate requires admin token."""
+        response = await client.post("/api/assets/1/deactivate")
         assert response.status_code == 401
 
     async def test_list_assets_without_token(self, client):
@@ -47,14 +47,14 @@ class TestUnauthenticatedAccess:
 class TestForbiddenAccessControl:
     """Test 403 Forbidden when user lacks required role."""
 
-    def _create_user_token(self, role: str = "user") -> str:
+    def _create_user_token(self, role: str = "EMPLOYEE") -> str:
         """Helper to create a token with specified role."""
         payload = {"sub": "testuser", "role": role, "exp": datetime.now(timezone.utc) + timedelta(hours=1)}
         return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
     def _create_admin_token(self) -> str:
         """Helper to create an admin token."""
-        return self._create_user_token(role="admin")
+        return self._create_user_token(role="ADMIN")
 
     async def test_user_cannot_create_asset(self, client):
         """User (non-admin) cannot POST /api/assets."""
@@ -63,15 +63,15 @@ class TestForbiddenAccessControl:
         assert response.status_code == 403
 
     async def test_user_cannot_delete_asset(self, client):
-        """User (non-admin) cannot DELETE /api/assets/{asset_id}."""
+        """User (non-admin) cannot POST /api/assets/{asset_id}/deactivate."""
         headers = {"Authorization": f"Bearer {self._create_user_token()}"}
-        response = await client.delete("/api/assets/1", headers=headers)
+        response = await client.post("/api/assets/1/deactivate", headers=headers)
         assert response.status_code == 403
 
     async def test_user_cannot_update_asset(self, client):
-        """User (non-admin) cannot PATCH /api/assets/{asset_id}."""
+        """User (non-admin) cannot PUT /api/assets/{asset_id}."""
         headers = {"Authorization": f"Bearer {self._create_user_token()}"}
-        response = await client.patch("/api/assets/1", headers=headers, json={"name": "Updated"})
+        response = await client.put("/api/assets/1", headers=headers, json={"name": "Updated"})
         assert response.status_code == 403
 
     async def test_user_cannot_delete_inspection(self, client):

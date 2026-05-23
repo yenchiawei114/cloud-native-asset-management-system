@@ -377,6 +377,7 @@ def patch_ticket_dependencies(monkeypatch, fake_db_session):
 
     app.dependency_overrides[get_db] = override_get_db
     monkeypatch.setattr(ticket_api, "redis", fake_redis)
+    monkeypatch.setattr(ticket_api, "send_email", lambda **kw: None)
 
     with TestClient(app) as client:
         yield client

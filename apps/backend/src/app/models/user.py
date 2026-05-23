@@ -90,5 +90,6 @@ class User(Base):
     )
     repair_requests: Mapped[list["RepairRequest"]] = relationship(
         "RepairRequest",
-        back_populates="requester"
+        back_populates="requester",
+        foreign_keys="[RepairRequest.requester_id]"
     )

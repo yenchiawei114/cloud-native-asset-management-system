@@ -172,6 +172,8 @@ export interface RepairRequest {
   loaner_asset_name?: string | null;
   loaner_return_borrower_confirmed?: boolean;
   loaner_return_lender_confirmed?: boolean;
+  handled_by?: number | null;
+  handled_by_name?: string | null;
   created_at: string;
   version: number;
   priority: string;
@@ -388,7 +390,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...payload, status: 'OPEN' })
     }),
-  closeTicket: (ticketId: number, payload: { issue_description: string; solution: string; vendor: string; cost: number }) =>
+  closeTicket: (ticketId: number, payload: { issue_description: string; solution: string; vendor_id: number; cost: number }) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/close`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

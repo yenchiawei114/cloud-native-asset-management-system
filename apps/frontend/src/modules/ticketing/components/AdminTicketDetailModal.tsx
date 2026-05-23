@@ -91,6 +91,12 @@ export const AdminTicketDetailModal: React.FC<Props> = ({
           <Section title={t('ticketing.detail.basicInfo')}>
             <InfoRow label={t('ticketing.detail.requester')} value={ticket.requester_name || `${t('ticketing.user')} #${ticket.requester_id}`} />
             <InfoRow label={t('ticketing.detail.requestDate')} value={fmtDate(ticket.created_at)} />
+            {ticket.handled_by && (
+              <InfoRow
+                label={t('ticketing.handlerLabel')}
+                value={ticket.handled_by_name || `Admin #${ticket.handled_by}`}
+              />
+            )}
             <InfoRow
               label={t('ticketing.detail.backupNeeded')}
               value={ticket.need_backup

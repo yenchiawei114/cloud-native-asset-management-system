@@ -25,6 +25,7 @@ class RepairRequest(Base):
     loaner_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
     loaner_return_borrower_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     loaner_return_lender_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    handled_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
@@ -34,7 +35,8 @@ class RepairRequest(Base):
     record: Mapped["RepairRecord | None"] = relationship(
         "RepairRecord", back_populates="request", uselist=False, cascade="all, delete-orphan"
     )
-    requester: Mapped["User"] = relationship("User", back_populates="repair_requests")
+    requester: Mapped["User"] = relationship("User", back_populates="repair_requests", foreign_keys=[requester_id])
+    handler: Mapped["User | None"] = relationship("User", foreign_keys=[handled_by])
     target_asset: Mapped["Asset"] = relationship("Asset", back_populates="repair_requests", foreign_keys=[asset_id])
     loaner_asset: Mapped["Asset | None"] = relationship("Asset", back_populates="loaner_requests", foreign_keys=[loaner_asset_id])
 

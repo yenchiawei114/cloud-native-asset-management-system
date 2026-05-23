@@ -52,7 +52,7 @@ class RepairRequestStatusUpdate(BaseModel):
 class CloseTicketPayload(BaseModel):
     issue_description: str
     solution: str
-    vendor: str
+    vendor_id: int
     cost: int = 0
 
 
@@ -83,6 +83,8 @@ class RepairRequestOut(BaseModel):
     loaner_asset_name: str | None = None
     loaner_return_borrower_confirmed: bool = False
     loaner_return_lender_confirmed: bool = False
+    handled_by: int | None = None
+    handled_by_name: str | None = None
     created_at: datetime
     version: int
     requester_name: str | None = None
@@ -108,7 +110,7 @@ class RepairRecordCreate(BaseModel):
     issue_description: str
     solution: str
     cost: int = 0
-    vendor: str
+    vendor_id: int
 
 
 class RepairInspectionUpdate(BaseModel):
@@ -122,7 +124,7 @@ class RepairRecordUpdate(BaseModel):
     issue_description: str
     solution: str
     cost: int = 0
-    vendor: str
+    vendor_id: int
 
 
 class RepairRecordOut(BaseModel):
@@ -133,6 +135,7 @@ class RepairRecordOut(BaseModel):
     solution: str
     cost: int
     vendor: str | None
+    vendor_id: int | None
     created_at: datetime
 
 
@@ -174,6 +177,7 @@ def _request_to_out(
     row: RepairRequest,
     requester_name: str | None = None,
     loaner_asset: Asset | None = None,
+    handler_name: str | None = None,
 ) -> RepairRequestOut:
     return RepairRequestOut(
         id=row.id,
@@ -191,10 +195,20 @@ def _request_to_out(
         loaner_asset_name=loaner_asset.name if loaner_asset else None,
         loaner_return_borrower_confirmed=row.loaner_return_borrower_confirmed,
         loaner_return_lender_confirmed=row.loaner_return_lender_confirmed,
+        handled_by=row.handled_by,
+        handled_by_name=handler_name,
         created_at=row.created_at,
         version=row.version,
         requester_name=requester_name,
     )
+
+
+async def _require_handler(row: RepairRequest, user: dict, db: AsyncSession) -> None:
+    """僅允許負責此工單的管理員執行後續操作。若 handled_by 為 NULL（舊資料），任何管理員皆可操作。"""
+    if row.handled_by is not None and row.handled_by != user["user_id"]:
+        handler = await db.get(User, row.handled_by)
+        handler_name = handler.name if handler else f"#{row.handled_by}"
+        raise HTTPException(status_code=403, detail=f"此工單由管理員 {handler_name} 負責，無法操作")
 
 
 def _inspection_to_out(row: RepairInspection) -> RepairInspectionOut:
@@ -208,7 +222,7 @@ def _inspection_to_out(row: RepairInspection) -> RepairInspectionOut:
     )
 
 
-def _record_to_out(row: RepairRecord) -> RepairRecordOut:
+def _record_to_out(row: RepairRecord, vendor_name: str | None = None) -> RepairRecordOut:
     return RepairRecordOut(
         id=row.id,
         request_id=row.request_id,
@@ -216,7 +230,8 @@ def _record_to_out(row: RepairRecord) -> RepairRecordOut:
         issue_description=row.issue_description,
         solution=row.solution,
         cost=row.cost,
-        vendor=(row.vendor.name if getattr(row, "vendor", None) else None),
+        vendor=vendor_name,
+        vendor_id=row.vendor_id,
         created_at=row.created_at,
     )
 
@@ -286,7 +301,19 @@ async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_re
     if loaner_ids:
         loaners = (await db.scalars(select(Asset).where(Asset.id.in_(loaner_ids)))).all()
         loaner_map = {a.id: a for a in loaners}
-    return [_request_to_out(r, loaner_asset=loaner_map.get(r.loaner_asset_id) if r.loaner_asset_id else None) for r in rows]
+    handler_ids = {r.handled_by for r in rows if r.handled_by}
+    handler_map: dict[int, User] = {}
+    if handler_ids:
+        handlers = (await db.scalars(select(User).where(User.id.in_(handler_ids)))).all()
+        handler_map = {u.id: u for u in handlers}
+    return [
+        _request_to_out(
+            r,
+            loaner_asset=loaner_map.get(r.loaner_asset_id) if r.loaner_asset_id else None,
+            handler_name=handler_map[r.handled_by].name if r.handled_by and r.handled_by in handler_map else None,
+        )
+        for r in rows
+    ]
 
 
 @router.get("/assets/{asset_id}/tickets", response_model=list[RepairRequestWithAttachments])
@@ -334,6 +361,12 @@ async def list_asset_tickets(
         loaners = (await db.scalars(select(Asset).where(Asset.id.in_(loaner_ids)))).all()
         loaner_map = {a.id: a for a in loaners}
 
+    handler_ids = {r.handled_by for r in rows if r.handled_by}
+    handler_map: dict[int, User] = {}
+    if handler_ids:
+        handlers = (await db.scalars(select(User).where(User.id.in_(handler_ids)))).all()
+        handler_map = {u.id: u for u in handlers}
+
     result = []
     for r in rows:
         requester = requester_map.get(r.requester_id)
@@ -342,6 +375,7 @@ async def list_asset_tickets(
                 r,
                 requester_name=requester.name if requester else None,
                 loaner_asset=loaner_map.get(r.loaner_asset_id) if r.loaner_asset_id else None,
+                handler_name=handler_map[r.handled_by].name if r.handled_by and r.handled_by in handler_map else None,
             ),
             attachment=attachments_map.get(r.id),
         ))
@@ -399,6 +433,12 @@ async def list_user_tickets(
         loaners = (await db.scalars(select(Asset).where(Asset.id.in_(loaner_ids)))).all()
         loaner_map = {a.id: a for a in loaners}
 
+    handler_ids = {r.handled_by for r in rows if r.handled_by}
+    handler_map: dict[int, User] = {}
+    if handler_ids:
+        handlers = (await db.scalars(select(User).where(User.id.in_(handler_ids)))).all()
+        handler_map = {u.id: u for u in handlers}
+
     result: list[RepairRequestWithAttachments] = []
     for r in rows:
         result.append(RepairRequestWithAttachments(
@@ -406,6 +446,7 @@ async def list_user_tickets(
                 r,
                 requester_name=requester_name,
                 loaner_asset=loaner_map.get(r.loaner_asset_id) if r.loaner_asset_id else None,
+                handler_name=handler_map[r.handled_by].name if r.handled_by and r.handled_by in handler_map else None,
             ),
             attachment=attachments_map.get(r.id),
         ))
@@ -439,7 +480,13 @@ async def get_ticket(
 
     requester = await db.get(User, row.requester_id)
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
-    result = _request_to_out(row, requester_name=requester.name if requester else None, loaner_asset=loaner_asset)
+    handler = await db.get(User, row.handled_by) if row.handled_by else None
+    result = _request_to_out(
+        row,
+        requester_name=requester.name if requester else None,
+        loaner_asset=loaner_asset,
+        handler_name=handler.name if handler else None,
+    )
     await redis.setex(cache_key, CACHE_TTL_SECONDS, result.model_dump_json())
     return result
 
@@ -450,6 +497,23 @@ async def create_ticket(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> RepairRequestOut:
+    asset_row = await db.get(Asset, payload.asset_id)
+    if asset_row is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+
+    if user.get("role") == "ADMIN" and asset_row.owner_id != user["user_id"]:
+        raise HTTPException(status_code=403, detail="管理員只能對自己保管的資產提出維修申請")
+
+    _ACTIVE_STATUSES = ("OPEN", "IN_PROGRESS", "WAITING_LOANER_RETURN")
+    existing_active = (await db.scalars(
+        select(RepairRequest).where(
+            RepairRequest.asset_id == payload.asset_id,
+            RepairRequest.status.in_(_ACTIVE_STATUSES),
+        )
+    )).first()
+    if existing_active:
+        raise HTTPException(status_code=400, detail="此資產已有進行中的維修工單，請等待完成後再重新申請")
+
     row = RepairRequest(
         asset_id=payload.asset_id,
         requester_id=payload.requester_id,
@@ -491,6 +555,10 @@ async def update_ticket(
     if row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    # 已退回工單為終態，不允許修改；需重新開立新工單
+    if row.status != "OPEN":
+        raise HTTPException(status_code=400, detail="只有待審核（OPEN）狀態的工單才能修改")
+
     before = _request_to_out(row).model_dump(mode="json")
 
     row.asset_id = payload.asset_id
@@ -500,14 +568,8 @@ async def update_ticket(
     row.backup_spec = payload.backup_spec
     row.expected_completion_date = payload.expected_completion_date
     row.pickup_location = payload.pickup_location
+    row.status = payload.status
     row.version += 1
-
-    # 若工單是「已退回」狀態，重送後自動重設為「待審核」並清除退回原因
-    if row.status == "RETURNED":
-        row.status = "OPEN"
-        row.reject_reason = None
-    else:
-        row.status = payload.status
 
     after = _request_to_out(row).model_dump(mode="json")
     await log_action(
@@ -540,7 +602,16 @@ async def update_ticket_status(
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
 
+    # 只有 OPEN 工單可由任意管理員審核；非 OPEN 工單只有 handled_by 管理員可操作
+    if row.status != "OPEN":
+        await _require_handler(row, user, db)
+
     old_status = row.status
+
+    # 審核動作（OPEN → IN_PROGRESS 或 OPEN → RETURNED）記錄負責管理員
+    if row.status == "OPEN" and payload.status in ("IN_PROGRESS", "RETURNED"):
+        row.handled_by = user["user_id"]
+
     row.status = payload.status
     row.version += 1
 
@@ -590,7 +661,7 @@ async def update_ticket_status(
         elif payload.status == "RETURNED":
             send_email(
                 subject=f"【維修申請退回】{asset_label} 維修工單已退回",
-                body=f"<p>您好 {requester.name}，</p><p>您的維修申請（工單 #{ticket_id}）已被退回。</p><p>退回原因：{payload.reject_reason or '無說明'}</p><p>您可登入系統修改後重新送出。</p>",
+                body=f"<p>您好 {requester.name}，</p><p>您的維修申請（工單 #{ticket_id}）已被退回。</p><p>退回原因：{payload.reject_reason or '無說明'}</p><p>如有需要，請重新開立新的維修申請。</p>",
                 receiver=requester.email,
             )
 
@@ -608,7 +679,13 @@ async def update_ticket_status(
     await db.refresh(row)
 
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
-    result = _request_to_out(row, requester_name=requester.name if requester else None, loaner_asset=loaner_asset)
+    handler = await db.get(User, row.handled_by) if row.handled_by else None
+    result = _request_to_out(
+        row,
+        requester_name=requester.name if requester else None,
+        loaner_asset=loaner_asset,
+        handler_name=handler.name if handler else None,
+    )
     await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
     return result
 
@@ -625,13 +702,9 @@ async def close_ticket(
         raise HTTPException(status_code=404, detail="ticket not found")
     if row.status != "IN_PROGRESS":
         raise HTTPException(status_code=400, detail="只有「維修中」的工單才能結案")
+    await _require_handler(row, user, db)
 
-    vendor = (
-        await db.scalars(
-            select(Vendor).where(Vendor.name == payload.vendor)
-        )
-    ).first()
-
+    vendor = await db.get(Vendor, payload.vendor_id)
     if vendor is None:
         raise HTTPException(status_code=400, detail="vendor not found")
 
@@ -699,7 +772,13 @@ async def close_ticket(
     await db.refresh(row)
 
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
-    result = _request_to_out(row, requester_name=requester.name if requester else None, loaner_asset=loaner_asset)
+    handler = await db.get(User, row.handled_by) if row.handled_by else None
+    result = _request_to_out(
+        row,
+        requester_name=requester.name if requester else None,
+        loaner_asset=loaner_asset,
+        handler_name=handler.name if handler else None,
+    )
     await redis.setex(_ticket_cache_key(ticket_id), CACHE_TTL_SECONDS, result.model_dump_json())
     return result
 
@@ -824,6 +903,7 @@ async def create_ticket_inspection(
     request_row = await db.get(RepairRequest, ticket_id)
     if request_row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+    await _require_handler(request_row, user, db)
 
     existing = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
     if existing is not None:
@@ -833,7 +913,7 @@ async def create_ticket_inspection(
         request_id=ticket_id,
         status=payload.status,
         note=payload.note,
-        checked_by=payload.checked_by,
+        checked_by=user["user_id"],
     )
     db.add(row)
     await db.flush()
@@ -860,11 +940,15 @@ async def update_ticket_inspection(
     if row is None:
         raise HTTPException(status_code=404, detail="inspection not found")
 
+    request_row = await db.get(RepairRequest, ticket_id)
+    if request_row:
+        await _require_handler(request_row, user, db)
+
     before = _inspection_to_out(row).model_dump(mode="json")
 
     row.status = payload.status
     row.note = payload.note
-    row.checked_by = payload.checked_by
+    row.checked_by = user["user_id"]
 
     after = _inspection_to_out(row).model_dump(mode="json")
     await log_action(
@@ -889,6 +973,10 @@ async def delete_ticket_inspection(
     row = (await db.scalars(select(RepairInspection).where(RepairInspection.request_id == ticket_id))).first()
     if row is None:
         raise HTTPException(status_code=404, detail="inspection not found")
+
+    request_row = await db.get(RepairRequest, ticket_id)
+    if request_row:
+        await _require_handler(request_row, user, db)
 
     before = _inspection_to_out(row).model_dump(mode="json")
     inspection_id = row.id
@@ -918,7 +1006,8 @@ async def get_ticket_record(
     if user.get("role") != "ADMIN" and request_row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    return _record_to_out(row)
+    vendor = await db.get(Vendor, row.vendor_id) if row.vendor_id else None
+    return _record_to_out(row, vendor_name=vendor.name if vendor else None)
 
 
 @router.post("/tickets/{ticket_id}/record", response_model=RepairRecordOut, status_code=201)
@@ -928,17 +1017,13 @@ async def create_ticket_record(
     request_row = await db.get(RepairRequest, ticket_id)
     if request_row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+    await _require_handler(request_row, user, db)
 
     existing = (await db.scalars(select(RepairRecord).where(RepairRecord.request_id == ticket_id))).first()
     if existing is not None:
         raise HTTPException(status_code=409, detail="repair record already exists")
 
-    vendor = (
-        await db.scalars(
-            select(Vendor).where(Vendor.name == payload.vendor)
-        )
-    ).first()
-
+    vendor = await db.get(Vendor, payload.vendor_id)
     if vendor is None:
         raise HTTPException(status_code=400, detail="vendor not found")
 
@@ -964,7 +1049,7 @@ async def create_ticket_record(
     )
     await db.commit()
     await db.refresh(row)
-    return _record_to_out(row)
+    return _record_to_out(row, vendor_name=vendor.name)
 
 
 @router.put("/tickets/{ticket_id}/record", response_model=RepairRecordOut)
@@ -975,16 +1060,16 @@ async def update_ticket_record(
     if row is None:
         raise HTTPException(status_code=404, detail="repair record not found")
 
-    vendor = (
-        await db.scalars(
-            select(Vendor).where(Vendor.name == payload.vendor)
-        )
-    ).first()
+    request_row = await db.get(RepairRequest, row.request_id)
+    if request_row:
+        await _require_handler(request_row, user, db)
 
+    vendor = await db.get(Vendor, payload.vendor_id)
     if vendor is None:
         raise HTTPException(status_code=400, detail="vendor not found")
 
-    before = _record_to_out(row).model_dump(mode="json")
+    old_vendor = await db.get(Vendor, row.vendor_id) if row.vendor_id else None
+    before = _record_to_out(row, vendor_name=old_vendor.name if old_vendor else None).model_dump(mode="json")
 
     row.repair_date = payload.repair_date
     row.issue_description = payload.issue_description
@@ -992,7 +1077,7 @@ async def update_ticket_record(
     row.cost = payload.cost
     row.vendor_id = vendor.id
 
-    after = _record_to_out(row).model_dump(mode="json")
+    after = _record_to_out(row, vendor_name=vendor.name).model_dump(mode="json")
     await log_action(
         db,
         user_id=user["user_id"],
@@ -1005,7 +1090,7 @@ async def update_ticket_record(
     )
     await db.commit()
     await db.refresh(row)
-    return _record_to_out(row)
+    return _record_to_out(row, vendor_name=vendor.name)
 
 
 @router.delete("/tickets/{ticket_id}/record", status_code=204)
@@ -1016,7 +1101,12 @@ async def delete_ticket_record(
     if row is None:
         raise HTTPException(status_code=404, detail="repair record not found")
 
-    before = _record_to_out(row).model_dump(mode="json")
+    request_row = await db.get(RepairRequest, row.request_id)
+    if request_row:
+        await _require_handler(request_row, user, db)
+
+    vendor = await db.get(Vendor, row.vendor_id) if row.vendor_id else None
+    before = _record_to_out(row, vendor_name=vendor.name if vendor else None).model_dump(mode="json")
     record_id = row.id
     await db.delete(row)
     await log_action(

@@ -1,8 +1,8 @@
-from datetime import date, datetime
 import csv
 import io
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -406,8 +406,8 @@ async def import_assets_csv(
         raise HTTPException(status_code=400, detail="empty file")
     try:
         text = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="invalid file encoding, expected UTF-8")
+    except UnicodeDecodeError as err:
+        raise HTTPException(status_code=400, detail="invalid file encoding, expected UTF-8") from err
 
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames:
@@ -483,8 +483,8 @@ async def import_assets_csv(
                 raise ValueError("type required")
             try:
                 asset_type = AssetType(asset_type_raw)
-            except ValueError:
-                raise ValueError("invalid type")
+            except ValueError as err:
+                raise ValueError("invalid type") from err
 
             model = normalized_row.get("model", "")
             if not model:
@@ -514,8 +514,8 @@ async def import_assets_csv(
                 raise ValueError("purchase_price required")
             try:
                 purchase_price = int(purchase_price_raw)
-            except ValueError:
-                raise ValueError("invalid purchase_price")
+            except ValueError as err:
+                raise ValueError("invalid purchase_price") from err
 
             owner_id = user["user_id"]
             asset = (

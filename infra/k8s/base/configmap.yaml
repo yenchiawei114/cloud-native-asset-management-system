@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: asset-mgmt-config
+  namespace: asset-mgmt
+data:
+  APP_ENV: "production"
+  LOG_FORMAT: "json"
+  ENABLE_METRICS: "true"
+  STORAGE_BACKEND: "gcs"
+  GCS_BUCKET: "asset-mgmt-files-494008"
+  GCS_SIGNED_URLS: "true"
+  DB_URL: "mysql+asyncmy://app:$(DB_PASSWORD)@cloudsql-proxy:3306/asset_mgmt"
+  DB_SYNC_URL: "mysql+pymysql://app:$(DB_PASSWORD)@cloudsql-proxy:3306/asset_mgmt"
+  DB_POOL_SIZE: "10"
+  REDIS_URL: "redis://redis.internal:6379/0"
+  CORS_ORIGINS: "https://cnams.duckdns.org"
+  WEB_CONCURRENCY: "2"

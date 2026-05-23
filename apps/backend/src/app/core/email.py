@@ -33,7 +33,7 @@ def _send_email_task(self, subject: str, body: str, receiver: str) -> None:
             countdown,
             exc,
         )
-        raise self.retry(exc=exc, countdown=countdown)
+        raise self.retry(exc=exc, countdown=countdown) from exc
 
 
 def _send_via_smtp(subject: str, body: str, receiver: str) -> None:

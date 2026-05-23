@@ -10,7 +10,7 @@ GKE 上的 Cloud Logging 會自動把看起來像 JSON 的 stdout 解析為 JSON
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.config import settings
 
@@ -29,7 +29,7 @@ class JsonFormatter(logging.Formatter):
         payload: dict[str, object] = {
             "severity": _SEVERITY.get(record.levelno, record.levelname),
             "message": record.getMessage(),
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "logger": record.name,
         }
         if record.exc_info:

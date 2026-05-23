@@ -3,22 +3,22 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
-from app.core.storage import storage
+from app.core.cache import redis
 from app.core.db import get_db
-from app.models import RepairInspection, RepairRecord, RepairRequest, Attachment, User, Vendor
+from app.core.email import send_email
+from app.core.limiter import limiter
+from app.core.storage import storage
+from app.models import Attachment, RepairInspection, RepairRecord, RepairRequest, User, Vendor
 from app.models.asset import Asset, AssetStatus
 from app.models.audit_log import Action, TargetType
 from app.models.user import Role
-from app.core.cache import redis
-
-from app.core.email import send_email
-from app.api.deps import require_role, get_current_user
 
 admin_required = require_role("ADMIN")
 
@@ -26,6 +26,7 @@ router = APIRouter()
 CACHE_TTL_SECONDS = 60
 MAX_ATTACHMENT_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_ACTIVE_STATUSES = ("OPEN", "IN_PROGRESS", "WAITING_LOANER_RETURN")
 
 
 def _ticket_cache_key(ticket_id: int) -> str:
@@ -504,7 +505,6 @@ async def create_ticket(
     if user.get("role") == "ADMIN" and asset_row.owner_id != user["user_id"]:
         raise HTTPException(status_code=403, detail="管理員只能對自己保管的資產提出維修申請")
 
-    _ACTIVE_STATUSES = ("OPEN", "IN_PROGRESS", "WAITING_LOANER_RETURN")
     existing_active = (await db.scalars(
         select(RepairRequest).where(
             RepairRequest.asset_id == payload.asset_id,
@@ -555,9 +555,9 @@ async def update_ticket(
     if row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # 已退回工單為終態，不允許修改；需重新開立新工單
-    if row.status != "OPEN":
-        raise HTTPException(status_code=400, detail="只有待審核（OPEN）狀態的工單才能修改")
+    # 只有 OPEN 或 RETURNED 工單可由申請人修改
+    if row.status not in ("OPEN", "RETURNED"):
+        raise HTTPException(status_code=400, detail="只有待審核（OPEN）或已退回（RETURNED）狀態的工單才能修改")
 
     before = _request_to_out(row).model_dump(mode="json")
 
@@ -568,7 +568,12 @@ async def update_ticket(
     row.backup_spec = payload.backup_spec
     row.expected_completion_date = payload.expected_completion_date
     row.pickup_location = payload.pickup_location
-    row.status = payload.status
+    # RETURNED 工單重新提交時強制重置為 OPEN，並清除退回原因
+    if row.status == "RETURNED":
+        row.status = "OPEN"
+        row.reject_reason = None
+    else:
+        row.status = payload.status
     row.version += 1
 
     after = _request_to_out(row).model_dump(mode="json")
@@ -1197,7 +1202,9 @@ async def get_attachment(
 
 
 @router.post("/attachments", response_model=AttachmentOut, status_code=201)
+@limiter.limit("30/minute")
 async def create_and_upload_attachment(
+    request: Request,
     attachable_type: AttachmentAttachableType = Form(...),
     attachable_id: int = Form(...),
     file: UploadFile = File(...),

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -77,7 +77,7 @@ async def list_audit_logs(
         try:
             stmt = stmt.where(AuditLog.target_type == TargetType(target_type))
         except ValueError:
-            raise HTTPException(status_code=422, detail=f"invalid target_type: {target_type}")
+            raise HTTPException(status_code=422, detail=f"invalid target_type: {target_type}") from None
     if target_id is not None:
         stmt = stmt.where(AuditLog.target_id == target_id)
     if user_id is not None:
@@ -86,11 +86,11 @@ async def list_audit_logs(
         try:
             stmt = stmt.where(AuditLog.action == Action(action))
         except ValueError:
-            raise HTTPException(status_code=422, detail=f"invalid action: {action}")
+            raise HTTPException(status_code=422, detail=f"invalid action: {action}") from None
     if from_date is not None:
-        stmt = stmt.where(AuditLog.timestamp >= datetime(from_date.year, from_date.month, from_date.day, tzinfo=timezone.utc))
+        stmt = stmt.where(AuditLog.timestamp >= datetime(from_date.year, from_date.month, from_date.day, tzinfo=UTC))
     if to_date is not None:
-        upper = datetime(to_date.year, to_date.month, to_date.day, tzinfo=timezone.utc) + timedelta(days=1)
+        upper = datetime(to_date.year, to_date.month, to_date.day, tzinfo=UTC) + timedelta(days=1)
         stmt = stmt.where(AuditLog.timestamp < upper)
 
     total = (await db.scalar(select(func.count()).select_from(stmt.subquery()))) or 0
@@ -105,14 +105,3 @@ async def list_audit_logs(
         page_size=page_size,
     )
 
-
-@router.get("/audit-logs/{log_id}", response_model=AuditLogOut)
-async def get_audit_log(
-    log_id: int,
-    db: AsyncSession = Depends(get_db),
-    _user=Depends(admin_required),
-) -> AuditLogOut:
-    log = await db.get(AuditLog, log_id)
-    if log is None:
-        raise HTTPException(status_code=404, detail="audit log not found")
-    return _to_out(log)

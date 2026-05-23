@@ -100,6 +100,14 @@ class FakeSession:
             if requester_match:
                 requester_id = int(requester_match.group(1))
                 rows = [row for row in rows if row.requester_id == requester_id]
+            asset_match = re.search(r"repair_requests\.asset_id\s*=\s*(\d+)", lowered)
+            if asset_match:
+                asset_id = int(asset_match.group(1))
+                rows = [row for row in rows if row.asset_id == asset_id]
+            status_in_match = re.search(r"status\s+in\s*\(([^)]+)\)", lowered)
+            if status_in_match:
+                statuses = [s.strip().strip("'") for s in status_in_match.group(1).split(",")]
+                rows = [row for row in rows if getattr(row, "status", None) in statuses]
             rows = sorted(rows, key=lambda row: row.id, reverse=True)
             return FakeScalarResult(rows)
         if "from attachments" in lowered:
@@ -369,6 +377,7 @@ def patch_ticket_dependencies(monkeypatch, fake_db_session):
 
     app.dependency_overrides[get_db] = override_get_db
     monkeypatch.setattr(ticket_api, "redis", fake_redis)
+    monkeypatch.setattr(ticket_api, "send_email", lambda **kw: None)
 
     with TestClient(app) as client:
         yield client
@@ -485,7 +494,7 @@ def test_when_admin_lists_user_tickets_then_should_return_nested_data(client, fa
         need_backup=True,
         backup_spec="Backup docs",
     )
-    other_ticket = _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
+    other_ticket = _create_ticket(client, loaner_id, requester_id=admin_user_id, token=admin_token)
 
     fake_db_session.tickets[employee_ticket["id"]].loaner_asset_id = loaner_id
     fake_db_session.tickets[employee_ticket["id"]].status = "WAITING_LOANER_RETURN"
@@ -523,8 +532,9 @@ def test_when_employee_lists_own_tickets_then_should_return_only_their_tickets(
     employee_token, employee_user_id = _login_employee(client)
 
     asset_id = _create_asset(client, admin_token, owner_id=admin_user_id)
+    asset2_id = _create_asset(client, admin_token, owner_id=admin_user_id)
     own_ticket = _create_ticket(client, asset_id, requester_id=employee_user_id, token=employee_token)
-    _create_ticket(client, asset_id, requester_id=admin_user_id, token=admin_token)
+    _create_ticket(client, asset2_id, requester_id=admin_user_id, token=admin_token)
 
     _seed_attachment(
         fake_db_session,
@@ -1056,7 +1066,7 @@ def test_when_close_non_in_progress_ticket_then_should_return_400(
         json={
             "issue_description": "broken fan",
             "solution": "replaced fan",
-            "vendor": "Lenovo",
+            "vendor_id": 1,
             "cost": 100,
         },
         headers=_auth_header(admin_token),
@@ -1101,7 +1111,7 @@ def test_when_close_ticket_without_loaner_then_should_mark_done(
         json={
             "issue_description": "fan broken",
             "solution": "fan replaced",
-            "vendor": "Lenovo",
+            "vendor_id": 1,
             "cost": 300,
         },
         headers=_auth_header(admin_token),
@@ -1282,7 +1292,7 @@ def test_when_lender_confirms_then_should_only_update_lender_flag(
         client,
         asset_id,
         requester_id=borrower_id,
-        token=admin_token,
+        token=lender_token,
     )
 
     ticket = fake_db_session.tickets[created["id"]]
@@ -1338,7 +1348,7 @@ def test_when_both_confirm_loaner_return_then_should_complete_ticket(
         client,
         asset_id,
         requester_id=borrower_id,
-        token=admin_token,
+        token=borrower_token,
     )
 
     ticket = fake_db_session.tickets[created["id"]]

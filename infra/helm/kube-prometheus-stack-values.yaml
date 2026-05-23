@@ -1,0 +1,121 @@
+# GKE Autopilot 相容設定
+# 所有 sidecar/operator 必須明確設定 requests，否則 Autopilot 強制灌到 500m/2Gi
+
+prometheusOperator:
+  # 關掉 admission webhook 以移除那個需要 2Gi 的 admission-create Job
+  admissionWebhooks:
+    enabled: false
+    patch:
+      enabled: false
+  # 同時關掉 operator 本身的 TLS（否則會掛載不存在的 admission secret）
+  tls:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  prometheusConfigReloader:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelector: {}
+    retention: 2d
+    # 用 emptyDir 避免要求 PVC SSD
+    storageSpec: {}
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 400m
+        memory: 512Mi
+  prometheusConfigReloader:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+grafana:
+  adminPassword: "admin"
+  serviceAccount:
+    name: grafana-sa
+    create: false
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  # 設定 sub-path 讓 ingress /grafana 路由正常運作
+  grafana.ini:
+    server:
+      root_url: "https://cnams.duckdns.org/grafana"
+      serve_from_sub_path: true
+  # 關掉 sidecar 省記憶體
+  sidecar:
+    dashboards:
+      enabled: false
+    datasources:
+      enabled: false
+  # GMP datasource：用 Cloud Monitoring plugin 讀 GMP 資料
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: GMP
+          type: stackdriver
+          access: proxy
+          isDefault: true
+          jsonData:
+            authenticationType: gce
+            defaultProject: cloud-native-project-494008
+
+# 作業不需要 alertmanager，停掉省 128Mi
+alertmanager:
+  enabled: false
+
+kube-state-metrics:
+  enabled: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Autopilot 不支援的元件
+nodeExporter:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+coreDns:
+  enabled: false
+kubeDns:
+  enabled: false

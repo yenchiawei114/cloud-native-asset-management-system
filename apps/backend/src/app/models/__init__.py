@@ -4,8 +4,8 @@ from app.models.base import Base
 from app.models.department import Department
 from app.models.notification_preference import NotificationPreference
 from app.models.office_location import OfficeLocation
+from app.models.ticket import Attachment, RepairInspection, RepairRecord, RepairRequest
 from app.models.user import User
-from app.models.ticket import RepairRequest, RepairRecord, RepairInspection, Attachment
 from app.models.vendor import Vendor
 
 __all__ = [

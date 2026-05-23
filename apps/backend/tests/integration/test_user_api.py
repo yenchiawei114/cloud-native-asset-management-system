@@ -92,7 +92,7 @@ async def _seed_offboarding_data(test_db_session, department, admin, employee):
         type=AssetType.LAPTOP,
         model="ThinkPad X1",
         specification="16GB RAM / 512GB SSD",
-        vendor="Lenovo",
+        vendor_id=None,
         purchase_date=date(2025, 1, 1),
         purchase_price=1500,
         storage_location="HQ",
@@ -110,7 +110,7 @@ async def _seed_offboarding_data(test_db_session, department, admin, employee):
         type=AssetType.LAPTOP,
         model="MacBook Air",
         specification="8GB RAM / 256GB SSD",
-        vendor="Apple",
+        vendor_id=None,
         purchase_date=date(2025, 2, 1),
         purchase_price=1200,
         storage_location="HQ",
@@ -179,14 +179,14 @@ async def _seed_offboarding_data(test_db_session, department, admin, employee):
 @pytest.fixture(autouse=True)
 async def clean_user_tables(test_db_session):
     await test_db_session.rollback()
-    for model in (AuditLog, NotificationPreference, User, Department):
+    for model in (AuditLog, NotificationPreference, User, Department, OfficeLocation):
         await test_db_session.execute(delete(model))
     await test_db_session.commit()
 
     yield
 
     await test_db_session.rollback()
-    for model in (AuditLog, NotificationPreference, User, Department):
+    for model in (AuditLog, NotificationPreference, User, Department, OfficeLocation):
         await test_db_session.execute(delete(model))
     await test_db_session.commit()
 
@@ -317,7 +317,13 @@ async def test_when_receive_upsert_notification_preference_then_should_return_20
     assert row.value == new_value
 
 
-async def test_when_admin_creates_user_then_should_return_201_with_user_info(client, admin_token, seeded_user_data):
+async def test_when_admin_creates_user_then_should_return_201_with_user_info(
+    client, admin_token, seeded_user_data, test_db_session
+):
+    hq = OfficeLocation(name="Headquarters")
+    test_db_session.add(hq)
+    await test_db_session.commit()
+
     now = datetime.now(timezone.utc)
     payload = {
         "employee_id": random_employee_id(),

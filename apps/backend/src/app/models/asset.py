@@ -1,7 +1,21 @@
-from datetime import datetime, date
+from datetime import date, datetime
 from enum import Enum as PyEnum
-from sqlalchemy import Index, BigInteger, Boolean, Integer, CHAR, String, DateTime, Date, Enum, ForeignKey, func
+
+from sqlalchemy import (
+    CHAR,
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.models.base import Base
 
 
@@ -36,7 +50,7 @@ class Asset(Base):
     type: Mapped[AssetType] = mapped_column(Enum(AssetType), nullable=False)
     model: Mapped[str] = mapped_column(String(255), nullable=False)
     specification: Mapped[str] = mapped_column(String(255), nullable=False)
-    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id"), nullable=False)
+    vendor_id: Mapped[int | None] = mapped_column(ForeignKey("vendors.id"), nullable=True)
     purchase_date: Mapped[date] = mapped_column(
         Date,
         nullable=False

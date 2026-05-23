@@ -2,22 +2,21 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, or_
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm.exc import StaleDataError
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.exc import StaleDataError
 
+from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
 from app.core.db import get_db
 from app.core.email import send_email
 from app.models import Asset, AssetTransfer
-from app.models.asset import AssetType, AssetStatus
+from app.models.asset import AssetStatus, AssetType
 from app.models.audit_log import Action, TargetType
-from app.models.user import User, Role
+from app.models.user import Role, User
 from app.models.vendor import Vendor
-
-from app.api.deps import require_role, get_current_user
 
 admin_required = require_role("ADMIN")
 router = APIRouter()
@@ -318,7 +317,7 @@ async def create_asset(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="該資產編號已存在 (Asset code already exists)")
+        raise HTTPException(status_code=409, detail="該資產編號已存在 (Asset code already exists)") from None
     await log_action(
         db,
         user_id=user["user_id"],
@@ -391,9 +390,9 @@ async def update_asset(
     except StaleDataError:
         await db.rollback()
         raise HTTPException(
-            status_code=409, 
-            detail="該資產已被其他使用者修改，請重新整理後再試 (Asset has been modified by another user)"
-        )
+            status_code=409,
+            detail="該資產已被其他使用者修改，請重新整理後再試 (Asset has been modified by another user)",
+        ) from None
     asset = await _get_asset_for_out(db, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")

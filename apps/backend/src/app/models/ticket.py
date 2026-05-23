@@ -1,7 +1,20 @@
-from sqlalchemy import Index, BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.base import Base
+
 from app.models.asset import Asset
+from app.models.base import Base
 from app.models.user import User
 
 
@@ -65,11 +78,11 @@ class RepairRecord(Base):
     issue_description: Mapped[str] = mapped_column(Text, nullable=False)
     solution: Mapped[str] = mapped_column(Text, nullable=False)
     cost: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id"), nullable=False)
+    vendor_id: Mapped[int | None] = mapped_column(ForeignKey("vendors.id"), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
 
     request: Mapped["RepairRequest"] = relationship("RepairRequest", back_populates="record", foreign_keys=[request_id])
-    vendor: Mapped["Vendor"] = relationship("Vendor", back_populates="repair_records", foreign_keys=[vendor_id])
+    vendor: Mapped["Vendor | None"] = relationship("Vendor", back_populates="repair_records", foreign_keys=[vendor_id])
 
 
 class Attachment(Base):

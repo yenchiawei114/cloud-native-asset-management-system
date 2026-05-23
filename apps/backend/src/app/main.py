@@ -5,11 +5,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.api import assets, audit_logs, auth, health, ticket, user, vendor
 from app.core.cache import close_cache
 from app.core.config import settings
 from app.core.db import dispose_engines
+from app.core.limiter import limiter
 from app.core.logging import configure_logging
 from app.core.storage import LocalStorage, storage
 
@@ -27,6 +31,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Asset Management", lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

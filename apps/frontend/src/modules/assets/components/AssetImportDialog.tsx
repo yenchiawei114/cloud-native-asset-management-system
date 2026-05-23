@@ -9,6 +9,8 @@ interface Props {
 }
 
 const REQUIRED_COLUMNS = "asset_code,name,type,model,specification,vendor,purchase_date,purchase_price,activation_date,warranty_expiry";
+const REQUIRED_COLUMN_SET = new Set(REQUIRED_COLUMNS.split(","));
+const PREVIEW_LIMIT = 5;
 
 export const AssetImportDialog: React.FC<Props> = ({ open, onClose, onImported }) => {
   const { t } = useTranslation();
@@ -16,12 +18,122 @@ export const AssetImportDialog: React.FC<Props> = ({ open, onClose, onImported }
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<AssetImportResponse | null>(null);
+  const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
+  const [previewRows, setPreviewRows] = useState<string[][]>([]);
+  const [previewTotal, setPreviewTotal] = useState(0);
+  const [previewError, setPreviewError] = useState('');
+  const [successNotice, setSuccessNotice] = useState(false);
+  const [refreshOnClose, setRefreshOnClose] = useState(false);
 
   const handleClose = () => {
+    if (refreshOnClose) {
+      onImported();
+    }
     setFile(null);
     setError('');
     setResult(null);
+    setPreviewHeaders([]);
+    setPreviewRows([]);
+    setPreviewTotal(0);
+    setPreviewError('');
+    setSuccessNotice(false);
+    setRefreshOnClose(false);
     onClose();
+  };
+
+  const parseCsv = (text: string) => {
+    const rows: string[][] = [];
+    let current = '';
+    let row: string[] = [];
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      const next = text[i + 1];
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (char === ',' && !inQuotes) {
+        row.push(current);
+        current = '';
+        continue;
+      }
+      if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && next === '\n') {
+          i += 1;
+        }
+        row.push(current);
+        if (row.some((value) => value.trim() !== '')) {
+          rows.push(row);
+        }
+        row = [];
+        current = '';
+        continue;
+      }
+      current += char;
+    }
+
+    if (current.length > 0 || row.length > 0) {
+      row.push(current);
+      if (row.some((value) => value.trim() !== '')) {
+        rows.push(row);
+      }
+    }
+
+    if (rows.length === 0) {
+      throw new Error('empty');
+    }
+
+    const headers = rows[0].map((value) => value.trim());
+    const dataRows = rows.slice(1);
+    return { headers, rows: dataRows };
+  };
+
+  const handleFileChange = (selected: File | null) => {
+    setFile(selected);
+    setResult(null);
+    setError('');
+    setPreviewError('');
+    setPreviewHeaders([]);
+    setPreviewRows([]);
+    setPreviewTotal(0);
+    setSuccessNotice(false);
+    setRefreshOnClose(false);
+
+    if (!selected) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result || '');
+        const parsed = parseCsv(text);
+        const normalizedHeaders = parsed.headers.map((h) => h.toLowerCase());
+        const missing = Array.from(REQUIRED_COLUMN_SET).filter(
+          (h) => !normalizedHeaders.includes(h),
+        );
+        if (missing.length > 0) {
+          setPreviewError(t('assets.import.previewMissing', { columns: missing.join(', ') }));
+          return;
+        }
+        const invalidRow = parsed.rows.find((row) => row.length !== parsed.headers.length);
+        if (invalidRow) {
+          setPreviewError(t('assets.import.previewInvalidRow'));
+          return;
+        }
+        setPreviewHeaders(parsed.headers);
+        setPreviewTotal(parsed.rows.length);
+        setPreviewRows(parsed.rows.slice(0, PREVIEW_LIMIT));
+      } catch (err) {
+        setPreviewError(t('assets.import.previewFailed'));
+      }
+    };
+    reader.readAsText(selected);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,12 +143,20 @@ export const AssetImportDialog: React.FC<Props> = ({ open, onClose, onImported }
       setError(t('assets.import.fileRequired'));
       return;
     }
+    if (previewError) {
+      setError(previewError);
+      return;
+    }
     setUploading(true);
     try {
+      setResult(null);
+      setSuccessNotice(false);
       const data = await api.importAssetsCsv(file);
+      setError('');
       setResult(data);
-      if (data.success_count > 0) {
-        onImported();
+      if (data.failure_count === 0 && data.total > 0) {
+        setSuccessNotice(true);
+        setRefreshOnClose(true);
       }
     } catch (err: any) {
       setError(err.message || t('assets.import.failed'));
@@ -44,6 +164,8 @@ export const AssetImportDialog: React.FC<Props> = ({ open, onClose, onImported }
       setUploading(false);
     }
   };
+
+  const showPreview = previewHeaders.length > 0 && !previewError && !result;
 
   if (!open) return null;
 
@@ -65,7 +187,7 @@ export const AssetImportDialog: React.FC<Props> = ({ open, onClose, onImported }
             <input
               type="file"
               accept=".csv"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
               className={inputCls}
             />
             <p className="text-xs text-on-surface-variant">
@@ -74,6 +196,9 @@ export const AssetImportDialog: React.FC<Props> = ({ open, onClose, onImported }
             <p className="text-xs text-on-surface-variant">
               {t('assets.import.optionalColumns')}: storage_location, owner_employee_id, status
             </p>
+            {/* <p className="text-xs text-on-surface-variant">
+              {t('assets.import.ignoredColumns')}: storage_location, owner_employee_id, status
+            </p> */}
             <a
               href="/asset-import-sample.csv"
               className="text-xs font-semibold text-primary hover:underline"
@@ -86,6 +211,52 @@ export const AssetImportDialog: React.FC<Props> = ({ open, onClose, onImported }
 
           {error && (
             <p className="text-sm text-error bg-error-container/20 rounded-lg px-3 py-2">{error}</p>
+          )}
+
+          {previewError && !error && (
+            <p className="text-sm text-error bg-error-container/20 rounded-lg px-3 py-2">{previewError}</p>
+          )}
+
+          {successNotice && result && (
+            <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-sm text-green-700 font-semibold">
+              {t('assets.import.successMessage')} ({t('assets.import.total', { count: result.total })})
+            </div>
+          )}
+
+          {showPreview && (
+            <div className="space-y-3">
+              <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 px-4 py-3 text-sm">
+                <span className="font-semibold text-on-surface">{t('assets.import.previewTitle')}</span>
+                <span className="ml-2 text-on-surface-variant">
+                  {t('assets.import.previewCount', { shown: previewRows.length, total: previewTotal })}
+                </span>
+              </div>
+              <div className="overflow-x-auto border border-outline-variant/10 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-container-low text-on-surface-variant">
+                    <tr>
+                      {previewHeaders.map((header) => (
+                        <th key={header} className="px-3 py-2 text-left whitespace-nowrap">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((row, index) => (
+                      <tr key={`${index}-${row[0] ?? 'row'}`} className="border-t border-outline-variant/10">
+                        {row.map((value, colIndex) => (
+                          <td key={`${index}-${colIndex}`} className="px-3 py-2 whitespace-nowrap">
+                            {value || '-'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {previewTotal > PREVIEW_LIMIT && (
+                <p className="text-xs text-on-surface-variant">{t('assets.import.previewHint', { count: PREVIEW_LIMIT })}</p>
+              )}
+            </div>
           )}
 
           {result && (

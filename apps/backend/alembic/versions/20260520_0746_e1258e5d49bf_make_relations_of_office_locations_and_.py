@@ -42,7 +42,14 @@ def upgrade() -> None:
 
     # assets: vendor_id 欄位可能已存在（部分套用），跳過重複 ADD COLUMN
     if not _has_column(conn, 'assets', 'vendor_id'):
-        op.add_column('assets', sa.Column('vendor_id', sa.BigInteger(), nullable=False))
+        op.add_column('assets', sa.Column('vendor_id', sa.BigInteger(), nullable=True))
+    else:
+        # 欄位已存在（前次失敗殘留），確保允許 NULL 以便清理孤兒資料
+        op.alter_column('assets', 'vendor_id',
+                        existing_type=sa.BigInteger(),
+                        nullable=True)
+    # 清除 MySQL 預設填入的 0（不對應任何 vendor），避免 FK 約束失敗
+    conn.execute(sa.text("UPDATE assets SET vendor_id = NULL WHERE vendor_id = 0"))
     op.alter_column('assets', 'created_at',
                existing_type=mysql.DATETIME(),
                server_default=sa.text('now()'),
@@ -59,7 +66,12 @@ def upgrade() -> None:
 
     # repair_records: vendor_id
     if not _has_column(conn, 'repair_records', 'vendor_id'):
-        op.add_column('repair_records', sa.Column('vendor_id', sa.BigInteger(), nullable=False))
+        op.add_column('repair_records', sa.Column('vendor_id', sa.BigInteger(), nullable=True))
+    else:
+        op.alter_column('repair_records', 'vendor_id',
+                        existing_type=sa.BigInteger(),
+                        nullable=True)
+    conn.execute(sa.text("UPDATE repair_records SET vendor_id = NULL WHERE vendor_id = 0"))
     if not _has_fk_on(conn, 'repair_records', 'vendor_id'):
         op.create_foreign_key(None, 'repair_records', 'vendors', ['vendor_id'], ['id'])
     if _has_column(conn, 'repair_records', 'vendor'):

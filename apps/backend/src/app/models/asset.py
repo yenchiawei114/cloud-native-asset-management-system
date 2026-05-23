@@ -36,7 +36,7 @@ class Asset(Base):
     type: Mapped[AssetType] = mapped_column(Enum(AssetType), nullable=False)
     model: Mapped[str] = mapped_column(String(255), nullable=False)
     specification: Mapped[str] = mapped_column(String(255), nullable=False)
-    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id"), nullable=False)
+    vendor_id: Mapped[int | None] = mapped_column(ForeignKey("vendors.id"), nullable=True)
     purchase_date: Mapped[date] = mapped_column(
         Date,
         nullable=False

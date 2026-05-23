@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ import { ticketService } from '../modules/ticketing/services/ticketService';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
 import { fmtDate, fmtDateTime, fmtNumber } from '../lib/locale';
+import type { Vendor } from '../lib/api';
 
 const EMPLOYEE_STATUS_BADGE: Record<string, string> = {
   OPEN: 'bg-amber-100 text-amber-700',
@@ -16,6 +17,7 @@ const EMPLOYEE_STATUS_BADGE: Record<string, string> = {
   DONE: 'bg-green-100 text-green-700',
   CANCELLED: 'bg-slate-100 text-slate-500',
   RETURNED: 'bg-red-100 text-red-700',
+  WAITING_LOANER_RETURN: 'bg-purple-100 text-purple-700',
 };
 
 export const TicketDetailPage: React.FC = () => {
@@ -30,11 +32,12 @@ export const TicketDetailPage: React.FC = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [recordForm, setRecordForm] = useState({
     fault_reason: '',
     solution: '',
     completion_date: '',
-    vendor: '',
+    vendor_id: 0,
     cost: 0
   });
 
@@ -48,32 +51,15 @@ export const TicketDetailPage: React.FC = () => {
   const [isEditingRecord, setIsEditingRecord] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
-  const [resubmitForm, setResubmitForm] = useState<{ description: string; need_backup: boolean; backup_spec: string } | null>(null);
+  useEffect(() => {
+    api.listVendors().then(setVendors).catch(() => {});
+  }, []);
+
+  // resubmit 功能已移除：退回工單為終態，員工需重新開立新工單
 
   const isAdmin = user?.role === 'ADMIN';
   const backPath = isAdmin ? '/ticket-review' : '/repair-history';
-
-  const handleResubmit = async () => {
-    if (!ticket || !resubmitForm || !user) return;
-    setIsSubmitting(true);
-    try {
-      await api.updateTicket(ticket.id, {
-        asset_id: ticket.asset_id,
-        requester_id: user.id,
-        description: resubmitForm.description,
-        need_backup: resubmitForm.need_backup,
-        backup_spec: resubmitForm.backup_spec || null,
-        pickup_location: ticket.pickup_location || null,
-      });
-      setResubmitForm(null);
-      await refresh();
-      showFeedback({ title: t('ticketing.resubmitTitle'), message: t('ticketing.resubmitMsg'), type: 'success', onConfirm: closeFeedback });
-    } catch (err: any) {
-      showFeedback({ title: t('ticketing.submitFailedTitle'), message: err.message, type: 'error', onConfirm: closeFeedback });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const isHandlingAdmin = !ticket || !ticket.handled_by || ticket.handled_by === user?.id;
 
   const handleApprove = async () => {
     if (!ticket) return;
@@ -102,6 +88,19 @@ export const TicketDetailPage: React.FC = () => {
     }
   };
 
+  const handleConfirmLoanerReturn = async () => {
+    if (!ticket) return;
+    setIsSubmitting(true);
+    try {
+      await api.confirmLoanerReturn(ticket.id);
+      await refresh();
+    } catch (err: any) {
+      showFeedback({ title: t('common.operationFailed'), message: err.message, type: 'error', onConfirm: closeFeedback });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSaveDraft = async () => {
     if (!ticket) return;
     setIsSubmitting(true);
@@ -111,7 +110,7 @@ export const TicketDetailPage: React.FC = () => {
         issue_description: recordForm.fault_reason,
         solution: recordForm.solution,
         cost: recordForm.cost,
-        vendor: recordForm.vendor
+        vendor_id: recordForm.vendor_id
       });
       showFeedback({ title: t('ticketing.saveSuccess'), message: t('ticketing.saveDraftMsg'), type: 'success', onConfirm: closeFeedback });
       await refresh();
@@ -131,7 +130,7 @@ export const TicketDetailPage: React.FC = () => {
         issue_description: recordForm.fault_reason,
         solution: recordForm.solution,
         cost: recordForm.cost,
-        vendor: recordForm.vendor
+        vendor_id: recordForm.vendor_id
       };
 
       let activeRecordId: number;
@@ -268,22 +267,12 @@ export const TicketDetailPage: React.FC = () => {
   /* ── Employee simplified view ── */
   if (!isAdmin) {
     const requestAttachments = attachments.filter(a => a.attachable_type === 'REPAIR_REQUEST');
-    const isEditing = ticket.status === 'RETURNED' && resubmitForm !== null;
-
-    const handleDeleteAttachment = async (attachmentId: number) => {
-      try {
-        await api.deleteAttachment(attachmentId);
-        await refresh();
-      } catch (err: any) {
-        showFeedback({ title: t('common.deleteFailed'), message: err.message, type: 'error', onConfirm: closeFeedback });
-      }
-    };
 
     return (
       <DashboardLayout activeTab="assets">
         <div className="max-w-2xl mx-auto space-y-5 pb-12 animate-in fade-in duration-300">
-          {/* Top bar: 返回 (left) + 修改並重新送出 (right) */}
-          <div className="flex items-center justify-between">
+          {/* Top bar: 返回 */}
+          <div className="flex items-center">
             <button
               onClick={() => navigate('/dashboard')}
               className="flex items-center text-primary font-semibold text-sm gap-1 hover:gap-1.5 transition-all"
@@ -291,15 +280,6 @@ export const TicketDetailPage: React.FC = () => {
               <span className="material-symbols-outlined text-sm">arrow_back</span>
               {t('ticketing.backLabel')}
             </button>
-            {ticket.status === 'RETURNED' && !isEditing && (
-              <button
-                onClick={() => setResubmitForm({ description: ticket.description, need_backup: ticket.need_backup, backup_spec: ticket.backup_spec || '' })}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity shadow-sm"
-              >
-                <span className="material-symbols-outlined text-[16px]">edit</span>
-                {t('ticketing.editAndResubmit')}
-              </button>
-            )}
           </div>
 
           {/* Ticket header */}
@@ -322,13 +302,21 @@ export const TicketDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Reject reason banner */}
-          {ticket.status === 'RETURNED' && ticket.reject_reason && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
-              <span className="material-symbols-outlined text-red-500 mt-0.5">undo</span>
-              <div>
-                <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-1">{t('ticketing.rejectReasonLabel')}</p>
-                <p className="text-sm text-red-700 leading-relaxed">{ticket.reject_reason}</p>
+          {/* Reject reason banner + 關閉說明 */}
+          {ticket.status === 'RETURNED' && (
+            <div className="space-y-3">
+              {ticket.reject_reason && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+                  <span className="material-symbols-outlined text-red-500 mt-0.5">undo</span>
+                  <div>
+                    <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-1">{t('ticketing.rejectReasonLabel')}</p>
+                    <p className="text-sm text-red-700 leading-relaxed">{ticket.reject_reason}</p>
+                  </div>
+                </div>
+              )}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-start gap-3">
+                <span className="material-symbols-outlined text-slate-400 mt-0.5">info</span>
+                <p className="text-sm text-slate-600 leading-relaxed">{t('ticketing.returnedClosedHint')}</p>
               </div>
             </div>
           )}
@@ -336,42 +324,13 @@ export const TicketDetailPage: React.FC = () => {
           {/* Fault description */}
           <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-2">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('ticketing.faultDescLabel')}</p>
-            {isEditing ? (
-              <textarea
-                className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none resize-none h-24"
-                value={resubmitForm!.description}
-                onChange={e => setResubmitForm(f => f && { ...f, description: e.target.value })}
-              />
-            ) : (
-              <p className="text-sm text-on-surface leading-relaxed">{ticket.description}</p>
-            )}
+            <p className="text-sm text-on-surface leading-relaxed">{ticket.description}</p>
           </div>
 
           {/* Backup need */}
           <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-2">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('ticketing.backupNeedLabel')}</p>
-            {isEditing ? (
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm font-medium text-on-surface cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={resubmitForm!.need_backup}
-                    onChange={e => setResubmitForm(f => f && { ...f, need_backup: e.target.checked })}
-                    className="w-4 h-4 rounded"
-                  />
-                  {t('ticketing.needBackupYes')}
-                </label>
-                {resubmitForm!.need_backup && (
-                  <input
-                    type="text"
-                    className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
-                    value={resubmitForm!.backup_spec}
-                    onChange={e => setResubmitForm(f => f && { ...f, backup_spec: e.target.value })}
-                    placeholder={t('ticketing.backupSpecPlaceholder')}
-                  />
-                )}
-              </div>
-            ) : ticket.need_backup ? (
+            {ticket.need_backup ? (
               <div className="space-y-1">
                 <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
                   <span className="material-symbols-outlined text-sm">check_circle</span>
@@ -419,71 +378,22 @@ export const TicketDetailPage: React.FC = () => {
           {/* 附件照片 */}
           <div className="bg-surface-container-lowest rounded-2xl p-5 shadow-sm border border-slate-100 space-y-3">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('ticketing.attachmentLabel')}</p>
-            {requestAttachments.length === 0 && !isEditing ? (
+            {requestAttachments.length === 0 ? (
               <p className="text-sm text-on-surface-variant">{t('ticketing.noAttachments')}</p>
             ) : (
               <div className="flex flex-wrap gap-3">
                 {requestAttachments.map(file => (
-                  isEditing ? (
-                    <div key={file.id} className="relative w-20 h-20 group">
-                      <img
-                        src={file.file_url}
-                        alt={file.file_name}
-                        className="w-full h-full object-cover rounded-xl border border-slate-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAttachment(file.id)}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-error text-white rounded-full flex items-center justify-center shadow-sm hover:scale-110 transition-transform"
-                      >
-                        <span className="material-symbols-outlined text-[12px]">close</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      key={file.id}
-                      onClick={() => setLightboxUrl(file.file_url)}
-                      className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 hover:scale-105 transition-all shadow-sm"
-                    >
-                      <img src={file.file_url} alt={file.file_name} className="w-full h-full object-cover" />
-                    </button>
-                  )
+                  <button
+                    key={file.id}
+                    onClick={() => setLightboxUrl(file.file_url)}
+                    className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 hover:scale-105 transition-all shadow-sm"
+                  >
+                    <img src={file.file_url} alt={file.file_name} className="w-full h-full object-cover" />
+                  </button>
                 ))}
-                {isEditing && (
-                  <div className="w-20 h-20 rounded-xl bg-surface-container-low flex items-center justify-center text-slate-400 group relative cursor-pointer border-2 border-dashed border-slate-200 hover:border-primary/50 transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      onChange={e => handleFileUpload(e, 'REPAIR_REQUEST', ticket.id)}
-                    />
-                    <span className="material-symbols-outlined group-hover:text-primary transition-colors">add_a_photo</span>
-                  </div>
-                )}
               </div>
             )}
           </div>
-
-          {/* Submit / Cancel bar (editing mode only) */}
-          {isEditing && (
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setResubmitForm(null)}
-                className="px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={handleResubmit}
-                disabled={isSubmitting || !resubmitForm!.description.trim()}
-                className="flex-1 px-5 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                {isSubmitting ? t('ticketing.new.submitting') : t('ticketing.resubmitConfirm')}
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Lightbox */}
@@ -539,8 +449,11 @@ export const TicketDetailPage: React.FC = () => {
                 <div className="flex flex-col items-end gap-2">
                   <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${
                     ticket.status === 'DONE' ? 'bg-green-100 text-green-700' :
-                    ticket.status === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
-                    ticket.status === 'CANCELLED' ? 'bg-error-container text-on-error-container' :
+                    ticket.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                    ticket.status === 'OPEN' ? 'bg-amber-100 text-amber-700' :
+                    ticket.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
+                    ticket.status === 'RETURNED' ? 'bg-red-100 text-red-700' :
+                    ticket.status === 'WAITING_LOANER_RETURN' ? 'bg-purple-100 text-purple-700' :
                     'bg-secondary-container text-on-secondary-container'
                   }`}>
                     {t(`ticketing.status.${ticket.status}`)}
@@ -571,6 +484,17 @@ export const TicketDetailPage: React.FC = () => {
               </div>
               <div className="absolute -right-12 -top-12 w-48 h-48 bg-primary/5 rounded-full blur-3xl"></div>
             </div>
+
+            {/* Reject reason (RETURNED) */}
+            {ticket.status === 'RETURNED' && ticket.reject_reason && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start gap-3">
+                <span className="material-symbols-outlined text-red-500 mt-0.5">undo</span>
+                <div>
+                  <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-1">{t('ticketing.rejectReasonLabel')}</p>
+                  <p className="text-sm text-red-700 leading-relaxed">{ticket.reject_reason}</p>
+                </div>
+              </div>
+            )}
 
             {/* Ticket Details Bento */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -645,6 +569,16 @@ export const TicketDetailPage: React.FC = () => {
                       {ticket.pickup_location || t('ticketing.onSiteRepair')}
                     </p>
                   </div>
+                  {ticket.loaner_asset_id && (
+                    <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
+                      <span className="text-[10px] font-bold text-purple-600 uppercase">{t('ticketing.detail.backupAsset')}</span>
+                      <p className="text-sm font-semibold text-purple-800 mt-1">
+                        {ticket.loaner_asset_code && ticket.loaner_asset_name
+                          ? `${ticket.loaner_asset_code} — ${ticket.loaner_asset_name}`
+                          : `#${ticket.loaner_asset_id}`}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -665,7 +599,7 @@ export const TicketDetailPage: React.FC = () => {
                             fault_reason: record.issue_description,
                             solution: record.solution,
                             completion_date: record.repair_date,
-                            vendor: record.vendor,
+                            vendor_id: record.vendor_id ?? 0,
                             cost: record.cost
                           });
                           setIsEditingRecord(true);
@@ -774,12 +708,16 @@ export const TicketDetailPage: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-on-surface-variant">{t('ticketing.repairVendorInput')}</label>
-                        <input
+                        <select
                           className="w-full bg-surface-container-low border-0 border-b-2 border-transparent focus:border-primary focus:ring-0 rounded-lg p-3 text-sm transition-all"
-                          placeholder={t('ticketing.repairVendorPlaceholder')}
-                          value={recordForm.vendor}
-                          onChange={(e) => setRecordForm({...recordForm, vendor: e.target.value})}
-                        />
+                          value={recordForm.vendor_id || ''}
+                          onChange={(e) => setRecordForm({...recordForm, vendor_id: Number(e.target.value)})}
+                        >
+                          <option value="">{t('ticketing.repairVendorPlaceholder')}</option>
+                          {vendors.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-on-surface-variant">{t('ticketing.repairCost')}</label>
@@ -856,6 +794,58 @@ export const TicketDetailPage: React.FC = () => {
 
           {/* Right Action Sidebar */}
           <div className="space-y-6">
+            {/* 負責管理員資訊（已審核後顯示） */}
+            {isAdmin && ticket.handled_by && (
+              <div className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/10 space-y-2">
+                <p className="text-[10px] font-bold text-outline uppercase tracking-widest">{t('ticketing.handlerLabel')}</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                    {ticket.handled_by_name?.charAt(0) || 'A'}
+                  </div>
+                  <span className="text-sm font-semibold text-on-surface">{ticket.handled_by_name || `Admin #${ticket.handled_by}`}</span>
+                </div>
+                {!isHandlingAdmin && (
+                  <p className="text-xs text-on-surface-variant bg-surface-container-low rounded-lg px-3 py-2 mt-1">
+                    {t('ticketing.notHandlerHint', { name: ticket.handled_by_name || `Admin #${ticket.handled_by}` })}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Loaner Return Confirmation (WAITING_LOANER_RETURN) */}
+            {isAdmin && ticket.status === 'WAITING_LOANER_RETURN' && (() => {
+              const isLender = user?.id === ticket.handled_by;
+              const isBorrower = user?.id === ticket.requester_id;
+              const canConfirm =
+                (isLender && !ticket.loaner_return_lender_confirmed) ||
+                (isBorrower && !ticket.loaner_return_borrower_confirmed);
+              return (
+                <div className="bg-purple-50 p-5 rounded-2xl border border-purple-200 space-y-3">
+                  <p className="text-[10px] font-bold text-purple-700 uppercase tracking-widest">{t('ticketing.detail.loanerReturnTitle')}</p>
+                  <div className="space-y-2">
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_lender_confirmed ? 'bg-green-100 text-green-700' : 'bg-white text-on-surface-variant'}`}>
+                      <span className="material-symbols-outlined text-sm">{ticket.loaner_return_lender_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                      {ticket.loaner_return_lender_confirmed ? t('ticketing.detail.lenderConfirmed') : t('ticketing.detail.lenderPending')}
+                    </div>
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_borrower_confirmed ? 'bg-green-100 text-green-700' : 'bg-white text-on-surface-variant'}`}>
+                      <span className="material-symbols-outlined text-sm">{ticket.loaner_return_borrower_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                      {ticket.loaner_return_borrower_confirmed ? t('ticketing.detail.borrowerConfirmed') : t('ticketing.detail.borrowerPending')}
+                    </div>
+                  </div>
+                  {canConfirm && (
+                    <button
+                      onClick={handleConfirmLoanerReturn}
+                      disabled={isSubmitting}
+                      className="w-full py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 active:bg-purple-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-sm">keyboard_return</span>
+                      {t('assets.repairs.actions.confirmReturn')}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Admin Approval Actions */}
             {isAdmin && ticket.status === 'OPEN' && (
               <div className="bg-surface-container-high p-6 rounded-3xl space-y-4 shadow-xl shadow-primary/5 border border-primary/10 animate-in zoom-in-95 duration-300">
@@ -882,8 +872,8 @@ export const TicketDetailPage: React.FC = () => {
               </div>
             )}
 
-            {/* Inspection Section (Admin Only) */}
-            {isAdmin && record && ticket.status === 'IN_PROGRESS' && !inspection && (
+            {/* Inspection Section (Admin Only - 僅負責管理員可操作) */}
+            {isAdmin && record && ticket.status === 'IN_PROGRESS' && !inspection && isHandlingAdmin && (
               <div className="bg-tertiary/5 p-6 rounded-3xl border border-tertiary/20 space-y-4 animate-in slide-in-from-right-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-symbols-outlined text-tertiary">fact_check</span>

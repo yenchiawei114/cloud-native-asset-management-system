@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../lib/api';
+import type { Vendor } from '../../../lib/api';
+import { VendorCombobox } from '../../../components/VendorCombobox';
 
 interface Props {
   ticketId: number | null;
@@ -13,12 +15,18 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
   const [form, setForm] = useState({
     issue_description: '',
     solution: '',
-    vendor: '',
+    vendor_id: '' as string,
+    vendor_name: '' as string,
     cost: '',
   });
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.listVendors().then(setVendors).catch(() => {});
+  }, []);
 
   const field = (key: keyof typeof form, value: string) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -32,7 +40,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
       await api.closeTicket(ticketId, {
         issue_description: form.issue_description,
         solution: form.solution,
-        vendor: form.vendor,
+        vendor_id: Number(form.vendor_id),
         cost: Number(form.cost) || 0,
       });
 
@@ -51,7 +59,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
 
       onClosed();
       onClose();
-      setForm({ issue_description: '', solution: '', vendor: '', cost: '' });
+      setForm({ issue_description: '', solution: '', vendor_id: '', vendor_name: '', cost: '' });
       setPhotos([]);
     } catch (err: any) {
       setError(err.message || t('common.operationFailed'));
@@ -88,8 +96,13 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
 
           <div className="grid grid-cols-2 gap-4">
             <Field label={t('ticketing.close.vendor')} required>
-              <input required value={form.vendor} onChange={e => field('vendor', e.target.value)}
-                className={inputCls} placeholder={t('ticketing.close.vendorPlaceholder')} />
+              <VendorCombobox
+                vendors={vendors}
+                value={form.vendor_name}
+                onChange={(name, id) => setForm(prev => ({ ...prev, vendor_name: name, vendor_id: id ? String(id) : '' }))}
+                required
+                inputCls={inputCls}
+              />
             </Field>
             <Field label={t('ticketing.close.totalCost')} required>
               <input required type="number" min="0" value={form.cost} onChange={e => field('cost', e.target.value)}

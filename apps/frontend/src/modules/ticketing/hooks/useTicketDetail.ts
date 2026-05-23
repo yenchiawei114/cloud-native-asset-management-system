@@ -26,9 +26,9 @@ export const useTicketDetail = (ticketId: string | undefined) => {
       const assetData = await api.getAsset(ticketData.asset_id);
       setAsset(assetData);
 
-      // 3. 維修紀錄（OPEN / CANCELLED 一定不存在，跳過請求）
+      // 3. 維修紀錄（OPEN / CANCELLED / RETURNED 一定不存在，跳過請求）
       let recordData = null;
-      if (ticketData.status === 'IN_PROGRESS' || ticketData.status === 'DONE') {
+      if (['IN_PROGRESS', 'DONE', 'WAITING_LOANER_RETURN'].includes(ticketData.status)) {
         try {
           recordData = await api.getTicketRecord(tidNum);
           setRecord(recordData);
@@ -37,9 +37,9 @@ export const useTicketDetail = (ticketId: string | undefined) => {
         }
       }
 
-      // 4. 驗收結果（只有 DONE 狀態才可能存在）
+      // 4. 驗收結果（DONE 與 WAITING_LOANER_RETURN 狀態可能存在）
       let inspectionData = null;
-      if (ticketData.status === 'DONE') {
+      if (['DONE', 'WAITING_LOANER_RETURN'].includes(ticketData.status)) {
         try {
           inspectionData = await api.getTicketInspection(tidNum);
           setInspection(inspectionData);

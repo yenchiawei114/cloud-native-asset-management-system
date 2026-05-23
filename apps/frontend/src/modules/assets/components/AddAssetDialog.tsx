@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, User, Vendor } from '../../../lib/api';
 import { useAuth } from '../../auth/hooks/useAuth';
+import { VendorCombobox } from '../../../components/VendorCombobox';
 
 interface Props {
   open: boolean;
@@ -123,10 +124,13 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
               </select>
             </Field>
             <Field label={t('assets.dialog.vendor')} required>
-              <select required value={form.vendor} onChange={e => field('vendor', e.target.value)} className={inputCls}>
-                <option value="">{t('assets.selectVendor')}</option>
-                {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
-              </select>
+              <VendorCombobox
+                vendors={vendors}
+                value={form.vendor}
+                onChange={(name) => field('vendor', name)}
+                required
+                inputCls={inputCls}
+              />
             </Field>
             <Field label={t('assets.dialog.model')} required>
               <input required value={form.model} onChange={e => field('model', e.target.value)}

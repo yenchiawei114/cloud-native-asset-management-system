@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { api, Asset, RepairRequest } from '../lib/api';
+import { useAuth } from '../modules/auth/hooks/useAuth';
 import { fmtDate } from '../lib/locale';
 import { AdminTicketDetailModal } from '../modules/ticketing/components/AdminTicketDetailModal';
 import { ApproveTicketDialog } from '../modules/ticketing/components/ApproveTicketDialog';
@@ -36,6 +37,7 @@ export const AdminAssetRepairsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const assetId = Number(id);
 
   const [asset, setAsset] = useState<Asset | null>(null);
@@ -151,7 +153,7 @@ export const AdminAssetRepairsPage: React.FC = () => {
             <h2 className="font-bold text-on-surface">{t('assets.repairs.title')}</h2>
             <div className="flex items-center gap-3">
               <span className="text-xs text-on-surface-variant font-medium">{tickets.length}{t('assets.repairs.countSuffix')}</span>
-              {asset && asset.status !== 'deactivated' && (
+              {asset && asset.status !== 'deactivated' && asset.owner_id === user?.id && (
                 <button
                   onClick={() => hasActiveTicket ? setBlockedDialogOpen(true) : setNewRepairOpen(true)}
                   className="px-3 py-1.5 bg-primary text-on-primary text-xs font-bold rounded-lg flex items-center gap-1.5 hover:opacity-90 transition-opacity"
@@ -225,7 +227,9 @@ export const AdminAssetRepairsPage: React.FC = () => {
                           {req.status === 'IN_PROGRESS' && (
                             <ActionBtn icon="task_alt" label={t('assets.repairs.actions.close')} color="text-primary" onClick={() => setCloseId(req.id)} />
                           )}
-                          {req.status === 'WAITING_LOANER_RETURN' && !req.loaner_return_lender_confirmed && (
+                          {req.status === 'WAITING_LOANER_RETURN' &&
+                            ((user?.id === req.handled_by && !req.loaner_return_lender_confirmed) ||
+                             (user?.id === req.requester_id && !req.loaner_return_borrower_confirmed)) && (
                             <ActionBtn icon="keyboard_return" label={t('assets.repairs.actions.confirmReturn')} color="text-purple-600" onClick={() => handleConfirmLoanerReturn(req.id)} />
                           )}
                         </div>

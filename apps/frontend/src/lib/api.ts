@@ -156,6 +156,21 @@ export interface AssetCreatePayload {
   status?: string;
 }
 
+export interface AssetImportRowResult {
+  row: number;
+  asset_code?: string | null;
+  action?: string | null;
+  success: boolean;
+  error?: string | null;
+}
+
+export interface AssetImportResponse {
+  total: number;
+  success_count: number;
+  failure_count: number;
+  results: AssetImportRowResult[];
+}
+
 export interface RepairRequest {
   id: number;
   asset_id: number;
@@ -341,6 +356,14 @@ export const api = {
     http<Asset>(`/api/assets/${id}/toggle-status`, { method: "POST" }),
   listIdleAssets: () => http<Asset[]>('/api/assets/idle'),
   listMyIdleAssets: () => http<Asset[]>('/api/assets/idle?owner_only=true'),
+  importAssetsCsv: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return http<AssetImportResponse>('/api/assets/import', {
+      method: 'POST',
+      body: formData,
+    });
+  },
   confirmLoanerReturn: (ticketId: number) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/confirm-loaner-return`, { method: "POST" }),
 

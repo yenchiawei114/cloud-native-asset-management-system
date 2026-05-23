@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../lib/api';
 import type { Vendor } from '../../../lib/api';
+import { VendorCombobox } from '../../../components/VendorCombobox';
 
 interface Props {
   ticketId: number | null;
@@ -14,7 +15,8 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
   const [form, setForm] = useState({
     issue_description: '',
     solution: '',
-    vendor_id: '',
+    vendor_id: '' as string,
+    vendor_name: '' as string,
     cost: '',
   });
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -57,7 +59,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
 
       onClosed();
       onClose();
-      setForm({ issue_description: '', solution: '', vendor_id: '', cost: '' });
+      setForm({ issue_description: '', solution: '', vendor_id: '', vendor_name: '', cost: '' });
       setPhotos([]);
     } catch (err: any) {
       setError(err.message || t('common.operationFailed'));
@@ -94,13 +96,13 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
 
           <div className="grid grid-cols-2 gap-4">
             <Field label={t('ticketing.close.vendor')} required>
-              <select required value={form.vendor_id} onChange={e => field('vendor_id', e.target.value)}
-                className={inputCls}>
-                <option value="">{t('ticketing.close.vendorPlaceholder')}</option>
-                {vendors.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
+              <VendorCombobox
+                vendors={vendors}
+                value={form.vendor_name}
+                onChange={(name, id) => setForm(prev => ({ ...prev, vendor_name: name, vendor_id: id ? String(id) : '' }))}
+                required
+                inputCls={inputCls}
+              />
             </Field>
             <Field label={t('ticketing.close.totalCost')} required>
               <input required type="number" min="0" value={form.cost} onChange={e => field('cost', e.target.value)}

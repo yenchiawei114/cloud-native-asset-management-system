@@ -556,7 +556,8 @@
     "inspectionProofPhotosLabel": "Inspection Proof Photos",
     "backupRequired": "This ticket requires a backup device. Please select an available asset from the list.",
     "loadFailed": "Failed to load",
-    "noIdleAssets": "There are no available loaner assets at this time",
+    "noIdleAssets": "You have no assets under your custody",
+    "loanerNonIdleError": "This asset is not currently idle and cannot be assigned",
     "loanerSelected": "Selected: {{code}} — {{name}}",
     "confirmApprove": "Confirm Approval",
     "backupNeeded": "Yes",
@@ -568,8 +569,8 @@
     "approveDialogDescPost": ". Ticket status will be updated to In Progress and the requester will be notified by email.",
     "optional": "(Optional)",
     "loanerAssetLabel": "Loaner Asset",
-    "loanerAssetRestriction": "(Idle assets you currently manage only)",
-    "loadingAssets": "Loading idle assets…",
+    "loanerAssetRestriction": "(Assets you currently manage only)",
+    "loadingAssets": "Loading assets…",
     "noAssetsFound": "No matching assets found"
   },
   "profile": {

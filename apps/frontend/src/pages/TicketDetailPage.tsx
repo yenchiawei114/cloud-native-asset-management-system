@@ -88,6 +88,19 @@ export const TicketDetailPage: React.FC = () => {
     }
   };
 
+  const handleConfirmLoanerReturn = async () => {
+    if (!ticket) return;
+    setIsSubmitting(true);
+    try {
+      await api.confirmLoanerReturn(ticket.id);
+      await refresh();
+    } catch (err: any) {
+      showFeedback({ title: t('common.operationFailed'), message: err.message, type: 'error', onConfirm: closeFeedback });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSaveDraft = async () => {
     if (!ticket) return;
     setIsSubmitting(true);
@@ -800,21 +813,38 @@ export const TicketDetailPage: React.FC = () => {
             )}
 
             {/* Loaner Return Confirmation (WAITING_LOANER_RETURN) */}
-            {isAdmin && ticket.status === 'WAITING_LOANER_RETURN' && (
-              <div className="bg-purple-50 p-5 rounded-2xl border border-purple-200 space-y-3">
-                <p className="text-[10px] font-bold text-purple-700 uppercase tracking-widest">{t('ticketing.detail.loanerReturnTitle')}</p>
-                <div className="space-y-2">
-                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_lender_confirmed ? 'bg-green-100 text-green-700' : 'bg-white text-on-surface-variant'}`}>
-                    <span className="material-symbols-outlined text-sm">{ticket.loaner_return_lender_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
-                    {ticket.loaner_return_lender_confirmed ? t('ticketing.detail.lenderConfirmed') : t('ticketing.detail.lenderPending')}
+            {isAdmin && ticket.status === 'WAITING_LOANER_RETURN' && (() => {
+              const isLender = user?.id === ticket.handled_by;
+              const isBorrower = user?.id === ticket.requester_id;
+              const canConfirm =
+                (isLender && !ticket.loaner_return_lender_confirmed) ||
+                (isBorrower && !ticket.loaner_return_borrower_confirmed);
+              return (
+                <div className="bg-purple-50 p-5 rounded-2xl border border-purple-200 space-y-3">
+                  <p className="text-[10px] font-bold text-purple-700 uppercase tracking-widest">{t('ticketing.detail.loanerReturnTitle')}</p>
+                  <div className="space-y-2">
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_lender_confirmed ? 'bg-green-100 text-green-700' : 'bg-white text-on-surface-variant'}`}>
+                      <span className="material-symbols-outlined text-sm">{ticket.loaner_return_lender_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                      {ticket.loaner_return_lender_confirmed ? t('ticketing.detail.lenderConfirmed') : t('ticketing.detail.lenderPending')}
+                    </div>
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_borrower_confirmed ? 'bg-green-100 text-green-700' : 'bg-white text-on-surface-variant'}`}>
+                      <span className="material-symbols-outlined text-sm">{ticket.loaner_return_borrower_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                      {ticket.loaner_return_borrower_confirmed ? t('ticketing.detail.borrowerConfirmed') : t('ticketing.detail.borrowerPending')}
+                    </div>
                   </div>
-                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${ticket.loaner_return_borrower_confirmed ? 'bg-green-100 text-green-700' : 'bg-white text-on-surface-variant'}`}>
-                    <span className="material-symbols-outlined text-sm">{ticket.loaner_return_borrower_confirmed ? 'check_circle' : 'radio_button_unchecked'}</span>
-                    {ticket.loaner_return_borrower_confirmed ? t('ticketing.detail.borrowerConfirmed') : t('ticketing.detail.borrowerPending')}
-                  </div>
+                  {canConfirm && (
+                    <button
+                      onClick={handleConfirmLoanerReturn}
+                      disabled={isSubmitting}
+                      className="w-full py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 active:bg-purple-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-sm">keyboard_return</span>
+                      {t('assets.repairs.actions.confirmReturn')}
+                    </button>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Admin Approval Actions */}
             {isAdmin && ticket.status === 'OPEN' && (

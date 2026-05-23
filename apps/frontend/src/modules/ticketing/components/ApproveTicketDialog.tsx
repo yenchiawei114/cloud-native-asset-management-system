@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, Asset, RepairRequest } from '../../../lib/api';
+import { useAuth } from '../../auth/hooks/useAuth';
 
 interface Props {
   ticket: RepairRequest | null;
@@ -10,10 +11,12 @@ interface Props {
 
 export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApproved }) => {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [expectedDate, setExpectedDate] = useState('');
   const [loanerAsset, setLoanerAsset] = useState<Asset | null>(null);
+  const [loanerError, setLoanerError] = useState('');
   const [searchText, setSearchText] = useState('');
-  const [idleAssets, setIdleAssets] = useState<Asset[]>([]);
+  const [ownedAssets, setOwnedAssets] = useState<Asset[]>([]);
   const [filteredAssets, setFilteredAssets] = useState<Asset[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loadingAssets, setLoadingAssets] = useState(false);
@@ -26,26 +29,27 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
     if (!ticket) return;
     setExpectedDate('');
     setLoanerAsset(null);
+    setLoanerError('');
     setSearchText('');
     setError('');
-    if (ticket.need_backup) {
+    if (ticket.need_backup && user?.employee_id) {
       setLoadingAssets(true);
-      api.listMyIdleAssets()
-        .then(data => { setIdleAssets(data); setFilteredAssets(data); })
-        .catch(() => { setIdleAssets([]); setFilteredAssets([]); })
+      api.listAssets({ owner_employee_id: user.employee_id })
+        .then(data => { setOwnedAssets(data); setFilteredAssets(data); })
+        .catch(() => { setOwnedAssets([]); setFilteredAssets([]); })
         .finally(() => setLoadingAssets(false));
     }
-  }, [ticket]);
+  }, [ticket, user?.employee_id]);
 
   useEffect(() => {
     const q = searchText.toLowerCase();
     setFilteredAssets(
-      q ? idleAssets.filter(a =>
+      q ? ownedAssets.filter(a =>
         a.asset_code.toLowerCase().includes(q) ||
         a.name.toLowerCase().includes(q)
-      ) : idleAssets
+      ) : ownedAssets
     );
-  }, [searchText, idleAssets]);
+  }, [searchText, ownedAssets]);
 
   // 點擊外部關閉下拉選單
   useEffect(() => {
@@ -59,13 +63,20 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
   }, []);
 
   const selectAsset = (asset: Asset) => {
-    setLoanerAsset(asset);
     setSearchText(`${asset.asset_code} — ${asset.name}`);
     setDropdownOpen(false);
+    if (asset.status !== 'available') {
+      setLoanerAsset(null);
+      setLoanerError(t('ticketing.loanerNonIdleError'));
+    } else {
+      setLoanerAsset(asset);
+      setLoanerError('');
+    }
   };
 
   const clearLoaner = () => {
     setLoanerAsset(null);
+    setLoanerError('');
     setSearchText('');
     inputRef.current?.focus();
   };
@@ -163,12 +174,15 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
                         <button
                           key={a.id}
                           type="button"
-                          className="w-full text-left px-3 py-2 hover:bg-surface-container transition-colors text-sm"
+                          className="w-full text-left px-3 py-2 hover:bg-surface-container transition-colors text-sm flex items-center gap-2"
                           onMouseDown={() => selectAsset(a)}
                         >
                           <span className="font-mono text-primary font-bold text-xs">{a.asset_code}</span>
-                          <span className="text-on-surface ml-2">{a.name}</span>
-                          {a.model && <span className="text-on-surface-variant/60 ml-1 text-xs">({a.model})</span>}
+                          <span className="text-on-surface flex-1">{a.name}</span>
+                          {a.model && <span className="text-on-surface-variant/60 text-xs">({a.model})</span>}
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${a.status === 'available' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {a.status === 'available' ? '閒置' : '非閒置'}
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -189,7 +203,11 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
                 </div>
               )}
 
-              {idleAssets.length === 0 && !loadingAssets && (
+              {loanerError && (
+                <p className="text-xs text-error bg-error-container/20 rounded-lg px-3 py-2">{loanerError}</p>
+              )}
+
+              {ownedAssets.length === 0 && !loadingAssets && (
                 <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
                   {t('ticketing.noIdleAssets')}
                 </p>
@@ -205,7 +223,7 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
             </button>
             <button
               type="submit"
-              disabled={submitting || (ticket.need_backup && idleAssets.length === 0 && !loadingAssets)}
+              disabled={submitting || (ticket.need_backup && !loanerAsset)}
               className="px-5 py-2 bg-primary text-on-primary text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {submitting ? t('common.processing') : t('ticketing.confirmApprove')}

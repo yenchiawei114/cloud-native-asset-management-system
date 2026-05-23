@@ -556,7 +556,8 @@
     "inspectionProofPhotosLabel": "驗收證明照片",
     "backupRequired": "此工單需要備用機，請從列表中選擇一台閒置資產",
     "loadFailed": "載入失敗",
-    "noIdleAssets": "您目前沒有可借出的閒置資產",
+    "noIdleAssets": "您目前沒有任何保管中的資產",
+    "loanerNonIdleError": "此資產狀態目前非閒置中，無法指派",
     "loanerSelected": "已選擇：{{code}} — {{name}}",
     "confirmApprove": "確認核准",
     "backupNeeded": "需要",
@@ -568,8 +569,8 @@
     "approveDialogDescPost": "，工單狀態將更新為「維修中」，並 email 通知申請人。",
     "optional": "（選填）",
     "loanerAssetLabel": "備用機資產",
-    "loanerAssetRestriction": "（限自己保管的閒置資產）",
-    "loadingAssets": "載入閒置資產中…",
+    "loanerAssetRestriction": "（限自己保管的資產）",
+    "loadingAssets": "載入資產中…",
     "noAssetsFound": "找不到符合的資產"
   },
   "profile": {

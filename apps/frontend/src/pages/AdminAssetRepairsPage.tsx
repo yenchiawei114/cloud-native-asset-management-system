@@ -227,7 +227,9 @@ export const AdminAssetRepairsPage: React.FC = () => {
                           {req.status === 'IN_PROGRESS' && (
                             <ActionBtn icon="task_alt" label={t('assets.repairs.actions.close')} color="text-primary" onClick={() => setCloseId(req.id)} />
                           )}
-                          {req.status === 'WAITING_LOANER_RETURN' && !req.loaner_return_lender_confirmed && (
+                          {req.status === 'WAITING_LOANER_RETURN' &&
+                            ((user?.id === req.handled_by && !req.loaner_return_lender_confirmed) ||
+                             (user?.id === req.requester_id && !req.loaner_return_borrower_confirmed)) && (
                             <ActionBtn icon="keyboard_return" label={t('assets.repairs.actions.confirmReturn')} color="text-purple-600" onClick={() => handleConfirmLoanerReturn(req.id)} />
                           )}
                         </div>

@@ -1,6 +1,8 @@
 from datetime import date, datetime
+import csv
+import io
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -12,7 +14,7 @@ from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
 from app.core.db import get_db
 from app.core.email import send_email
-from app.models import Asset, AssetTransfer
+from app.models import Asset, AssetTransfer, OfficeLocation
 from app.models.asset import AssetStatus, AssetType
 from app.models.audit_log import Action, TargetType
 from app.models.user import Role, User
@@ -80,6 +82,21 @@ class AssetTransferOut(BaseModel):
     asset_code: str | None = None
     from_owner_name: str | None = None
     to_owner_name: str | None = None
+
+
+class AssetImportRowResult(BaseModel):
+    row: int
+    asset_code: str | None = None
+    action: str | None = None
+    success: bool
+    error: str | None = None
+
+
+class AssetImportResponse(BaseModel):
+    total: int
+    success_count: int
+    failure_count: int
+    results: list[AssetImportRowResult]
 
 
 def _to_out(asset: Asset, owner: User | None = None) -> AssetOut:
@@ -163,6 +180,47 @@ async def _get_transfer_for_out(db: AsyncSession, transfer_id: int) -> AssetTran
             .where(AssetTransfer.id == transfer_id)
         )
     ).first()
+
+
+async def _asset_before_for_log(db: AsyncSession, asset: Asset) -> dict:
+    vendor = await db.get(Vendor, asset.vendor_id)
+    owner_employee_id = None
+    if asset.owner_id:
+        owner = await db.get(User, asset.owner_id)
+        owner_employee_id = owner.employee_id if owner else None
+    return {
+        "asset_code": asset.asset_code,
+        "name": asset.name,
+        "type": asset.type.value,
+        "model": asset.model,
+        "specification": asset.specification,
+        "vendor": vendor.name if vendor else None,
+        "purchase_date": str(asset.purchase_date),
+        "purchase_price": asset.purchase_price,
+        "storage_location": asset.storage_location,
+        "owner_employee_id": owner_employee_id,
+        "activation_date": str(asset.activation_date),
+        "warranty_expiry": str(asset.warranty_expiry),
+        "status": asset.status.value,
+    }
+
+
+def _parse_csv_date(raw: str) -> date:
+    raw = raw.strip()
+    if not raw:
+        raise ValueError("date required")
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError("invalid date format")
+
+
+def _normalize_csv_value(value: str | list[str] | None) -> str:
+    if isinstance(value, list):
+        value = ",".join(value)
+    return (value or "").strip()
 
 
 @router.get("/assets", response_model=list[AssetOut])
@@ -308,8 +366,10 @@ async def create_asset(
     if not payload_dict.get("storage_location"):
         owner_id = payload_dict.get("owner_id") or user["user_id"]
         ref_user = await db.get(User, owner_id)
-        if ref_user and ref_user.location:
-            payload_dict["storage_location"] = ref_user.location.name
+        if ref_user and ref_user.location_id:
+            location = await db.get(OfficeLocation, ref_user.location_id)
+            if location:
+                payload_dict["storage_location"] = location.name
 
     asset = Asset(**payload_dict)
     db.add(asset)
@@ -333,6 +393,320 @@ async def create_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     return _to_out(asset, _asset_owner(asset))
+
+
+@router.post("/assets/import", response_model=AssetImportResponse)
+async def import_assets_csv(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required),
+) -> AssetImportResponse:
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="empty file")
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="invalid file encoding, expected UTF-8")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="missing CSV header")
+
+    normalized_headers = [h.strip().lower() for h in reader.fieldnames]
+    required_headers = {
+        "asset_code",
+        "name",
+        "type",
+        "model",
+        "specification",
+        "vendor",
+        "purchase_date",
+        "purchase_price",
+        "activation_date",
+        "warranty_expiry",
+    }
+    missing = required_headers - set(normalized_headers)
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"missing required columns: {', '.join(sorted(missing))}",
+        )
+
+    results: list[AssetImportRowResult] = []
+    prepared_rows: list[dict] = []
+    row_results: dict[int, AssetImportRowResult] = {}
+    has_error = False
+    location_cache: dict[int, str | None] = {}
+
+    async def _get_location_name_for_user(user_id: int) -> str | None:
+        if user_id in location_cache:
+            return location_cache[user_id]
+        ref_user = await db.get(User, user_id)
+        if not ref_user or not ref_user.location_id:
+            location_cache[user_id] = None
+            return None
+        location = await db.get(OfficeLocation, ref_user.location_id)
+        location_cache[user_id] = location.name if location else None
+        return location_cache[user_id]
+
+    for row_index, row in enumerate(reader, start=2):
+        extra_values = row.get(None)
+        if extra_values and any(str(v).strip() for v in extra_values):
+            raise HTTPException(
+                status_code=400,
+                detail=f"row {row_index}: unexpected extra columns",
+            )
+        normalized_row = {
+            k.strip().lower(): _normalize_csv_value(v)
+            for k, v in row.items()
+            if k is not None
+        }
+        if not any(normalized_row.values()):
+            continue
+
+        try:
+            asset_code = normalized_row.get("asset_code", "")
+            if not asset_code:
+                raise ValueError("asset_code required")
+            if len(asset_code) > 10:
+                raise ValueError("asset_code too long")
+            if any(r.get("asset_code") == asset_code for r in prepared_rows):
+                raise ValueError("duplicate asset_code in file")
+
+            name = normalized_row.get("name", "")
+            if not name:
+                raise ValueError("name required")
+
+            asset_type_raw = normalized_row.get("type", "").lower()
+            if not asset_type_raw:
+                raise ValueError("type required")
+            try:
+                asset_type = AssetType(asset_type_raw)
+            except ValueError:
+                raise ValueError("invalid type")
+
+            model = normalized_row.get("model", "")
+            if not model:
+                raise ValueError("model required")
+
+            specification = normalized_row.get("specification", "")
+            if not specification:
+                raise ValueError("specification required")
+
+            vendor_name = normalized_row.get("vendor", "")
+            if not vendor_name:
+                raise ValueError("vendor required")
+            vendor = (
+                await db.scalars(
+                    select(Vendor).where(Vendor.name == vendor_name)
+                )
+            ).first()
+            if vendor is None:
+                raise ValueError("vendor not found")
+
+            purchase_date = _parse_csv_date(normalized_row.get("purchase_date", ""))
+            activation_date = _parse_csv_date(normalized_row.get("activation_date", ""))
+            warranty_expiry = _parse_csv_date(normalized_row.get("warranty_expiry", ""))
+
+            purchase_price_raw = normalized_row.get("purchase_price", "")
+            if not purchase_price_raw:
+                raise ValueError("purchase_price required")
+            try:
+                purchase_price = int(purchase_price_raw)
+            except ValueError:
+                raise ValueError("invalid purchase_price")
+
+            owner_id = user["user_id"]
+            asset = (
+                await db.scalars(
+                    select(Asset).where(Asset.asset_code == asset_code)
+                )
+            ).first()
+
+            action = "updated" if asset else "created"
+            row_results[row_index] = AssetImportRowResult(
+                row=row_index,
+                asset_code=asset_code,
+                action=action,
+                success=True,
+            )
+
+            final_storage_location = None
+            if action == "created":
+                final_storage_location = await _get_location_name_for_user(owner_id)
+
+            prepared_rows.append({
+                "row": row_index,
+                "asset_code": asset_code,
+                "action": action,
+                "asset": asset,
+                "name": name,
+                "type": asset_type,
+                "model": model,
+                "specification": specification,
+                "vendor_id": vendor.id,
+                "purchase_date": purchase_date,
+                "purchase_price": purchase_price,
+                "storage_location": final_storage_location,
+                "owner_id": owner_id,
+                "activation_date": activation_date,
+                "warranty_expiry": warranty_expiry,
+                "status": None,
+                "owner_employee_id": None,
+            })
+        except StaleDataError:
+            await db.rollback()
+            row_results[row_index] = AssetImportRowResult(
+                row=row_index,
+                asset_code=normalized_row.get("asset_code") or None,
+                action="updated",
+                success=False,
+                error="asset has been modified by another user",
+            )
+            has_error = True
+        except IntegrityError:
+            await db.rollback()
+            row_results[row_index] = AssetImportRowResult(
+                row=row_index,
+                asset_code=normalized_row.get("asset_code") or None,
+                action=None,
+                success=False,
+                error="integrity error",
+            )
+            has_error = True
+        except Exception as exc:
+            await db.rollback()
+            row_results[row_index] = AssetImportRowResult(
+                row=row_index,
+                asset_code=normalized_row.get("asset_code") or None,
+                action=None,
+                success=False,
+                error=str(exc),
+            )
+            has_error = True
+
+    if not row_results:
+        return AssetImportResponse(total=0, success_count=0, failure_count=0, results=[])
+
+    if has_error:
+        for result in row_results.values():
+            if result.success:
+                result.success = False
+                result.error = "aborted due to validation errors"
+        results = sorted(row_results.values(), key=lambda r: r.row)
+        return AssetImportResponse(
+            total=len(results),
+            success_count=0,
+            failure_count=len(results),
+            results=results,
+        )
+
+    try:
+        for row in prepared_rows:
+            if row["action"] == "created":
+                asset = Asset(
+                    asset_code=row["asset_code"],
+                    name=row["name"],
+                    type=row["type"],
+                    model=row["model"],
+                    specification=row["specification"],
+                    vendor_id=row["vendor_id"],
+                    purchase_date=row["purchase_date"],
+                    purchase_price=row["purchase_price"],
+                    storage_location=row["storage_location"],
+                    owner_id=row["owner_id"],
+                    activation_date=row["activation_date"],
+                    warranty_expiry=row["warranty_expiry"],
+                    status=AssetStatus.AVAILABLE,
+                )
+                db.add(asset)
+                await db.flush()
+                await log_action(
+                    db,
+                    user_id=user["user_id"],
+                    actor_name=user["name"],
+                    action=Action.CREATE,
+                    target_type=TargetType.ASSET,
+                    target_id=asset.id,
+                    target_name=f"{asset.name} ({asset.asset_code})",
+                    detail={
+                        "after": {
+                            "asset_code": asset.asset_code,
+                            "name": asset.name,
+                            "type": asset.type.value,
+                            "model": asset.model,
+                            "specification": asset.specification,
+                            "vendor": (await db.get(Vendor, asset.vendor_id)).name,
+                            "purchase_date": str(asset.purchase_date),
+                            "purchase_price": asset.purchase_price,
+                            "storage_location": asset.storage_location,
+                            "owner_employee_id": None,
+                            "activation_date": str(asset.activation_date),
+                            "warranty_expiry": str(asset.warranty_expiry),
+                            "status": asset.status.value,
+                        }
+                    },
+                )
+            else:
+                asset = row["asset"]
+                before_data = await _asset_before_for_log(db, asset)
+                asset.name = row["name"]
+                asset.type = row["type"]
+                asset.model = row["model"]
+                asset.specification = row["specification"]
+                asset.vendor_id = row["vendor_id"]
+                asset.purchase_date = row["purchase_date"]
+                asset.purchase_price = row["purchase_price"]
+                asset.activation_date = row["activation_date"]
+                asset.warranty_expiry = row["warranty_expiry"]
+
+                after_data = {
+                    "name": asset.name,
+                    "type": asset.type.value,
+                    "model": asset.model,
+                    "specification": asset.specification,
+                    "vendor": (await db.get(Vendor, asset.vendor_id)).name,
+                    "purchase_date": str(asset.purchase_date),
+                    "purchase_price": asset.purchase_price,
+                    "storage_location": asset.storage_location,
+                    "owner_employee_id": None,
+                    "activation_date": str(asset.activation_date),
+                    "warranty_expiry": str(asset.warranty_expiry),
+                }
+
+                await log_action(
+                    db,
+                    user_id=user["user_id"],
+                    actor_name=user["name"],
+                    action=Action.UPDATE,
+                    target_type=TargetType.ASSET,
+                    target_id=asset.id,
+                    target_name=f"{asset.name} ({asset.asset_code})",
+                    detail={"before": before_data, "after": after_data},
+                )
+        await db.commit()
+    except (StaleDataError, IntegrityError) as exc:
+        await db.rollback()
+        error_msg = "asset has been modified by another user" if isinstance(exc, StaleDataError) else "integrity error"
+        for result in row_results.values():
+            result.success = False
+            result.error = error_msg
+        results = sorted(row_results.values(), key=lambda r: r.row)
+        return AssetImportResponse(
+            total=len(results),
+            success_count=0,
+            failure_count=len(results),
+            results=results,
+        )
+
+    results = sorted(row_results.values(), key=lambda r: r.row)
+    return AssetImportResponse(
+        total=len(results),
+        success_count=len(results),
+        failure_count=0,
+        results=results,
+    )
 
 
 @router.put("/assets/{asset_id}", response_model=AssetOut)

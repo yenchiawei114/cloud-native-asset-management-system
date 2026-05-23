@@ -5,6 +5,7 @@ import { DashboardLayout } from "../modules/dashboard/components/DashboardLayout
 import { useAuth } from "../modules/auth/hooks/useAuth";
 import { useAssets } from "../modules/assets/hooks/useAssets";
 import { AddAssetDialog } from "../modules/assets/components/AddAssetDialog";
+import { AssetImportDialog } from "../modules/assets/components/AssetImportDialog";
 import { AssetTransferDialog } from "../modules/assets/components/AssetTransferDialog";
 import { api, Asset, Vendor, OfficeLocation, User, RepairRequest } from "../lib/api";
 import { UserSearchCombobox } from "../modules/core/components/UserSearchCombobox";
@@ -131,6 +132,7 @@ export const AdminDashboard: React.FC = () => {
     setTicketStatusFilter((prev) => (prev === status ? null : status));
 
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [transferAsset, setTransferAsset] = useState<Asset | null>(null);
 
   const [editMode, setEditMode] = useState(false);
@@ -264,6 +266,15 @@ export const AdminDashboard: React.FC = () => {
                     edit
                   </span>
                   {t('assets.editBtn')}
+                </button>
+                <button
+                  onClick={() => setImportOpen(true)}
+                  className="px-4 py-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">
+                    upload_file
+                  </span>
+                  {t('assets.import.button')}
                 </button>
                 <button
                   onClick={() => setAddOpen(true)}
@@ -681,6 +692,11 @@ export const AdminDashboard: React.FC = () => {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onCreated={refresh}
+      />
+      <AssetImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={refresh}
       />
       <AssetTransferDialog
         asset={transferAsset}

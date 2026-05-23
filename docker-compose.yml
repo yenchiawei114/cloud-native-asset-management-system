@@ -5,10 +5,10 @@ services:
     image: mysql:8.0
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpw}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-app}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app}
     ports:
       - "3306:3306"
     volumes:
@@ -16,7 +16,7 @@ services:
       - ./infra/local/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./infra/local/mysql/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysql -h localhost -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE} -e 'SELECT 1'"]
+      test: ["CMD-SHELL", "mysql -h localhost -u$${MYSQL_USER:-app} -p$${MYSQL_PASSWORD:-app} $${MYSQL_DATABASE:-app} -e 'SELECT 1'"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -43,9 +43,9 @@ services:
       dockerfile: Dockerfile
     restart: "no"
     environment:
-      DB_URL: ${COMPOSE_DB_URL}
-      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL}
-      SECRET_KEY: ${SECRET_KEY}
+      DB_URL: ${COMPOSE_DB_URL:-mysql+asyncmy://app:app@mysql:3306/app}
+      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL:-mysql+pymysql://app:app@mysql:3306/app}
+      SECRET_KEY: ${SECRET_KEY:-jwt-demo-secret-key-change-me}
     command: ["alembic", "upgrade", "head"]
     depends_on:
       mysql:
@@ -57,22 +57,22 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      APP_ENV: ${APP_ENV}
-      LOG_LEVEL: ${LOG_LEVEL}
-      LOG_FORMAT: ${LOG_FORMAT}
-      SECRET_KEY: ${SECRET_KEY}
-      DB_URL: ${COMPOSE_DB_URL}
-      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL}
-      DB_POOL_SIZE: ${DB_POOL_SIZE}
-      REDIS_URL: ${COMPOSE_REDIS_URL}
-      STORAGE_BACKEND: ${STORAGE_BACKEND}
-      STORAGE_LOCAL_ROOT: ${COMPOSE_STORAGE_LOCAL_ROOT}
-      STORAGE_LOCAL_BASE_URL: ${COMPOSE_STORAGE_LOCAL_BASE_URL}
-      ENABLE_METRICS: ${ENABLE_METRICS}
-      CORS_ORIGINS: ${COMPOSE_CORS_ORIGINS}
-      WEB_CONCURRENCY: ${WEB_CONCURRENCY}
-      SENDER_EMAIL: ${SENDER_EMAIL}
-      GOOGLE_SMTP_PASSWORD: ${GOOGLE_SMTP_PASSWORD}
+      APP_ENV: ${APP_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      SECRET_KEY: ${SECRET_KEY:-jwt-demo-secret-key-change-me}
+      DB_URL: ${COMPOSE_DB_URL:-mysql+asyncmy://app:app@mysql:3306/app}
+      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL:-mysql+pymysql://app:app@mysql:3306/app}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      REDIS_URL: ${COMPOSE_REDIS_URL:-redis://redis:6379/0}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      STORAGE_LOCAL_ROOT: ${COMPOSE_STORAGE_LOCAL_ROOT:-/app/uploads}
+      STORAGE_LOCAL_BASE_URL: ${COMPOSE_STORAGE_LOCAL_BASE_URL:-http://localhost:8000/static}
+      ENABLE_METRICS: ${ENABLE_METRICS:-false}
+      CORS_ORIGINS: ${COMPOSE_CORS_ORIGINS:-http://localhost:5173,http://localhost}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+      SENDER_EMAIL: ${SENDER_EMAIL:-}
+      GOOGLE_SMTP_PASSWORD: ${GOOGLE_SMTP_PASSWORD:-}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
     ports:
@@ -100,17 +100,17 @@ services:
     restart: unless-stopped
     command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     environment:
-      APP_ENV: ${APP_ENV}
-      LOG_LEVEL: ${LOG_LEVEL}
-      LOG_FORMAT: ${LOG_FORMAT}
-      SECRET_KEY: ${SECRET_KEY}
-      DB_URL: ${COMPOSE_DB_URL}
-      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL}
-      REDIS_URL: ${COMPOSE_REDIS_URL}
-      STORAGE_BACKEND: ${STORAGE_BACKEND}
-      STORAGE_LOCAL_ROOT: ${COMPOSE_STORAGE_LOCAL_ROOT}
-      SENDER_EMAIL: ${SENDER_EMAIL}
-      GOOGLE_SMTP_PASSWORD: ${GOOGLE_SMTP_PASSWORD}
+      APP_ENV: ${APP_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      SECRET_KEY: ${SECRET_KEY:-jwt-demo-secret-key-change-me}
+      DB_URL: ${COMPOSE_DB_URL:-mysql+asyncmy://app:app@mysql:3306/app}
+      DB_SYNC_URL: ${COMPOSE_DB_SYNC_URL:-mysql+pymysql://app:app@mysql:3306/app}
+      REDIS_URL: ${COMPOSE_REDIS_URL:-redis://redis:6379/0}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      STORAGE_LOCAL_ROOT: ${COMPOSE_STORAGE_LOCAL_ROOT:-/app/uploads}
+      SENDER_EMAIL: ${SENDER_EMAIL:-}
+      GOOGLE_SMTP_PASSWORD: ${GOOGLE_SMTP_PASSWORD:-}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
     depends_on:
@@ -125,7 +125,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      API_BASE_URL: ${COMPOSE_API_BASE_URL}
+      API_BASE_URL: ${COMPOSE_API_BASE_URL:-http://localhost:8000}
     ports:
       - "80:80"
     depends_on:

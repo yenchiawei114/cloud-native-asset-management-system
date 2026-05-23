@@ -182,6 +182,29 @@ async def _get_transfer_for_out(db: AsyncSession, transfer_id: int) -> AssetTran
     ).first()
 
 
+async def _asset_before_for_log(db: AsyncSession, asset: Asset) -> dict:
+    vendor = await db.get(Vendor, asset.vendor_id)
+    owner_employee_id = None
+    if asset.owner_id:
+        owner = await db.get(User, asset.owner_id)
+        owner_employee_id = owner.employee_id if owner else None
+    return {
+        "asset_code": asset.asset_code,
+        "name": asset.name,
+        "type": asset.type.value,
+        "model": asset.model,
+        "specification": asset.specification,
+        "vendor": vendor.name if vendor else None,
+        "purchase_date": str(asset.purchase_date),
+        "purchase_price": asset.purchase_price,
+        "storage_location": asset.storage_location,
+        "owner_employee_id": owner_employee_id,
+        "activation_date": str(asset.activation_date),
+        "warranty_expiry": str(asset.warranty_expiry),
+        "status": asset.status.value,
+    }
+
+
 def _parse_csv_date(raw: str) -> date:
     raw = raw.strip()
     if not raw:
@@ -411,7 +434,21 @@ async def import_assets_csv(
         )
 
     results: list[AssetImportRowResult] = []
-    success_count = 0
+    prepared_rows: list[dict] = []
+    row_results: dict[int, AssetImportRowResult] = {}
+    has_error = False
+    location_cache: dict[int, str | None] = {}
+
+    async def _get_location_name_for_user(user_id: int) -> str | None:
+        if user_id in location_cache:
+            return location_cache[user_id]
+        ref_user = await db.get(User, user_id)
+        if not ref_user or not ref_user.location_id:
+            location_cache[user_id] = None
+            return None
+        location = await db.get(OfficeLocation, ref_user.location_id)
+        location_cache[user_id] = location.name if location else None
+        return location_cache[user_id]
 
     for row_index, row in enumerate(reader, start=2):
         extra_values = row.get(None)
@@ -432,6 +469,10 @@ async def import_assets_csv(
             asset_code = normalized_row.get("asset_code", "")
             if not asset_code:
                 raise ValueError("asset_code required")
+            if len(asset_code) > 10:
+                raise ValueError("asset_code too long")
+            if any(r.get("asset_code") == asset_code for r in prepared_rows):
+                raise ValueError("duplicate asset_code in file")
 
             name = normalized_row.get("name", "")
             if not name:
@@ -476,57 +517,109 @@ async def import_assets_csv(
             except ValueError:
                 raise ValueError("invalid purchase_price")
 
-            status_raw = normalized_row.get("status", "").lower()
-            status_value: AssetStatus | None = None
-            if status_raw:
-                try:
-                    status_value = AssetStatus(status_raw)
-                except ValueError:
-                    raise ValueError("invalid status")
-
-            owner_employee_id = normalized_row.get("owner_employee_id", "")
-            owner_id: int | None = None
-            owner_user: User | None = None
-            if owner_employee_id:
-                owner_user = (
-                    await db.scalars(
-                        select(User).where(User.employee_id == owner_employee_id)
-                    )
-                ).first()
-                if owner_user is None:
-                    raise ValueError("owner not found")
-                owner_id = owner_user.id
-
-            storage_location = normalized_row.get("storage_location", "")
+            owner_id = user["user_id"]
             asset = (
                 await db.scalars(
                     select(Asset).where(Asset.asset_code == asset_code)
                 )
             ).first()
 
-            if asset is None:
+            action = "updated" if asset else "created"
+            row_results[row_index] = AssetImportRowResult(
+                row=row_index,
+                asset_code=asset_code,
+                action=action,
+                success=True,
+            )
+
+            final_storage_location = None
+            if action == "created":
+                final_storage_location = await _get_location_name_for_user(owner_id)
+
+            prepared_rows.append({
+                "row": row_index,
+                "asset_code": asset_code,
+                "action": action,
+                "asset": asset,
+                "name": name,
+                "type": asset_type,
+                "model": model,
+                "specification": specification,
+                "vendor_id": vendor.id,
+                "purchase_date": purchase_date,
+                "purchase_price": purchase_price,
+                "storage_location": final_storage_location,
+                "owner_id": owner_id,
+                "activation_date": activation_date,
+                "warranty_expiry": warranty_expiry,
+                "status": None,
+                "owner_employee_id": None,
+            })
+        except StaleDataError:
+            await db.rollback()
+            row_results[row_index] = AssetImportRowResult(
+                row=row_index,
+                asset_code=normalized_row.get("asset_code") or None,
+                action="updated",
+                success=False,
+                error="asset has been modified by another user",
+            )
+            has_error = True
+        except IntegrityError:
+            await db.rollback()
+            row_results[row_index] = AssetImportRowResult(
+                row=row_index,
+                asset_code=normalized_row.get("asset_code") or None,
+                action=None,
+                success=False,
+                error="integrity error",
+            )
+            has_error = True
+        except Exception as exc:
+            await db.rollback()
+            row_results[row_index] = AssetImportRowResult(
+                row=row_index,
+                asset_code=normalized_row.get("asset_code") or None,
+                action=None,
+                success=False,
+                error=str(exc),
+            )
+            has_error = True
+
+    if not row_results:
+        return AssetImportResponse(total=0, success_count=0, failure_count=0, results=[])
+
+    if has_error:
+        for result in row_results.values():
+            if result.success:
+                result.success = False
+                result.error = "aborted due to validation errors"
+        results = sorted(row_results.values(), key=lambda r: r.row)
+        return AssetImportResponse(
+            total=len(results),
+            success_count=0,
+            failure_count=len(results),
+            results=results,
+        )
+
+    try:
+        for row in prepared_rows:
+            if row["action"] == "created":
                 asset = Asset(
-                    asset_code=asset_code,
-                    name=name,
-                    type=asset_type,
-                    model=model,
-                    specification=specification,
-                    vendor_id=vendor.id,
-                    purchase_date=purchase_date,
-                    purchase_price=purchase_price,
-                    storage_location=storage_location or None,
-                    owner_id=owner_id,
-                    activation_date=activation_date,
-                    warranty_expiry=warranty_expiry,
-                    status=status_value or AssetStatus.AVAILABLE,
+                    asset_code=row["asset_code"],
+                    name=row["name"],
+                    type=row["type"],
+                    model=row["model"],
+                    specification=row["specification"],
+                    vendor_id=row["vendor_id"],
+                    purchase_date=row["purchase_date"],
+                    purchase_price=row["purchase_price"],
+                    storage_location=row["storage_location"],
+                    owner_id=row["owner_id"],
+                    activation_date=row["activation_date"],
+                    warranty_expiry=row["warranty_expiry"],
+                    status=AssetStatus.AVAILABLE,
                 )
-                if not storage_location:
-                    ref_owner_id = owner_id or user["user_id"]
-                    ref_user = await db.get(User, ref_owner_id)
-                    if ref_user and ref_user.location_id:
-                        location = await db.get(OfficeLocation, ref_user.location_id)
-                        if location:
-                            asset.storage_location = location.name
                 db.add(asset)
                 await db.flush()
                 await log_action(
@@ -544,66 +637,43 @@ async def import_assets_csv(
                             "type": asset.type.value,
                             "model": asset.model,
                             "specification": asset.specification,
-                            "vendor": vendor.name,
+                            "vendor": (await db.get(Vendor, asset.vendor_id)).name,
                             "purchase_date": str(asset.purchase_date),
                             "purchase_price": asset.purchase_price,
                             "storage_location": asset.storage_location,
-                            "owner_employee_id": owner_employee_id or None,
+                            "owner_employee_id": None,
                             "activation_date": str(asset.activation_date),
                             "warranty_expiry": str(asset.warranty_expiry),
                             "status": asset.status.value,
                         }
                     },
                 )
-                await db.commit()
-                results.append(
-                    AssetImportRowResult(
-                        row=row_index,
-                        asset_code=asset_code,
-                        action="created",
-                        success=True,
-                    )
-                )
             else:
-                before_data = _to_out(asset, _asset_owner(asset)).model_dump(mode="json")
-                asset.name = name
-                asset.type = asset_type
-                asset.model = model
-                asset.specification = specification
-                asset.vendor_id = vendor.id
-                asset.purchase_date = purchase_date
-                asset.purchase_price = purchase_price
-                asset.activation_date = activation_date
-                asset.warranty_expiry = warranty_expiry
-
-                if owner_id is not None:
-                    asset.owner_id = owner_id
-                if storage_location:
-                    asset.storage_location = storage_location
-                elif owner_id is not None:
-                    if owner_user and owner_user.location_id:
-                        location = await db.get(OfficeLocation, owner_user.location_id)
-                        asset.storage_location = location.name if location else None
-                    else:
-                        asset.storage_location = None
-                if status_value is not None:
-                    asset.status = status_value
+                asset = row["asset"]
+                before_data = await _asset_before_for_log(db, asset)
+                asset.name = row["name"]
+                asset.type = row["type"]
+                asset.model = row["model"]
+                asset.specification = row["specification"]
+                asset.vendor_id = row["vendor_id"]
+                asset.purchase_date = row["purchase_date"]
+                asset.purchase_price = row["purchase_price"]
+                asset.activation_date = row["activation_date"]
+                asset.warranty_expiry = row["warranty_expiry"]
 
                 after_data = {
-                    "name": name,
-                    "type": asset_type.value,
-                    "model": model,
-                    "specification": specification,
-                    "vendor": vendor.name,
-                    "purchase_date": str(purchase_date),
-                    "purchase_price": purchase_price,
+                    "name": asset.name,
+                    "type": asset.type.value,
+                    "model": asset.model,
+                    "specification": asset.specification,
+                    "vendor": (await db.get(Vendor, asset.vendor_id)).name,
+                    "purchase_date": str(asset.purchase_date),
+                    "purchase_price": asset.purchase_price,
                     "storage_location": asset.storage_location,
-                    "owner_employee_id": owner_employee_id or None,
-                    "activation_date": str(activation_date),
-                    "warranty_expiry": str(warranty_expiry),
+                    "owner_employee_id": None,
+                    "activation_date": str(asset.activation_date),
+                    "warranty_expiry": str(asset.warranty_expiry),
                 }
-                if status_value is not None:
-                    after_data["status"] = status_value.value
 
                 await log_action(
                     db,
@@ -615,56 +685,26 @@ async def import_assets_csv(
                     target_name=f"{asset.name} ({asset.asset_code})",
                     detail={"before": before_data, "after": after_data},
                 )
-                await db.commit()
-                results.append(
-                    AssetImportRowResult(
-                        row=row_index,
-                        asset_code=asset_code,
-                        action="updated",
-                        success=True,
-                    )
-                )
+        await db.commit()
+    except (StaleDataError, IntegrityError) as exc:
+        await db.rollback()
+        error_msg = "asset has been modified by another user" if isinstance(exc, StaleDataError) else "integrity error"
+        for result in row_results.values():
+            result.success = False
+            result.error = error_msg
+        results = sorted(row_results.values(), key=lambda r: r.row)
+        return AssetImportResponse(
+            total=len(results),
+            success_count=0,
+            failure_count=len(results),
+            results=results,
+        )
 
-            success_count += 1
-        except StaleDataError:
-            await db.rollback()
-            results.append(
-                AssetImportRowResult(
-                    row=row_index,
-                    asset_code=normalized_row.get("asset_code") or None,
-                    action="updated",
-                    success=False,
-                    error="asset has been modified by another user",
-                )
-            )
-        except IntegrityError:
-            await db.rollback()
-            results.append(
-                AssetImportRowResult(
-                    row=row_index,
-                    asset_code=normalized_row.get("asset_code") or None,
-                    action=None,
-                    success=False,
-                    error="integrity error",
-                )
-            )
-        except Exception as exc:
-            await db.rollback()
-            results.append(
-                AssetImportRowResult(
-                    row=row_index,
-                    asset_code=normalized_row.get("asset_code") or None,
-                    action=None,
-                    success=False,
-                    error=str(exc),
-                )
-            )
-
-    failure_count = len(results) - success_count
+    results = sorted(row_results.values(), key=lambda r: r.row)
     return AssetImportResponse(
         total=len(results),
-        success_count=success_count,
-        failure_count=failure_count,
+        success_count=len(results),
+        failure_count=0,
         results=results,
     )
 

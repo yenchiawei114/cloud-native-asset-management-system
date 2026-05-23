@@ -1,0 +1,3 @@
+asset_code,name,type,model,specification,vendor,purchase_date,purchase_price,activation_date,warranty_expiry
+DEMO202801,MacBook Air,laptop,M3 / 16GB / 512GB,13-inch,Apple Inc.,2026-05-18,43000,2026-05-19,2029-05-19
+DEMO202802,Dell Latitude 9450,invalid_type,Intel i7 / 32GB / 1TB SSD,14-inch FHD,Dell,2026-05-19,48000,2026-05-20,2029-05-20

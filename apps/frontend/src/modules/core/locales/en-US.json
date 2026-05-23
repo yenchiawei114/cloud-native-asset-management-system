@@ -248,6 +248,31 @@
       "submitting": "Adding...",
       "submit": "Add Asset"
     },
+    "import": {
+      "button": "Import CSV",
+      "title": "Import Assets CSV",
+      "fileLabel": "CSV File",
+      "requiredColumns": "Required columns",
+      "optionalColumns": "Optional columns",
+      "downloadSample": "Download sample CSV",
+      "fileRequired": "Please select a CSV file",
+      "failed": "Import failed",
+      "summary": "Import summary",
+      "total": "Total {{count}}",
+      "success": "Success {{count}}",
+      "failedCount": "Failed {{count}}",
+      "submit": "Start import",
+      "uploading": "Importing...",
+      "table": {
+        "row": "Row",
+        "assetCode": "Asset Code",
+        "action": "Action",
+        "result": "Result",
+        "error": "Error",
+        "success": "Success",
+        "failed": "Failed"
+      }
+    },
     "transfer": {
       "title": "Asset Transfer",
       "assetLabel": "Asset",

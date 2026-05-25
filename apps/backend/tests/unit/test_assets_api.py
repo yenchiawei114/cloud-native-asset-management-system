@@ -102,6 +102,9 @@ class FakeSession:
             return FakeScalarResult(rows)
         return FakeResult(None)
 
+    async def scalar(self, stmt):
+        return 0
+
     async def scalars(self, stmt):
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         lowered = compiled.lower()
@@ -152,6 +155,24 @@ class FakeSession:
                 rows = [row for row in rows if row.status == AssetStatus.AVAILABLE]
             if "status = 'deactivated'" in lowered:
                 rows = [row for row in rows if row.status == AssetStatus.DEACTIVATED]
+            owner_q_match = re.search(r"lower\(users\.name\)\s+like\s+lower\('%([^%]+)%'\)", compiled, re.IGNORECASE)
+            if owner_q_match:
+                owner_q_val = owner_q_match.group(1).lower()
+                rows = [
+                    row for row in rows
+                    if owner_q_val in (self.users.get(row.owner_id, SimpleNamespace(name="", employee_id="")).name or "").lower()
+                    or owner_q_val in (self.users.get(row.owner_id, SimpleNamespace(name="", employee_id="")).employee_id or "").lower()
+                ]
+            loc_q_match = re.search(r"lower\(office_locations\.name\)\s+like\s+lower\('%([^%]+)%'\)", compiled, re.IGNORECASE)
+            if loc_q_match:
+                loc_q_val = loc_q_match.group(1).lower()
+                def _matches_loc(row, val=loc_q_val):
+                    user = self.users.get(row.owner_id)
+                    if not user:
+                        return False
+                    loc = self.locations.get(getattr(user, "location_id", None))
+                    return loc is not None and val in loc.name.lower()
+                rows = [row for row in rows if _matches_loc(row)]
             rows = sorted(rows, key=lambda row: row.id)
             return FakeScalarResult(rows)
         return FakeScalarResult([])
@@ -388,9 +409,9 @@ def test_when_receive_get_assets_request_then_should_return_200_with_list(client
     # act: call GET /api/assets with auth token
     response = client.get("/api/assets", headers={"Authorization": f"Bearer {token}"})
 
-    # assert: verify response status is 200 and body is list
+    # assert: verify response status is 200 and body is paginated
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    assert "items" in response.json()
 
 
 def test_when_admin_user_list_assets_then_should_return_200_with_list(client):
@@ -399,7 +420,7 @@ def test_when_admin_user_list_assets_then_should_return_200_with_list(client):
     response = client.get("/api/assets", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    assert "items" in response.json()
 
 
 def test_when_employee_user_list_assets_then_should_return_200_with_list(client):
@@ -408,7 +429,7 @@ def test_when_employee_user_list_assets_then_should_return_200_with_list(client)
     response = client.get("/api/assets", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    assert "items" in response.json()
 
 
 def test_when_employee_user_query_other_employee_assets_then_should_return_403(client):
@@ -432,7 +453,7 @@ def test_when_employee_user_lists_assets_then_should_return_only_owned_or_borrow
     response = client.get("/api/assets", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
-    names = [item["name"] for item in response.json()]
+    names = [item["name"] for item in response.json()["items"]]
     assert "Employee Owned" in names
     assert "Borrowed From Admin" in names
     assert "Other Asset" not in names
@@ -462,7 +483,7 @@ def test_when_admin_queries_specific_owner_employee_then_should_return_only_that
     )
 
     assert response.status_code == 200
-    names = [item["name"] for item in response.json()]
+    names = [item["name"] for item in response.json()["items"]]
     assert names == ["Employee Owned"]
 
 
@@ -474,7 +495,7 @@ def test_when_list_assets_filters_by_owner_name_then_should_return_matching_asse
     response = client.get("/api/assets?owner_q=Employee User", headers=_auth_header(token))
 
     assert response.status_code == 200
-    names = [item["name"] for item in response.json()]
+    names = [item["name"] for item in response.json()["items"]]
     assert names == ["Employee Owned"]
 
 
@@ -486,7 +507,7 @@ def test_when_list_assets_filters_by_office_location_then_should_return_matching
     response = client.get("/api/assets?office_location_q=Branch", headers=_auth_header(token))
 
     assert response.status_code == 200
-    names = [item["name"] for item in response.json()]
+    names = [item["name"] for item in response.json()["items"]]
     assert names == ["Branch Asset"]
 
 
@@ -505,7 +526,7 @@ def test_when_list_assets_filters_by_type_and_status_then_should_return_matching
     )
 
     assert response.status_code == 200
-    names = [item["name"] for item in response.json()]
+    names = [item["name"] for item in response.json()["items"]]
     assert names == ["Laptop Asset"]
 
 

@@ -365,9 +365,10 @@ async def test_when_admin_lists_users_then_should_return_200_with_user_list(clie
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert data[0]["employee_id"] == "E00000002"
-    assert data[1]["employee_id"] == "A00000001"
+    assert data["total"] == 2
+    assert len(data["items"]) == 2
+    assert data["items"][0]["employee_id"] == "E00000002"
+    assert data["items"][1]["employee_id"] == "A00000001"
 
 
 async def test_when_admin_gets_specific_user_then_should_return_200_with_user_info(
@@ -495,24 +496,24 @@ async def test_when_admin_lists_users_with_keyword_then_should_return_filtered_l
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["employee_id"] == "A00000001"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["employee_id"] == "A00000001"
 
     # Search by name
     response = await client.get("/api/users?keyword=Admin", headers=_auth_header(admin_token))
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["name"] == "Admin User"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == "Admin User"
 
     # Search by email
     response = await client.get("/api/users?keyword=employee@example.com", headers=_auth_header(admin_token))
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["email"] == "employee@example.com"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["email"] == "employee@example.com"
 
 
 async def test_when_admin_updates_nonexistent_user_then_should_return_404(

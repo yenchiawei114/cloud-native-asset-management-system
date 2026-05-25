@@ -84,6 +84,9 @@ class FakeSession:
             return FakeResult(None)
         return FakeResult(None)
 
+    async def scalar(self, stmt):
+        return 0
+
     async def scalars(self, stmt):
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         lowered = compiled.lower()
@@ -433,8 +436,8 @@ def test_when_admin_lists_tickets_then_should_return_200_with_list(client):
     response = client.get("/api/tickets", headers=_auth_header(admin_token))
 
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
-    assert len(response.json()) > 0
+    assert "items" in response.json()
+    assert len(response.json()["items"]) > 0
 
 
 def test_when_admin_lists_tickets_with_loaner_asset_then_should_include_loaner_details(
@@ -452,7 +455,7 @@ def test_when_admin_lists_tickets_with_loaner_asset_then_should_include_loaner_d
     response = client.get("/api/tickets", headers=_auth_header(admin_token))
 
     assert response.status_code == 200
-    ticket = next(item for item in response.json() if item["id"] == created["id"])
+    ticket = next(item for item in response.json()["items"] if item["id"] == created["id"])
     assert ticket["loaner_asset_id"] == loaner_id
     assert ticket["loaner_asset_code"] == fake_db_session.assets[loaner_id].asset_code
     assert ticket["loaner_asset_name"] == fake_db_session.assets[loaner_id].name
@@ -589,9 +592,9 @@ def test_when_asset_has_tickets_and_attachments_then_should_return_nested_data(
 
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload) == 1
+    assert len(payload["items"]) == 1
 
-    item = payload[0]
+    item = payload["items"][0]
     assert item["request"]["id"] == created["id"]
     assert item["request"]["loaner_asset_id"] == loaner_id
     assert item["request"]["loaner_asset_code"] == fake_db_session.assets[loaner_id].asset_code

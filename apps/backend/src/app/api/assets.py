@@ -366,10 +366,14 @@ async def create_asset(
     if not payload_dict.get("storage_location"):
         owner_id = payload_dict.get("owner_id") or user["user_id"]
         ref_user = await db.get(User, owner_id)
-        if ref_user and ref_user.location_id:
-            location = await db.get(OfficeLocation, ref_user.location_id)
+        location_id = getattr(ref_user, "location_id", None) if ref_user else None
+        if location_id:
+            location = await db.get(OfficeLocation, location_id)
             if location:
                 payload_dict["storage_location"] = location.name
+        elif ref_user and getattr(ref_user, "location", None):
+            legacy_location = ref_user.location
+            payload_dict["storage_location"] = getattr(legacy_location, "name", legacy_location)
 
     asset = Asset(**payload_dict)
     db.add(asset)

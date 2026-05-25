@@ -1,9 +1,5 @@
 import random
 import string
-
-from fastapi.testclient import TestClient
-
-from app.core.config import settings
 from datetime import datetime, timedelta
 
 

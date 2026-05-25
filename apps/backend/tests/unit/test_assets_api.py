@@ -1,17 +1,17 @@
-from datetime import datetime, timezone
+import re
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
-import re
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.api import assets as assets_api
-from app.models.asset import Asset, AssetStatus, AssetType
-from app.models.asset import AssetTransfer
+from app.models.asset import Asset, AssetStatus, AssetTransfer, AssetType
 from app.models.office_location import OfficeLocation
 from app.models.user import Role, User
 from app.models.vendor import Vendor
+
 from .conftest import FakeResult, FakeScalarResult
 
 
@@ -211,7 +211,7 @@ class FakeSession:
         return None
 
     async def refresh(self, obj):
-        now = datetime(2026, 4, 28, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 28, tzinfo=UTC)
         if isinstance(obj, Asset):
             if obj.id is None:
                 obj.id = self.next_asset_id
@@ -301,7 +301,7 @@ def _seed_asset(
         activation_date=datetime(2025, 1, 2).date(),
         warranty_expiry=datetime(2028, 1, 1).date(),
         status=AssetStatus.AVAILABLE,
-        created_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        created_at=datetime(2026, 4, 28, tzinfo=UTC),
         version=1,
     )
     fake_db_session.assets[asset_id].__dict__["vendor"] = vendor
@@ -334,7 +334,7 @@ def _seed_transfer(
         status=status,
         from_confirmed=from_confirmed,
         to_confirmed=to_confirmed,
-        created_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        created_at=datetime(2026, 4, 28, tzinfo=UTC),
         is_offboarding_transfer=False,
     )
     fake_db_session.transfers[transfer_id].__dict__["asset"] = fake_db_session.assets.get(asset_id)

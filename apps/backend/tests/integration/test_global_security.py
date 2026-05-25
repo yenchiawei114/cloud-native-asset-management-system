@@ -1,7 +1,7 @@
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import jwt
-from app.main import app
+
 from app.core.config import settings
 
 
@@ -49,7 +49,7 @@ class TestForbiddenAccessControl:
 
     def _create_user_token(self, role: str = "EMPLOYEE") -> str:
         """Helper to create a token with specified role."""
-        payload = {"sub": "testuser", "role": role, "exp": datetime.now(timezone.utc) + timedelta(hours=1)}
+        payload = {"sub": "testuser", "role": role, "exp": datetime.now(UTC) + timedelta(hours=1)}
         return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
     def _create_admin_token(self) -> str:

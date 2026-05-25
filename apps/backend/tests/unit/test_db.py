@@ -1,7 +1,7 @@
-import asyncio
+from types import SimpleNamespace
+
 import pytest
 
-from types import SimpleNamespace
 from app.core import db
 
 
@@ -34,8 +34,8 @@ async def test_get_db_rolls_back_on_exception(monkeypatch):
     sess = await agen.__anext__()   # get yielded session
     assert sess is dummy
 
-    with pytest.raises(Exception):
-        await agen.athrow(Exception("boom"))  # throw into generator to trigger except
+    with pytest.raises(RuntimeError):
+        await agen.athrow(RuntimeError("boom"))  # throw into generator to trigger except
 
     assert dummy.rolled_back is True
 

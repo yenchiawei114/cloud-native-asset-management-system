@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+import re
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
-import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,9 +10,10 @@ from app.api import ticket as ticket_api
 from app.core.db import get_db
 from app.core.security import create_access_token
 from app.main import app
-from app.models.asset import Asset, AssetStatus, AssetType
-from app.models.ticket import RepairRequest, Attachment, RepairInspection, RepairRecord, User
+from app.models.asset import Asset, AssetStatus
+from app.models.ticket import Attachment, RepairInspection, RepairRecord, RepairRequest, User
 from app.models.vendor import Vendor
+
 from .conftest import FakeResult, FakeScalarResult
 
 
@@ -197,7 +198,7 @@ class FakeSession:
         return None
 
     async def refresh(self, obj):
-        now = datetime(2026, 4, 28, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 28, tzinfo=UTC)
         if isinstance(obj, Asset):
             if obj.id is None:
                 obj.id = self.next_asset_id
@@ -357,7 +358,7 @@ def _seed_attachment(
         file_url=f"uploads/{file_name}",
         file_type="IMAGE",
         file_name=file_name,
-        created_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        created_at=datetime(2026, 4, 28, tzinfo=UTC),
     )
 
 
@@ -902,7 +903,7 @@ def test_when_ticket_exists_in_cache_then_should_return_cached_ticket(
         status="OPEN",
         expected_completion_date=None,
         pickup_location=None,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         version=1,
     )
 
@@ -1321,8 +1322,8 @@ def test_when_both_confirm_loaner_return_then_should_complete_ticket(
     client,
     fake_db_session,
 ):
-    from app.models.user import Role
     from app.models.asset import AssetStatus
+    from app.models.user import Role
 
     lender_id = 100
     borrower_id = 200
@@ -1410,7 +1411,7 @@ def test_when_admin_gets_ticket_inspection_then_should_return_200(
         status=True,
         note="passed",
         checked_by=admin_user_id,
-        checked_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        checked_at=datetime(2026, 4, 28, tzinfo=UTC),
     )
 
     fake_db_session.inspections = {}

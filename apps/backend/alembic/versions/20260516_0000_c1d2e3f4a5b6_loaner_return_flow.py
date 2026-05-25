@@ -7,9 +7,10 @@ Create Date: 2026-05-16 00:00:00.000000+00:00
 """
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
+
+from alembic import op
 
 revision: str = 'c1d2e3f4a5b6'
 down_revision: str | Sequence[str] | None = '2b3c4d5e6f7a'

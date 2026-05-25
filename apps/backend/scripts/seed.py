@@ -567,6 +567,8 @@ async def run() -> None:
             session.add(dept)
             dept_count += 1
         await session.commit()
+        departments = (await session.scalars(select(Department))).all()
+        department_ids = {department.name: department.id for department in departments}
 
         # Seed Users
         user_count = 0
@@ -579,6 +581,9 @@ async def run() -> None:
             user_payload["password"] = hash_password(user_payload["password"])
             location_name = user_payload.pop("location", None)
             user_payload["location_id"] = office_location_ids.get(location_name)
+            department_index = user_payload["department_id"] - 1
+            department_name = DEPARTMENTS[department_index]["name"]
+            user_payload["department_id"] = department_ids[department_name]
             user = User(**user_payload)
             session.add(user)
             user_count += 1

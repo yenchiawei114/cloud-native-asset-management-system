@@ -463,6 +463,12 @@
       "submitting": "送出中...",
       "submit": "送出申請"
     },
+    "draft": {
+      "loading": "正在載入草稿...",
+      "saving": "草稿儲存中...",
+      "saved": "草稿已自動儲存",
+      "error": "草稿儲存失敗"
+    },
     "detail": {
       "title": "維修申請詳情",
       "basicInfo": "基本資訊",

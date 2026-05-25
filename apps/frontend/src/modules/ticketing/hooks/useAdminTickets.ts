@@ -36,9 +36,9 @@ export const useAdminTickets = (statusFilter?: string) => {
     return allTickets.filter(t => t.status === statusFilter);
   }, [allTickets, statusFilter]);
 
-  const approveTicket = async (id: number) => {
+  const approveTicket = async (ticket: Ticket) => {
     try {
-      await api.approveTicket(id, 'IN_PROGRESS');
+      await api.approveTicket(ticket.id, ticket.version);
       await fetchData();
       return true;
     } catch (err: any) {
@@ -46,9 +46,9 @@ export const useAdminTickets = (statusFilter?: string) => {
     }
   };
 
-  const rejectTicket = async (id: number, reason: string) => {
+  const rejectTicket = async (ticket: Ticket, reason: string) => {
     try {
-      await api.rejectTicket(id, reason);
+      await api.rejectTicket(ticket.id, ticket.version, reason);
       await fetchData();
       return true;
     } catch (err: any) {

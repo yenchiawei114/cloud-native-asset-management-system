@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAssets } from '../../assets/hooks/useAssets';
 import { ticketService } from '../services/ticketService';
@@ -23,6 +23,69 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
   const [files, setFiles] = useState<File[]>([]);
   const { feedbackState, showFeedback, closeFeedback } = useFeedback();
   const [submitting, setSubmitting] = useState(false);
+
+  const [loadingDraft, setLoadingDraft] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'loading' | 'saving' | 'saved' | 'error'>('idle');
+
+  // Load draft when selected asset changes
+  useEffect(() => {
+    if (!selectedAssetId) {
+      setDescription('');
+      setNeedBackup(false);
+      setBackupSpec('');
+      setDraftStatus('idle');
+      return;
+    }
+
+    const fetchDraft = async () => {
+      setLoadingDraft(true);
+      setDraftStatus('loading');
+      try {
+        const draft = await ticketService.getDraft(selectedAssetId);
+        if (draft && draft.draft_data) {
+          setDescription(draft.draft_data.description || '');
+          setNeedBackup(draft.draft_data.need_backup || false);
+          setBackupSpec(draft.draft_data.backup_spec || '');
+          setDraftStatus('saved');
+        } else {
+          setDraftStatus('idle');
+        }
+      } catch (err) {
+        // 404 means no draft exists, clear form for this asset
+        setDescription('');
+        setNeedBackup(false);
+        setBackupSpec('');
+        setDraftStatus('idle');
+      } finally {
+        setLoadingDraft(false);
+      }
+    };
+
+    fetchDraft();
+  }, [selectedAssetId]);
+
+  // Debounced auto-save when form inputs change
+  useEffect(() => {
+    if (!selectedAssetId || loadingDraft) return;
+
+    setDraftStatus('saving');
+
+    const timer = setTimeout(async () => {
+      try {
+        await ticketService.saveDraft(selectedAssetId, {
+          description,
+          need_backup: needBackup,
+          backup_spec: needBackup ? backupSpec : null
+        });
+        setDraftStatus('saved');
+      } catch (err) {
+        console.error('Failed to auto-save draft:', err);
+        setDraftStatus('error');
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [selectedAssetId, description, needBackup, backupSpec, loadingDraft]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -57,6 +120,13 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
         pickup_location: null
       });
 
+      // Clear draft since ticket is created
+      try {
+        await ticketService.deleteDraft(selectedAssetId);
+      } catch (err) {
+        console.error('Failed to delete draft:', err);
+      }
+
       for (const file of files) {
         await ticketService.uploadAttachment(ticket.id, file);
       }
@@ -79,10 +149,41 @@ export const NewRepairRequestForm: React.FC<NewRepairRequestFormProps> = ({ onCa
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold tracking-tight text-on-surface">{t('ticketing.form.title')}</h1>
-        <p className="text-on-surface-variant mt-1">{t('ticketing.form.subtitle')}</p>
+      <div className="mb-8 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-on-surface">{t('ticketing.form.title')}</h1>
+          <p className="text-on-surface-variant mt-1">{t('ticketing.form.subtitle')}</p>
+        </div>
+        {selectedAssetId && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-100 text-xs font-medium text-slate-500">
+            {draftStatus === 'loading' && (
+              <>
+                <div className="animate-spin rounded-full h-3 w-3 border-2 border-primary border-t-transparent"></div>
+                <span>{t('ticketing.draft.loading', '正在載入草稿...')}</span>
+              </>
+            )}
+            {draftStatus === 'saving' && (
+              <>
+                <div className="animate-ping h-1.5 w-1.5 rounded-full bg-amber-500"></div>
+                <span>{t('ticketing.draft.saving', '草稿儲存中...')}</span>
+              </>
+            )}
+            {draftStatus === 'saved' && (
+              <>
+                <span className="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+                <span>{t('ticketing.draft.saved', '草稿已自動儲存')}</span>
+              </>
+            )}
+            {draftStatus === 'error' && (
+              <>
+                <span className="material-symbols-outlined text-error text-sm">error</span>
+                <span>{t('ticketing.draft.error', '草稿儲存失敗')}</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
+
 
 
       <div className="space-y-8">

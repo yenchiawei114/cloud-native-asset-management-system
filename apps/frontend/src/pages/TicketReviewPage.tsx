@@ -5,6 +5,7 @@ import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout
 import { useAdminTickets } from '../modules/ticketing/hooks/useAdminTickets';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
+import { RepairRequest } from '../lib/api';
 import { fmtDate, fmtNumber } from '../lib/locale';
 
 export const TicketReviewPage: React.FC = () => {
@@ -25,9 +26,9 @@ export const TicketReviewPage: React.FC = () => {
     document.title = t('ticketing.review.pageTitle');
   }, [t]);
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (ticket: RepairRequest) => {
     try {
-      await approveTicket(id);
+      await approveTicket(ticket);
     } catch (err: any) {
       showFeedback({ title: t('ticketing.review.approveFailed'), message: err.message, type: 'error', onConfirm: closeFeedback });
     }
@@ -236,7 +237,7 @@ export const TicketReviewPage: React.FC = () => {
                       <div className="flex justify-end gap-2">
                         {ticket.status === 'OPEN' && (
                           <button 
-                            onClick={(e) => { e.stopPropagation(); handleApprove(ticket.id); }}
+                            onClick={(e) => { e.stopPropagation(); handleApprove(ticket); }}
                             className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
                             title={t('ticketing.review.startRepair')}
                           >

@@ -7,7 +7,7 @@ import { useAuth } from '../modules/auth/hooks/useAuth';
 import { NewRepairRequestModal } from '../modules/ticketing/components/NewRepairRequestModal';
 import { AssetRepairHistoryModal } from '../modules/ticketing/components/AssetRepairHistoryModal';
 import { api } from '../lib/api';
-import type { Asset, Vendor } from '../lib/api';
+import type { Asset, RepairRequest, Vendor } from '../lib/api';
 import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
 
 // 封鎖提示彈窗：資產已有未完成維修單，不允許再建立新申請
@@ -93,7 +93,7 @@ export const EmployeeDashboard: React.FC = () => {
   );
 
   const loanerReturnTicketByAssetId = useMemo(() => {
-    const map = new Map<number, import('../lib/api').RepairRequest>();
+    const map = new Map<number, RepairRequest>();
     tickets.forEach(t => {
       if (t.status === 'WAITING_LOANER_RETURN' && t.loaner_asset_id) {
         map.set(t.loaner_asset_id, t);
@@ -102,12 +102,12 @@ export const EmployeeDashboard: React.FC = () => {
     return map;
   }, [tickets]);
 
-  const [pendingReturnTicketId, setPendingReturnTicketId] = useState<number | null>(null);
+  const [pendingReturnTicket, setPendingReturnTicket] = useState<RepairRequest | null>(null);
 
-  const handleConfirmLoanerReturn = useCallback(async (ticketId: number) => {
-    setPendingReturnTicketId(null);
+  const handleConfirmLoanerReturn = useCallback(async (ticket: RepairRequest) => {
+    setPendingReturnTicket(null);
     try {
-      await api.confirmLoanerReturn(ticketId);
+      await api.confirmLoanerReturn(ticket.id, ticket.version);
       await Promise.all([refreshAssets(), refreshTickets()]);
     } catch (err: any) {
       alert(t('employeeDashboard.returnFailed') + err.message);
@@ -294,7 +294,7 @@ export const EmployeeDashboard: React.FC = () => {
                                 </span>
                               ) : (
                                 <button
-                                  onClick={() => setPendingReturnTicketId(loanerTicket.id)}
+                                  onClick={() => setPendingReturnTicket(loanerTicket)}
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
                                 >
                                   <span className="material-symbols-outlined text-[16px]">keyboard_return</span>
@@ -388,7 +388,7 @@ export const EmployeeDashboard: React.FC = () => {
         />
       )}
 
-      {pendingReturnTicketId !== null && (
+      {pendingReturnTicket !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
             <div className="flex items-start gap-3">
@@ -402,13 +402,13 @@ export const EmployeeDashboard: React.FC = () => {
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button
-                onClick={() => setPendingReturnTicketId(null)}
+                onClick={() => setPendingReturnTicket(null)}
                 className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"
               >
                 {t('common.cancel')}
               </button>
               <button
-                onClick={() => handleConfirmLoanerReturn(pendingReturnTicketId)}
+                onClick={() => handleConfirmLoanerReturn(pendingReturnTicket)}
                 className="px-5 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-colors"
               >
                 {t('employeeDashboard.confirmReturn')}

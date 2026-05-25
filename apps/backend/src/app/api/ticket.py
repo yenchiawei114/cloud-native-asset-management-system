@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.api.deps import get_current_user, require_role
 from app.core.audit import log_action
@@ -33,6 +34,14 @@ def _ticket_cache_key(ticket_id: int) -> str:
     return f"ticket:{ticket_id}"
 
 
+def _ensure_ticket_version(row: RepairRequest, version: int | None) -> None:
+    if version is not None and row.version != version:
+        raise HTTPException(
+            status_code=409,
+            detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
+        )
+
+
 class RepairRequestCreate(BaseModel):
     asset_id: int
     requester_id: int
@@ -45,12 +54,18 @@ class RepairRequestCreate(BaseModel):
 
 class RepairRequestStatusUpdate(BaseModel):
     status: Literal["OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "RETURNED", "WAITING_LOANER_RETURN"]
+    version: int | None = None
     expected_completion_date: date | None = None
     reject_reason: str | None = None
     loaner_asset_id: int | None = None  # 核准時指定備用機
 
 
+class TicketVersionPayload(BaseModel):
+    version: int | None = None
+
+
 class CloseTicketPayload(BaseModel):
+    version: int | None = None
     issue_description: str
     solution: str
     vendor_id: int
@@ -61,6 +76,7 @@ class RepairRequestUpdate(BaseModel):
     asset_id: int
     requester_id: int
     description: str
+    version: int | None = None
     need_backup: bool = False
     backup_spec: str | None = None
     status: Literal["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"] = "OPEN"
@@ -554,6 +570,7 @@ async def update_ticket(
     # 權限判斷：只能修改自己的表單
     if row.requester_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
+    _ensure_ticket_version(row, payload.version)
 
     # 只有 OPEN 或 RETURNED 工單可由申請人修改
     if row.status not in ("OPEN", "RETURNED"):
@@ -587,7 +604,14 @@ async def update_ticket(
         target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": before, "after": after},
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except StaleDataError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
+        ) from None
     await db.refresh(row)
 
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
@@ -606,6 +630,7 @@ async def update_ticket_status(
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+    _ensure_ticket_version(row, payload.version)
 
     # 只有 OPEN 工單可由任意管理員審核；非 OPEN 工單只有 handled_by 管理員可操作
     if row.status != "OPEN":
@@ -680,7 +705,14 @@ async def update_ticket_status(
         target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": {"status": old_status}, "after": {"status": payload.status}},
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except StaleDataError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
+        ) from None
     await db.refresh(row)
 
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
@@ -705,6 +737,7 @@ async def close_ticket(
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+    _ensure_ticket_version(row, payload.version)
     if row.status != "IN_PROGRESS":
         raise HTTPException(status_code=400, detail="只有「維修中」的工單才能結案")
     await _require_handler(row, user, db)
@@ -773,7 +806,14 @@ async def close_ticket(
         target_name=f"#{str(ticket_id).zfill(4)}",
         detail={"before": {"status": "IN_PROGRESS"}, "after": {"status": new_status}},
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except StaleDataError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
+        ) from None
     await db.refresh(row)
 
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
@@ -791,6 +831,7 @@ async def close_ticket(
 @router.post("/tickets/{ticket_id}/confirm-loaner-return", response_model=RepairRequestOut)
 async def confirm_loaner_return(
     ticket_id: int,
+    payload: TicketVersionPayload | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ) -> RepairRequestOut:
@@ -798,6 +839,7 @@ async def confirm_loaner_return(
     row = await db.get(RepairRequest, ticket_id)
     if row is None:
         raise HTTPException(status_code=404, detail="ticket not found")
+    _ensure_ticket_version(row, payload.version if payload else None)
     if row.status != "WAITING_LOANER_RETURN":
         raise HTTPException(status_code=400, detail="此工單目前不在等待備用機歸還狀態")
     if not row.loaner_asset_id:
@@ -850,7 +892,14 @@ async def confirm_loaner_return(
             "loaner_asset_id": row.loaner_asset_id,
         }},
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except StaleDataError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
+        ) from None
     await db.refresh(row)
 
     requester = await db.get(User, row.requester_id)
@@ -1325,3 +1374,65 @@ async def delete_attachment(
         detail={"before": before},
     )
     await db.commit()
+
+
+class RepairRequestDraftSave(BaseModel):
+    description: str = ""
+    need_backup: bool = False
+    backup_spec: str | None = None
+    pickup_location: str | None = None
+
+
+class RepairRequestDraftOut(BaseModel):
+    asset_id: int
+    user_id: int
+    draft_data: dict
+
+
+def _draft_cache_key(user_id: int, asset_id: int) -> str:
+    return f"ticket:draft:{user_id}:{asset_id}"
+
+
+@router.post("/tickets/draft/{asset_id}", response_model=RepairRequestDraftOut)
+async def save_ticket_draft(
+    asset_id: int,
+    payload: RepairRequestDraftSave,
+    user=Depends(get_current_user),
+) -> RepairRequestDraftOut:
+    import json
+    key = _draft_cache_key(user["user_id"], asset_id)
+    draft_dict = payload.model_dump()
+    # Save draft to Redis with TTL of 7 days (604800 seconds)
+    await redis.setex(key, 604800, json.dumps(draft_dict))
+    return RepairRequestDraftOut(
+        asset_id=asset_id,
+        user_id=user["user_id"],
+        draft_data=draft_dict,
+    )
+
+
+@router.get("/tickets/draft/{asset_id}", response_model=RepairRequestDraftOut)
+async def get_ticket_draft(
+    asset_id: int,
+    user=Depends(get_current_user),
+) -> RepairRequestDraftOut:
+    import json
+    key = _draft_cache_key(user["user_id"], asset_id)
+    cached = await redis.get(key)
+    if not cached:
+        raise HTTPException(status_code=404, detail="draft not found")
+    draft_dict = json.loads(cached)
+    return RepairRequestDraftOut(
+        asset_id=asset_id,
+        user_id=user["user_id"],
+        draft_data=draft_dict,
+    )
+
+
+@router.delete("/tickets/draft/{asset_id}", status_code=204)
+async def delete_ticket_draft(
+    asset_id: int,
+    user=Depends(get_current_user),
+) -> None:
+    key = _draft_cache_key(user["user_id"], asset_id)
+    await redis.delete(key)

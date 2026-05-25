@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api import assets as assets_api
 from app.models.asset import Asset, AssetStatus, AssetType
 from app.models.asset import AssetTransfer
+from app.models.office_location import OfficeLocation
 from app.models.user import Role, User
 from app.models.vendor import Vendor
 from .conftest import FakeResult, FakeScalarResult
@@ -16,6 +17,11 @@ from .conftest import FakeResult, FakeScalarResult
 
 class FakeSession:
     def __init__(self) -> None:
+        self.locations: dict[int, SimpleNamespace] = {
+            1: SimpleNamespace(id=1, name="HQ"),
+            2: SimpleNamespace(id=2, name="Branch Office"),
+            3: SimpleNamespace(id=3, name="Remote Office"),
+        }
         self.users: dict[int, SimpleNamespace] = {
             1: SimpleNamespace(
                 id=1,
@@ -23,6 +29,7 @@ class FakeSession:
                 password="testpassword",
                 name="Admin User",
                 email="admin@example.com",
+                location_id=1,
                 location=SimpleNamespace(name="HQ"),
                 must_change_password=False,
                 is_active=True,
@@ -34,6 +41,7 @@ class FakeSession:
                 password="testpassword",
                 name="Employee User",
                 email="employee@example.com",
+                location_id=2,
                 location=SimpleNamespace(name="Branch Office"),
                 must_change_password=False,
                 is_active=True,
@@ -45,6 +53,7 @@ class FakeSession:
                 password="testpassword",
                 name="Other Employee",
                 email="other@example.com",
+                location_id=3,
                 location=SimpleNamespace(name="Remote Office"),
                 must_change_password=False,
                 is_active=True,
@@ -154,6 +163,8 @@ class FakeSession:
             return self.users.get(key)
         if model is AssetTransfer:
             return self.transfers.get(key)
+        if model is OfficeLocation:
+            return self.locations.get(key)
         return None
 
     def add(self, obj):

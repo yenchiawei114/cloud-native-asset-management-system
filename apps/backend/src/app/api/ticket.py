@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -24,6 +24,13 @@ from app.models.user import Role
 admin_required = require_role("ADMIN")
 
 router = APIRouter()
+
+
+class PaginatedTicketResponse(BaseModel):
+    total: int
+    items: list
+    skip: int
+    limit: int
 CACHE_TTL_SECONDS = 60
 MAX_ATTACHMENT_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -310,9 +317,23 @@ async def _extract_attachment_owner(db: AsyncSession, row: Attachment, user: dic
     raise HTTPException(status_code=422, detail="unsupported attachable type")
 
 
-@router.get("/tickets", response_model=list[RepairRequestOut])
-async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_required)) -> list[RepairRequestOut]:
-    rows = (await db.scalars(select(RepairRequest).order_by(RepairRequest.id.desc()))).all()
+@router.get("/tickets", response_model=PaginatedTicketResponse)
+async def list_tickets(
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(admin_required),
+) -> PaginatedTicketResponse:
+    stmt = select(RepairRequest)
+    if status:
+        stmt = stmt.where(RepairRequest.status == status.upper())
+
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+
+    data_q = stmt.order_by(RepairRequest.id.desc()).offset(skip).limit(limit)
+    rows = (await db.scalars(data_q)).all()
+
     loaner_ids = {r.loaner_asset_id for r in rows if r.loaner_asset_id}
     loaner_map: dict[int, Asset] = {}
     if loaner_ids:
@@ -323,7 +344,8 @@ async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_re
     if handler_ids:
         handlers = (await db.scalars(select(User).where(User.id.in_(handler_ids)))).all()
         handler_map = {u.id: u for u in handlers}
-    return [
+
+    items = [
         _request_to_out(
             r,
             loaner_asset=loaner_map.get(r.loaner_asset_id) if r.loaner_asset_id else None,
@@ -331,14 +353,24 @@ async def list_tickets(db: AsyncSession = Depends(get_db), user=Depends(admin_re
         )
         for r in rows
     ]
+    return PaginatedTicketResponse(total=total, items=items, skip=skip, limit=limit)
 
 
-@router.get("/assets/{asset_id}/tickets", response_model=list[RepairRequestWithAttachments])
+class PaginatedAssetTicketResponse(BaseModel):
+    total: int
+    items: list
+    skip: int
+    limit: int
+
+
+@router.get("/assets/{asset_id}/tickets", response_model=PaginatedAssetTicketResponse)
 async def list_asset_tickets(
     asset_id: int,
+    skip: int = 0,
+    limit: int = 50,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
-) -> list[RepairRequestWithAttachments]:
+) -> PaginatedAssetTicketResponse:
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
@@ -346,10 +378,14 @@ async def list_asset_tickets(
     if user.get("role") != "ADMIN" and asset.owner_id != user.get("user_id"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    base_stmt = select(RepairRequest).where(RepairRequest.asset_id == asset_id)
+    total = await db.scalar(select(func.count()).select_from(base_stmt.subquery())) or 0
+
     rows = (await db.scalars(
-        select(RepairRequest)
-        .where(RepairRequest.asset_id == asset_id)
+        base_stmt
         .order_by(RepairRequest.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )).all()
 
     request_ids = [r.id for r in rows]
@@ -384,10 +420,10 @@ async def list_asset_tickets(
         handlers = (await db.scalars(select(User).where(User.id.in_(handler_ids)))).all()
         handler_map = {u.id: u for u in handlers}
 
-    result = []
+    items = []
     for r in rows:
         requester = requester_map.get(r.requester_id)
-        result.append(RepairRequestWithAttachments(
+        items.append(RepairRequestWithAttachments(
             request=_request_to_out(
                 r,
                 requester_name=requester.name if requester else None,
@@ -396,7 +432,7 @@ async def list_asset_tickets(
             ),
             attachment=attachments_map.get(r.id),
         ))
-    return result
+    return PaginatedAssetTicketResponse(total=total, items=items, skip=skip, limit=limit)
 
 
 @router.get("/tickets/list/{employee_id}", response_model=list[RepairRequestWithAttachments])

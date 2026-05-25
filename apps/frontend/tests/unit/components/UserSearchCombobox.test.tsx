@@ -60,7 +60,7 @@ describe('UserSearchCombobox', () => {
     })
 
     test('searches users and shows dropdown results', async () => {
-        mockedListUsers.mockResolvedValue(mockUsers as any)
+        mockedListUsers.mockResolvedValue({ items: mockUsers, total: 2, skip: 0, limit: 10 } as any)
 
         render(
             <UserSearchCombobox
@@ -75,7 +75,7 @@ describe('UserSearchCombobox', () => {
         await userEvent.type(input, 'john')
 
         await waitFor(() => {
-            expect(mockedListUsers).toHaveBeenCalledWith('john')
+            expect(mockedListUsers).toHaveBeenCalledWith({ keyword: 'john', limit: 10 })
         }, { timeout: 1000 })
 
         expect(screen.getByText('John Doe')).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('UserSearchCombobox', () => {
     })
 
     test('selects a user from dropdown', async () => {
-        mockedListUsers.mockResolvedValue(mockUsers as any)
+        mockedListUsers.mockResolvedValue({ items: mockUsers, total: 2, skip: 0, limit: 10 } as any)
 
         const onSelect = vi.fn()
 
@@ -194,7 +194,7 @@ describe('UserSearchCombobox', () => {
     })
 
     test('closes dropdown when clicking outside', async () => {
-        mockedListUsers.mockResolvedValue(mockUsers as any)
+        mockedListUsers.mockResolvedValue({ items: mockUsers, total: 2, skip: 0, limit: 10 } as any)
 
         render(
             <div>

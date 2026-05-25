@@ -40,8 +40,8 @@ export const OffboardingModal: React.FC<Props> = ({ targetUser, onClose, onSucce
       });
 
     if (!isInProgress) {
-      api.listUsers()
-        .then(users => setAllAdmins(users.filter(u => u.role === 'ADMIN' && u.is_active !== false && u.id !== targetUser.id)))
+      api.listUsers({ role: 'ADMIN', limit: 200 })
+        .then(data => setAllAdmins(data.items.filter(u => u.is_active !== false && u.id !== targetUser.id)))
         .catch(() => {});
     }
   }, [targetUser.employee_id, targetUser.id, isInProgress, t]);

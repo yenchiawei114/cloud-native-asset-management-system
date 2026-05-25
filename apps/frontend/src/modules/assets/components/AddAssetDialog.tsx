@@ -36,10 +36,10 @@ export const AddAssetDialog: React.FC<Props> = ({ open, onClose, onCreated }) =>
 
   useEffect(() => {
     if (!open) return;
-    api.listUsers().then(loaded => {
-      setUsers(loaded);
+    api.listUsers({ limit: 1000 }).then(data => {
+      setUsers(data.items);
       if (authUser) {
-        const self = loaded.find(u => u.id === authUser.id) ?? null;
+        const self = data.items.find(u => u.id === authUser.id) ?? null;
         setSelectedOwner(self);
       }
     }).catch(() => {});

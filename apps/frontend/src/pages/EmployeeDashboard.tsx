@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '../modules/dashboard/components/DashboardLayout';
 import { useAssets } from '../modules/assets/hooks/useAssets';
@@ -9,6 +9,7 @@ import { AssetRepairHistoryModal } from '../modules/ticketing/components/AssetRe
 import { api } from '../lib/api';
 import type { Asset, RepairRequest, Vendor } from '../lib/api';
 import { PendingTransfersBanner } from '../modules/assets/components/PendingTransfersBanner';
+import { Pagination } from '../modules/core/design-system/Pagination';
 
 // 封鎖提示彈窗：資產已有未完成維修單，不允許再建立新申請
 function BlockedRepairDialog({ asset, onClose }: { asset: Asset; onClose: () => void }) {
@@ -47,6 +48,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const ASSET_STATUSES = ['available', 'in_use', 'maintenance', 'borrowed'] as const;
+const ASSET_TYPE_VALUES = ['laptop', 'desktop', 'phone', 'tablet', 'server', 'network', 'other'] as const;
 
 interface FilterState {
   assetCode: string;
@@ -71,11 +73,20 @@ const EMPTY_FILTERS: FilterState = {
 export const EmployeeDashboard: React.FC = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { assets: allAssets, loading: assetsLoading, refresh: refreshAssets } = useAssets();
   const { tickets, refresh: refreshTickets } = useTickets();
 
   const [inputs, setInputs] = useState<FilterState>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS);
+
+  const { assets, total, skip, limit, loading: assetsLoading, refresh: refreshAssets, onPageChange } = useAssets({
+    asset_code_q: appliedFilters.assetCode || undefined,
+    name_q: appliedFilters.assetName || undefined,
+    model_q: appliedFilters.model || undefined,
+    spec_q: appliedFilters.spec || undefined,
+    vendor_q: appliedFilters.vendor || undefined,
+    asset_type: appliedFilters.category || undefined,
+    status: appliedFilters.status || undefined,
+  });
   const [repairModalAsset, setRepairModalAsset] = useState<Asset | null>(null);
   const [historyModalAsset, setHistoryModalAsset] = useState<Asset | null>(null);
   const [blockedRepairAsset, setBlockedRepairAsset] = useState<Asset | null>(null);
@@ -85,14 +96,12 @@ export const EmployeeDashboard: React.FC = () => {
     api.listVendors().then(setVendors).catch(() => {});
   }, []);
 
-  const categories = useMemo(() => Array.from(new Set(allAssets.map(a => a.type))), [allAssets]);
-
-  const blockedAssetIds = useMemo(
+  const blockedAssetIds = React.useMemo(
     () => new Set(tickets.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').map(t => t.asset_id)),
     [tickets]
   );
 
-  const loanerReturnTicketByAssetId = useMemo(() => {
+  const loanerReturnTicketByAssetId = React.useMemo(() => {
     const map = new Map<number, RepairRequest>();
     tickets.forEach(t => {
       if (t.status === 'WAITING_LOANER_RETURN' && t.loaner_asset_id) {
@@ -115,22 +124,10 @@ export const EmployeeDashboard: React.FC = () => {
   }, [refreshAssets, refreshTickets]);
 
   const handleSearch = useCallback(() => {
+    onPageChange(0);
     setAppliedFilters({ ...inputs });
-  }, [inputs]);
+  }, [inputs, onPageChange]);
 
-  const filteredAssets = useMemo(() => {
-    const { assetCode, assetName, model, spec, vendor, category, status } = appliedFilters;
-    return allAssets.filter(a => {
-      const matchCode = !assetCode || a.asset_code.toLowerCase().includes(assetCode.toLowerCase());
-      const matchName = !assetName || a.name.toLowerCase().includes(assetName.toLowerCase());
-      const matchModel = !model || a.model.toLowerCase().includes(model.toLowerCase());
-      const matchSpec = !spec || a.specification.toLowerCase().includes(spec.toLowerCase());
-      const matchVendor = !vendor || a.vendor === vendor;
-      const matchCategory = !category || a.type === category;
-      const matchStatus = !status || a.status === status;
-      return matchCode && matchName && matchModel && matchSpec && matchVendor && matchCategory && matchStatus;
-    });
-  }, [allAssets, appliedFilters]);
 
   const handleRepairSuccess = useCallback(async () => {
     setRepairModalAsset(null);
@@ -197,7 +194,7 @@ export const EmployeeDashboard: React.FC = () => {
                 onChange={e => setInputs(prev => ({ ...prev, category: e.target.value }))}
               >
                 <option value="">{t('dashboard.employee.allCategories')}</option>
-                {categories.map(c => (
+                {ASSET_TYPE_VALUES.map(c => (
                   <option key={c} value={c}>{t(`assets.type.${c}`, c)}</option>
                 ))}
               </select>
@@ -217,7 +214,7 @@ export const EmployeeDashboard: React.FC = () => {
             </div>
             <div className="ml-auto flex items-end gap-2">
               <button
-                onClick={() => { setInputs(EMPTY_FILTERS); setAppliedFilters(EMPTY_FILTERS); }}
+                onClick={() => { setInputs(EMPTY_FILTERS); setAppliedFilters(EMPTY_FILTERS); onPageChange(0); }}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
               >
                 <span className="material-symbols-outlined text-[16px]">close</span>
@@ -240,11 +237,11 @@ export const EmployeeDashboard: React.FC = () => {
             <div className="flex items-center justify-center p-16">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
-          ) : filteredAssets.length === 0 ? (
+          ) : assets.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-16 text-center">
               <span className="material-symbols-outlined text-5xl text-slate-300 mb-3">inventory_2</span>
               <p className="text-sm text-on-surface-variant">
-                {allAssets.length === 0
+                {total === 0
                   ? t('dashboard.employee.noAssignedAssets')
                   : t('dashboard.employee.noMatchingAssets')}
               </p>
@@ -278,7 +275,7 @@ export const EmployeeDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredAssets.map(asset => {
+                  {assets.map(asset => {
                     const isLoanerAsset = asset.owner_id !== user?.id;
                     const loanerTicket = loanerReturnTicketByAssetId.get(asset.id);
                     return (
@@ -362,6 +359,9 @@ export const EmployeeDashboard: React.FC = () => {
                   })}
                 </tbody>
               </table>
+              <div className="px-5 py-3 border-t border-slate-100">
+                <Pagination total={total} skip={skip} limit={limit} onPageChange={onPageChange} />
+              </div>
             </div>
           )}
         </div>

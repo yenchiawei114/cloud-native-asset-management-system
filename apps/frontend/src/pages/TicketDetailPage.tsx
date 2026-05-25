@@ -58,7 +58,7 @@ export const TicketDetailPage: React.FC = () => {
   // resubmit 功能已移除：退回工單為終態，員工需重新開立新工單
 
   const isAdmin = user?.role === 'ADMIN';
-  const backPath = isAdmin ? '/ticket-review' : '/repair-history';
+  const backPath = isAdmin ? '/all-assets' : '/repair-history';
   const isHandlingAdmin = !ticket || !ticket.handled_by || ticket.handled_by === user?.id;
 
   const handleApprove = async () => {

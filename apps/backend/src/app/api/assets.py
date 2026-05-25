@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -22,6 +22,14 @@ from app.models.vendor import Vendor
 
 admin_required = require_role("ADMIN")
 router = APIRouter()
+
+
+class PaginatedAssetResponse(BaseModel):
+    total: int
+    items: list
+    skip: int
+    limit: int
+
 
 class AssetCreate(BaseModel):
     asset_code: str
@@ -223,7 +231,7 @@ def _normalize_csv_value(value: str | list[str] | None) -> str:
     return (value or "").strip()
 
 
-@router.get("/assets", response_model=list[AssetOut])
+@router.get("/assets", response_model=PaginatedAssetResponse)
 async def list_assets(
     owner_employee_id: str | None = None,
     keyword: str | None = None,
@@ -236,14 +244,12 @@ async def list_assets(
     office_location_q: str | None = None,
     asset_type: AssetType | None = None,
     status: AssetStatus | None = None,
+    skip: int = 0,
+    limit: int = 50,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
-) -> list[AssetOut]:
-    stmt = (
-        select(Asset)
-        .options(*ASSET_OUT_OPTIONS)
-        .order_by(Asset.id.desc())
-    )
+) -> PaginatedAssetResponse:
+    stmt = select(Asset)
 
     is_admin = user.get("role") == "ADMIN"
     my_employee_id = user.get("employee_id")
@@ -253,8 +259,7 @@ async def list_assets(
         if owner_employee_id is not None and owner_employee_id != my_employee_id:
             raise HTTPException(status_code=403, detail="Forbidden: You can only query your own assets")
         # 包含保管人是自己或借用者是自己（備用機借用）的資產
-        from sqlalchemy import or_ as _or
-        stmt = stmt.where(_or(Asset.owner_id == my_user_id, Asset.borrower_id == my_user_id))
+        stmt = stmt.where(or_(Asset.owner_id == my_user_id, Asset.borrower_id == my_user_id))
     else:
         if owner_employee_id is not None:
             target_user = (await db.execute(
@@ -269,9 +274,15 @@ async def list_assets(
     if status:
         stmt = stmt.where(Asset.status == status)
 
+    # 追蹤已 JOIN 的資料表，避免重複 JOIN
+    vendor_joined = False
+    owner_joined = False
+
     # 舊版通用關鍵字搜尋（向下相容）
     if keyword:
-        stmt = stmt.outerjoin(Asset.vendor).where(
+        stmt = stmt.outerjoin(Asset.vendor)
+        vendor_joined = True
+        stmt = stmt.where(
             or_(
                 Asset.name.ilike(f"%{keyword}%"),
                 Asset.asset_code.ilike(f"%{keyword}%"),
@@ -290,24 +301,38 @@ async def list_assets(
     if spec_q:
         stmt = stmt.where(Asset.specification.ilike(f"%{spec_q}%"))
     if vendor_q:
-        stmt = stmt.join(Asset.vendor).where(
-            Vendor.name.ilike(f"%{vendor_q}%")
-        )
-
-    rows = (await db.scalars(stmt)).all()
-    result = [_to_out(r, _asset_owner(r)) for r in rows]
-    
+        if not vendor_joined:
+            stmt = stmt.join(Asset.vendor)
+            vendor_joined = True
+        stmt = stmt.where(Vendor.name.ilike(f"%{vendor_q}%"))
     if owner_q:
-        q = owner_q.lower()
-        result = [
-            a for a in result
-            if (a.owner_name and q in a.owner_name.lower())
-            or (a.owner_employee_id and q in a.owner_employee_id.lower())
-        ]
+        stmt = stmt.outerjoin(User, Asset.owner_id == User.id)
+        owner_joined = True
+        stmt = stmt.where(
+            or_(
+                User.name.ilike(f"%{owner_q}%"),
+                User.employee_id.ilike(f"%{owner_q}%"),
+            )
+        )
     if office_location_q:
-        q = office_location_q.lower()
-        result = [a for a in result if a.office_location and q in a.office_location.lower()]
-    return result
+        if not owner_joined:
+            stmt = stmt.outerjoin(User, Asset.owner_id == User.id)
+            owner_joined = True
+        stmt = stmt.outerjoin(OfficeLocation, User.location_id == OfficeLocation.id)
+        stmt = stmt.where(OfficeLocation.name.ilike(f"%{office_location_q}%"))
+
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+
+    data_q = (
+        stmt.options(*ASSET_OUT_OPTIONS)
+        .order_by(Asset.id.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    rows = (await db.scalars(data_q)).all()
+    items = [_to_out(r, _asset_owner(r)) for r in rows]
+
+    return PaginatedAssetResponse(total=total, items=items, skip=skip, limit=limit)
 
 
 @router.get("/assets/idle", response_model=list[AssetOut])

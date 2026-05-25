@@ -1,11 +1,15 @@
 import random
-from datetime import datetime, timezone
-from fastapi.testclient import TestClient
+
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from tests.utils.utils import random_email, random_lower_string, random_employee_id, random_int_id, random_date
-from app.models.user import User, Role, Sex
+from app.models.user import Role, Sex, User
+from tests.utils.utils import (
+    random_date,
+    random_email,
+    random_employee_id,
+    random_int_id,
+    random_lower_string,
+)
 
 # def user_authentication_headers(*, client: TestClient, email: str, password: str) -> dict[str, str]:
 #     data = {"username": email, "password": password}

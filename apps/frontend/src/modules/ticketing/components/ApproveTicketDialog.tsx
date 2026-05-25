@@ -34,8 +34,8 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
     setError('');
     if (ticket.need_backup && user?.employee_id) {
       setLoadingAssets(true);
-      api.listAssets({ owner_employee_id: user.employee_id })
-        .then(data => { setOwnedAssets(data); setFilteredAssets(data); })
+      api.listAssets({ owner_employee_id: user.employee_id, limit: 1000 })
+        .then(data => { setOwnedAssets(data.items); setFilteredAssets(data.items); })
         .catch(() => { setOwnedAssets([]); setFilteredAssets([]); })
         .finally(() => setLoadingAssets(false));
     }

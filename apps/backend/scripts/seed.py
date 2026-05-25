@@ -10,21 +10,21 @@ from app.core.db import Session, dispose_engines
 from app.core.security import hash_password
 from app.models import (
     Asset,
-    User,
+    Attachment,
+    AuditLog,
     Department,
+    NotificationPreference,
     OfficeLocation,
-    RepairRequest,
     RepairInspection,
     RepairRecord,
-    Attachment,
-    NotificationPreference,
-    AuditLog,
+    RepairRequest,
+    User,
     Vendor,
 )
-from app.models.asset import AssetType, AssetStatus
-from app.models.user import Role, Sex
+from app.models.asset import AssetStatus, AssetType
 from app.models.audit_log import Action, TargetType
 from app.models.notification_preference import NoteType
+from app.models.user import Role, Sex
 
 VENDORS = [
     "Apple Inc.",

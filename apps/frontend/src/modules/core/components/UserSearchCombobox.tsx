@@ -45,9 +45,9 @@ export const UserSearchCombobox: React.FC<UserSearchComboboxProps> = ({
     }
     const timer = setTimeout(async () => {
       try {
-        const users = await api.listUsers(text.trim());
-        setResults(users.slice(0, 10));
-        setOpen(users.length > 0);
+        const data = await api.listUsers({ keyword: text.trim(), limit: 10 });
+        setResults(data.items);
+        setOpen(data.items.length > 0);
       } catch {
         setResults([]);
         setOpen(false);

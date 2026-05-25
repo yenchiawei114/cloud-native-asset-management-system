@@ -10,6 +10,7 @@ import { ApproveTicketDialog } from '../modules/ticketing/components/ApproveTick
 import { ReturnTicketDialog } from '../modules/ticketing/components/ReturnTicketDialog';
 import { CloseTicketDialog } from '../modules/ticketing/components/CloseTicketDialog';
 import { NewRepairRequestModal } from '../modules/ticketing/components/NewRepairRequestModal';
+import { Pagination } from '../modules/core/design-system/Pagination';
 
 interface TicketWithAttachment {
   request: RepairRequest;
@@ -42,6 +43,9 @@ export const AdminAssetRepairsPage: React.FC = () => {
 
   const [asset, setAsset] = useState<Asset | null>(null);
   const [tickets, setTickets] = useState<TicketWithAttachment[]>([]);
+  const [total, setTotal] = useState(0);
+  const [skip, setSkip] = useState(0);
+  const limit = 50;
   const [loading, setLoading] = useState(true);
 
   const [detailTicket, setDetailTicket] = useState<RepairRequest | null>(null);
@@ -58,21 +62,27 @@ export const AdminAssetRepairsPage: React.FC = () => {
     req.status === 'OPEN' || req.status === 'IN_PROGRESS' || req.status === 'WAITING_LOANER_RETURN'
   );
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (currentSkip = 0) => {
     setLoading(true);
     try {
       const [assetData, ticketsData] = await Promise.all([
         api.getAsset(assetId),
-        api.getAssetTickets(assetId),
+        api.getAssetTickets(assetId, { skip: currentSkip, limit }),
       ]);
       setAsset(assetData);
-      setTickets(ticketsData);
+      setTickets(ticketsData.items);
+      setTotal(ticketsData.total);
     } catch {
       navigate('/all-assets');
     } finally {
       setLoading(false);
     }
-  }, [assetId, navigate]);
+  }, [assetId, navigate, limit]);
+
+  const onPageChange = useCallback((newSkip: number) => {
+    setSkip(newSkip);
+    fetchData(newSkip);
+  }, [fetchData]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -152,7 +162,7 @@ export const AdminAssetRepairsPage: React.FC = () => {
           <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between">
             <h2 className="font-bold text-on-surface">{t('assets.repairs.title')}</h2>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-on-surface-variant font-medium">{tickets.length}{t('assets.repairs.countSuffix')}</span>
+              <span className="text-xs text-on-surface-variant font-medium">{total}{t('assets.repairs.countSuffix')}</span>
               {asset && asset.status !== 'deactivated' && asset.owner_id === user?.id && (
                 <button
                   onClick={() => hasActiveTicket ? setBlockedDialogOpen(true) : setNewRepairOpen(true)}
@@ -241,6 +251,8 @@ export const AdminAssetRepairsPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        <Pagination total={total} skip={skip} limit={limit} onPageChange={onPageChange} />
       </div>
 
       <AdminTicketDetailModal

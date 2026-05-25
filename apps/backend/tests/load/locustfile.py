@@ -1,15 +1,16 @@
 import os
-
-from locust import HttpUser, task, between
-from pathlib import Path
 import sys
+from pathlib import Path
 
 root_dir = str(Path(__file__).resolve().parents[2])
 
 # 將該路徑加入 sys.path (加上判斷避免重複加入)
 if root_dir not in sys.path:
     sys.path.append(root_dir)
-from scripts.seed import USERS as seed_users
+
+from locust import HttpUser, between, task  # noqa: E402
+
+from scripts.seed import USERS as SEED_USERS  # noqa: E402
 
 
 class APIUser(HttpUser):
@@ -22,11 +23,10 @@ class APIUser(HttpUser):
     host = os.getenv("LOCUST_HOST", "http://localhost:8000")
     wait_time = between(1, 3)
 
-    credential_candidates = [(user.get("employee_id"), user.get("password")) for user in seed_users]
+    credential_candidates = [(user.get("employee_id"), user.get("password")) for user in SEED_USERS]
 
     def on_start(self):
         self.headers = {}
-        last_error = None
 
         for employee_id, password in self.credential_candidates:
             if not employee_id or not password:
@@ -35,7 +35,6 @@ class APIUser(HttpUser):
             payload = {"employee_id": employee_id, "password": password}
             with self.client.post("/api/login", json=payload, catch_response=True) as res:
                 if res.status_code != 200:
-                    last_error = f"employee_id={employee_id} (status={res.status_code})"
                     continue
 
                 try:
@@ -47,9 +46,7 @@ class APIUser(HttpUser):
                     self.headers = {"Authorization": f"Bearer {token}"}
                     return
 
-                last_error = f"employee_id={employee_id} (missing access_token)"
-
-        # raise StopUser(f"Login failed for all credential candidates: {last_error}")
+        # raise StopUser("Login failed for all credential candidates")
 
     @task
     def list_assets(self):

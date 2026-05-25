@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../modules/dashboard/components/DashboardLayout";
@@ -9,6 +9,7 @@ import { useFeedback } from "../modules/core/hooks/useFeedback";
 import { api, User, Department, OfficeLocation } from "../lib/api";
 import { OffboardingModal } from "../modules/users/components/OffboardingModal";
 import { fmtDate } from "../lib/locale";
+import { Pagination } from "../modules/core/design-system/Pagination";
 
 
 const inlineCls =
@@ -40,7 +41,6 @@ const EMPTY_FILTER: FilterDraft = {
 export const UserManagementPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { users, loading, refresh } = useUsers();
   const { user: currentUser } = useAuth();
   const { feedbackState, closeFeedback } = useFeedback();
 
@@ -52,6 +52,18 @@ export const UserManagementPage: React.FC = () => {
 
   const [draft, setDraft] = useState<FilterDraft>(EMPTY_FILTER);
   const [applied, setApplied] = useState<FilterDraft>(EMPTY_FILTER);
+
+  const { users, total, skip, limit, loading, refresh, onPageChange } = useUsers({
+    keyword: applied.employee_id || applied.name || applied.email || undefined,
+    sex: applied.sex || undefined,
+    department_id: applied.department_id ? Number(applied.department_id) : undefined,
+    location: applied.location || undefined,
+    role: applied.role || undefined,
+    must_change_password:
+      applied.must_change_password === "yes" ? true
+      : applied.must_change_password === "no" ? false
+      : undefined,
+  });
 
   const [offboardingTarget, setOffboardingTarget] = useState<User | null>(null);
 
@@ -71,46 +83,14 @@ export const UserManagementPage: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
-      const matchId =
-        !applied.employee_id ||
-        u.employee_id.toLowerCase().includes(applied.employee_id.toLowerCase());
-      const matchName =
-        !applied.name ||
-        u.name.toLowerCase().includes(applied.name.toLowerCase());
-      const matchEmail =
-        !applied.email ||
-        u.email.toLowerCase().includes(applied.email.toLowerCase());
-      const matchSex = !applied.sex || u.sex === applied.sex;
-      const matchDept =
-        !applied.department_id ||
-        String(u.department_id) === applied.department_id;
-      const matchLoc =
-        !applied.location || (u.location ?? "") === applied.location;
-      const matchRole = !applied.role || u.role === applied.role;
-      const matchPw =
-        !applied.must_change_password ||
-        (applied.must_change_password === "yes"
-          ? u.must_change_password
-          : !u.must_change_password);
-      return (
-        matchId &&
-        matchName &&
-        matchEmail &&
-        matchSex &&
-        matchDept &&
-        matchLoc &&
-        matchRole &&
-        matchPw
-      );
-    });
-  }, [users, applied]);
-
-  const handleSearch = () => setApplied({ ...draft });
+  const handleSearch = () => {
+    onPageChange(0);
+    setApplied({ ...draft });
+  };
   const handleClear = () => {
     setDraft(EMPTY_FILTER);
     setApplied(EMPTY_FILTER);
+    onPageChange(0);
   };
   const setDraftField = (key: keyof FilterDraft, value: string) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -401,8 +381,8 @@ export const UserManagementPage: React.FC = () => {
                       <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
                     </td>
                   </tr>
-                ) : filteredUsers.length > 0 ? (
-                  filteredUsers.map((user) => {
+                ) : users.length > 0 ? (
+                  users.map((user) => {
                     const isDirty = !!pendingEdits[user.employee_id];
                     return (
                       <tr
@@ -593,6 +573,9 @@ export const UserManagementPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 py-3 border-t border-outline-variant/10">
+            <Pagination total={total} skip={skip} limit={limit} onPageChange={onPageChange} />
           </div>
         </div>
       </div>

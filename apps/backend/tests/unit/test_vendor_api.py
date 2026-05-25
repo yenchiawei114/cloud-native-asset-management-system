@@ -4,6 +4,7 @@ import pytest
 
 from app.models.user import User
 from app.models.vendor import Vendor
+
 from .conftest import FakeResult, FakeScalarResult
 
 

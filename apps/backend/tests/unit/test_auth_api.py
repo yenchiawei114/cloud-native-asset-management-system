@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -6,6 +6,7 @@ from jose import jwt
 
 from app.core.config import settings
 from app.core.security import create_access_token
+
 from .conftest import FakeResult
 
 
@@ -123,7 +124,7 @@ def test_when_receive_get_me_with_expired_token_then_should_return_401(client):
         "user_id": 1,
         "role": "ADMIN",
         "employee_id": "A00000001",
-        "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+        "exp": datetime.now(UTC) - timedelta(minutes=1),
     }
     expired_token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
@@ -179,7 +180,7 @@ def test_when_receive_logout_with_expired_token_then_should_return_401(client):
         "user_id": 1,
         "role": "ADMIN",
         "employee_id": "A00000001",
-        "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+        "exp": datetime.now(UTC) - timedelta(minutes=1),
     }
     expired_token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 

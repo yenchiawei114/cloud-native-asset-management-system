@@ -1,19 +1,19 @@
 """
 Unit tests for user business logic (pure functions, no DB/HTTP layer).
 """
-from datetime import date, datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from app.api.user import (
-	validate_password_change,
 	_normalize_note_type,
+	_pref_to_out,
 	_role_to_str,
 	_sex_to_str,
 	_user_to_out,
-	_pref_to_out,
+	validate_password_change,
 )
 from app.models.notification_preference import NoteType
 from app.models.user import Role, Sex
@@ -104,7 +104,7 @@ class TestUserToOut:
 	def test_when_receive_valid_user_then_should_return_user_out(self):
 		"""Should convert User model to UserOut response."""
 		# Arrange
-		now = datetime.now(timezone.utc)
+		now = datetime.now(UTC)
 		user_mock = SimpleNamespace(
 			id=1,
 			employee_id="123456789",
@@ -144,7 +144,7 @@ class TestUserToOut:
 	def test_when_receive_admin_user_then_should_return_admin_role_in_output(self):
 		"""Should correctly convert ADMIN role."""
 		# Arrange
-		now = datetime.now(timezone.utc)
+		now = datetime.now(UTC)
 		user_mock = SimpleNamespace(
 			id=2,
 			employee_id="987654321",

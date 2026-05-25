@@ -2,7 +2,7 @@
 Integration tests for user API endpoints.
 Tests complete flows with real database interactions.
 """
-from datetime import date, datetime, timezone, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import delete, insert, select
@@ -11,11 +11,12 @@ from app.core.security import create_access_token, verify_password
 from app.models.asset import Asset, AssetStatus, AssetTransfer, AssetType
 from app.models.audit_log import AuditLog
 from app.models.department import Department
+from app.models.notification_preference import NoteType, NotificationPreference
 from app.models.office_location import OfficeLocation
-from app.models.notification_preference import NotificationPreference, NoteType
 from app.models.ticket import RepairRequest
 from app.models.user import Role, Sex, User
-from ..utils.utils import random_email, random_employee_id, random_lower_string, random_date
+
+from ..utils.utils import random_date, random_email, random_employee_id, random_lower_string
 
 
 def _auth_header(token: str) -> dict[str, str]:
@@ -324,7 +325,7 @@ async def test_when_admin_creates_user_then_should_return_201_with_user_info(
     test_db_session.add(hq)
     await test_db_session.commit()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "employee_id": random_employee_id(),
         "password": random_lower_string(12),
@@ -365,9 +366,10 @@ async def test_when_admin_lists_users_then_should_return_200_with_user_list(clie
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert data[0]["employee_id"] == "E00000002"
-    assert data[1]["employee_id"] == "A00000001"
+    assert data["total"] == 2
+    assert len(data["items"]) == 2
+    assert data["items"][0]["employee_id"] == "E00000002"
+    assert data["items"][1]["employee_id"] == "A00000001"
 
 
 async def test_when_admin_gets_specific_user_then_should_return_200_with_user_info(
@@ -495,24 +497,24 @@ async def test_when_admin_lists_users_with_keyword_then_should_return_filtered_l
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["employee_id"] == "A00000001"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["employee_id"] == "A00000001"
 
     # Search by name
     response = await client.get("/api/users?keyword=Admin", headers=_auth_header(admin_token))
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["name"] == "Admin User"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == "Admin User"
 
     # Search by email
     response = await client.get("/api/users?keyword=employee@example.com", headers=_auth_header(admin_token))
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["email"] == "employee@example.com"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["email"] == "employee@example.com"
 
 
 async def test_when_admin_updates_nonexistent_user_then_should_return_404(
@@ -757,7 +759,7 @@ async def test_when_offboarding_user_with_assets_and_tickets_then_should_track_a
     result = await test_db_session.execute(
         select(AssetTransfer).where(
             AssetTransfer.from_owner_id == employee.id,
-            AssetTransfer.is_offboarding_transfer == True,
+            AssetTransfer.is_offboarding_transfer.is_(True),
         )
     )
     created_transfers = result.scalars().all()

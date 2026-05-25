@@ -7,9 +7,10 @@ Create Date: 2026-05-20 07:46:36.374964+00:00
 """
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'e1258e5d49bf'

@@ -6,7 +6,6 @@ import { EmployeeDashboard } from "./pages/EmployeeDashboard";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { UserManagementPage } from "./pages/UserManagementPage";
 import { UserCreatePage } from "./pages/UserCreatePage";
-import { TicketReviewPage } from "./pages/TicketReviewPage";
 import { AssetCreatePage } from "./pages/AssetCreatePage";
 import { RepairHistory } from "./pages/RepairHistory";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -76,9 +75,6 @@ export default function App() {
       } />
       <Route path="/users/:employeeId" element={
         isAuthenticated && isAdmin ? <UserDetailPage /> : <Navigate to="/dashboard" replace />
-      } />
-      <Route path="/ticket-review" element={
-        isAuthenticated && isAdmin ? <TicketReviewPage /> : <Navigate to="/dashboard" replace />
       } />
       <Route path="/audit-logs" element={
         isAuthenticated && isAdmin ? <AuditLogPage /> : <Navigate to="/dashboard" replace />

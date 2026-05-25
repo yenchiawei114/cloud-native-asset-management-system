@@ -2,16 +2,15 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
-    async_sessionmaker,
     AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
 )
 from sqlalchemy.pool import StaticPool
-from sqlalchemy import select
 
 from app.core.db import get_db
 from app.main import app
-from app.models import Base, User, NotificationPreference, Department, AuditLog
+from app.models import AuditLog, Base, Department, NotificationPreference, User
 from app.models.asset import Asset, AssetTransfer
 from app.models.office_location import OfficeLocation
 from app.models.ticket import RepairRequest
@@ -102,7 +101,7 @@ class AutoIdAsyncSession:
 
     def add(self, obj):
         # Track objects being added for ID assignment
-        if isinstance(obj, (Department, User, NotificationPreference, AuditLog, OfficeLocation, Asset, AssetTransfer, RepairRequest)):
+        if isinstance(obj, Department | User | NotificationPreference | AuditLog | OfficeLocation | Asset | AssetTransfer | RepairRequest):
             self._assign_id_if_needed(obj)
             self._pending_objects.append(obj)
         return self._session.add(obj)
@@ -110,7 +109,7 @@ class AutoIdAsyncSession:
     def add_all(self, objs):
         # Track objects being added for ID assignment
         for obj in objs:
-            if isinstance(obj, (Department, User, NotificationPreference, AuditLog, OfficeLocation, Asset, AssetTransfer, RepairRequest)):
+            if isinstance(obj, Department | User | NotificationPreference | AuditLog | OfficeLocation | Asset | AssetTransfer | RepairRequest):
                 self._assign_id_if_needed(obj)
                 self._pending_objects.append(obj)
         return self._session.add_all(objs)
@@ -146,13 +145,13 @@ async def test_engine():
 @pytest_asyncio.fixture
 async def test_db_session(test_engine):
     """Create a fresh DB session for each test (function scope)."""
-    TestSession = async_sessionmaker(
+    session_factory = async_sessionmaker(
         bind=test_engine,
         expire_on_commit=False,
         class_=AsyncSession,
     )
 
-    async with TestSession() as session:
+    async with session_factory() as session:
         wrapped = AutoIdAsyncSession(session)
         yield wrapped
 

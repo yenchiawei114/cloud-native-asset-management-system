@@ -65,7 +65,7 @@ export const TicketDetailPage: React.FC = () => {
     if (!ticket) return;
     setIsSubmitting(true);
     try {
-      await api.approveTicket(ticket.id, 'IN_PROGRESS');
+      await api.approveTicket(ticket.id, ticket.version);
       await refresh();
     } catch (err: any) {
       showFeedback({ title: t('common.operationFailed'), message: err.message, type: 'error', onConfirm: closeFeedback });
@@ -78,7 +78,7 @@ export const TicketDetailPage: React.FC = () => {
     if (!ticket || !rejectReason) return;
     setIsSubmitting(true);
     try {
-      await api.rejectTicket(ticket.id, rejectReason);
+      await api.rejectTicket(ticket.id, ticket.version, rejectReason);
       setShowRejectModal(false);
       await refresh();
     } catch (err: any) {
@@ -92,7 +92,7 @@ export const TicketDetailPage: React.FC = () => {
     if (!ticket) return;
     setIsSubmitting(true);
     try {
-      await api.confirmLoanerReturn(ticket.id);
+      await api.confirmLoanerReturn(ticket.id, ticket.version);
       await refresh();
     } catch (err: any) {
       showFeedback({ title: t('common.operationFailed'), message: err.message, type: 'error', onConfirm: closeFeedback });
@@ -189,7 +189,7 @@ export const TicketDetailPage: React.FC = () => {
 
       // 3. 如果驗收通過，則自動結案 (DONE)
       if (inspectionForm.status) {
-        await api.approveTicket(ticket.id, 'DONE');
+        await api.updateTicketStatus(ticket.id, 'DONE', ticket.version);
       }
 
       await refresh();

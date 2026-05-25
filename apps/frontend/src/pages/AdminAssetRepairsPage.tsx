@@ -49,8 +49,8 @@ export const AdminAssetRepairsPage: React.FC = () => {
   const [detailRecord, setDetailRecord] = useState<any | null>(null);
   const [detailInspection, setDetailInspection] = useState<any | null>(null);
   const [approveTicket, setApproveTicket] = useState<RepairRequest | null>(null);
-  const [returnId, setReturnId] = useState<number | null>(null);
-  const [closeId, setCloseId] = useState<number | null>(null);
+  const [returnTicket, setReturnTicket] = useState<RepairRequest | null>(null);
+  const [closeTicket, setCloseTicket] = useState<RepairRequest | null>(null);
   const [newRepairOpen, setNewRepairOpen] = useState(false);
   const [blockedDialogOpen, setBlockedDialogOpen] = useState(false);
 
@@ -96,10 +96,10 @@ export const AdminAssetRepairsPage: React.FC = () => {
     setDetailInspection(inspection);
   };
 
-  const handleConfirmLoanerReturn = async (ticketId: number) => {
+  const handleConfirmLoanerReturn = async (ticket: RepairRequest) => {
     if (!window.confirm(t('assets.repairs.confirmLoanerReturn'))) return;
     try {
-      await api.confirmLoanerReturn(ticketId);
+      await api.confirmLoanerReturn(ticket.id, ticket.version);
     } catch (err: any) {
       window.alert(`${t('assets.repairs.confirmFailed')}${err.message}`);
     } finally {
@@ -221,16 +221,16 @@ export const AdminAssetRepairsPage: React.FC = () => {
                           {req.status === 'OPEN' && (
                             <>
                               <ActionBtn icon="check_circle" label={t('assets.repairs.actions.approve')} color="text-green-600" onClick={() => setApproveTicket(req)} />
-                              <ActionBtn icon="undo" label={t('assets.repairs.actions.return')} color="text-red-500" onClick={() => setReturnId(req.id)} />
+                              <ActionBtn icon="undo" label={t('assets.repairs.actions.return')} color="text-red-500" onClick={() => setReturnTicket(req)} />
                             </>
                           )}
                           {req.status === 'IN_PROGRESS' && (
-                            <ActionBtn icon="task_alt" label={t('assets.repairs.actions.close')} color="text-primary" onClick={() => setCloseId(req.id)} />
+                            <ActionBtn icon="task_alt" label={t('assets.repairs.actions.close')} color="text-primary" onClick={() => setCloseTicket(req)} />
                           )}
                           {req.status === 'WAITING_LOANER_RETURN' &&
                             ((user?.id === req.handled_by && !req.loaner_return_lender_confirmed) ||
                              (user?.id === req.requester_id && !req.loaner_return_borrower_confirmed)) && (
-                            <ActionBtn icon="keyboard_return" label={t('assets.repairs.actions.confirmReturn')} color="text-purple-600" onClick={() => handleConfirmLoanerReturn(req.id)} />
+                            <ActionBtn icon="keyboard_return" label={t('assets.repairs.actions.confirmReturn')} color="text-purple-600" onClick={() => handleConfirmLoanerReturn(req)} />
                           )}
                         </div>
                       </td>
@@ -256,13 +256,13 @@ export const AdminAssetRepairsPage: React.FC = () => {
         onApproved={fetchData}
       />
       <ReturnTicketDialog
-        ticketId={returnId}
-        onClose={() => setReturnId(null)}
+        ticket={returnTicket}
+        onClose={() => setReturnTicket(null)}
         onReturned={fetchData}
       />
       <CloseTicketDialog
-        ticketId={closeId}
-        onClose={() => setCloseId(null)}
+        ticket={closeTicket}
+        onClose={() => setCloseTicket(null)}
         onClosed={fetchData}
       />
       {asset && (

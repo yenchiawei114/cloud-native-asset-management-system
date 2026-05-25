@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../lib/api';
-import type { Vendor } from '../../../lib/api';
+import type { RepairRequest, Vendor } from '../../../lib/api';
 import { VendorCombobox } from '../../../components/VendorCombobox';
 
 interface Props {
-  ticketId: number | null;
+  ticket: RepairRequest | null;
   onClose: () => void;
   onClosed: () => void;
 }
 
-export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed }) => {
+export const CloseTicketDialog: React.FC<Props> = ({ ticket, onClose, onClosed }) => {
   const { t } = useTranslation();
   const [form, setForm] = useState({
     issue_description: '',
@@ -33,11 +33,12 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ticketId) return;
+    if (!ticket) return;
     setError('');
     setSubmitting(true);
     try {
-      await api.closeTicket(ticketId, {
+      await api.closeTicket(ticket.id, {
+        version: ticket.version,
         issue_description: form.issue_description,
         solution: form.solution,
         vendor_id: Number(form.vendor_id),
@@ -45,7 +46,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
       });
 
       if (photos.length > 0) {
-        const record = await api.getTicketRecord(ticketId).catch(() => null);
+        const record = await api.getTicketRecord(ticket.id).catch(() => null);
         if (record?.id) {
           for (const photo of photos) {
             const fd = new FormData();
@@ -68,7 +69,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
     }
   };
 
-  if (ticketId === null) return null;
+  if (ticket === null) return null;
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -82,7 +83,7 @@ export const CloseTicketDialog: React.FC<Props> = ({ ticketId, onClose, onClosed
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <p className="text-sm text-on-surface-variant">
-            {t('ticketing.close.title')} <span className="font-bold text-primary">#TKT-{String(ticketId).padStart(4, '0')}</span>{t('ticketing.close.infoSuffix')}
+            {t('ticketing.close.title')} <span className="font-bold text-primary">#TKT-{String(ticket.id).padStart(4, '0')}</span>{t('ticketing.close.infoSuffix')}
           </p>
 
           <Field label={t('ticketing.close.issueAnalysis')} required>

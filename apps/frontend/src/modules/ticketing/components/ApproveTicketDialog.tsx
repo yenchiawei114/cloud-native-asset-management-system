@@ -93,6 +93,7 @@ export const ApproveTicketDialog: React.FC<Props> = ({ ticket, onClose, onApprov
     try {
       await api.approveTicket(
         ticket.id,
+        ticket.version,
         expectedDate || undefined,
         loanerAsset ? loanerAsset.id : null,
       );

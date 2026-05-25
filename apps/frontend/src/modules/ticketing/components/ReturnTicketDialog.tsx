@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api } from '../../../lib/api';
+import { api, RepairRequest } from '../../../lib/api';
 
 interface Props {
-  ticketId: number | null;
+  ticket: RepairRequest | null;
   onClose: () => void;
   onReturned: () => void;
 }
 
-export const ReturnTicketDialog: React.FC<Props> = ({ ticketId, onClose, onReturned }) => {
+export const ReturnTicketDialog: React.FC<Props> = ({ ticket, onClose, onReturned }) => {
   const { t } = useTranslation();
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -16,11 +16,11 @@ export const ReturnTicketDialog: React.FC<Props> = ({ ticketId, onClose, onRetur
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ticketId || !reason.trim()) return;
+    if (!ticket || !reason.trim()) return;
     setError('');
     setSubmitting(true);
     try {
-      await api.returnTicket(ticketId, reason.trim());
+      await api.returnTicket(ticket.id, ticket.version, reason.trim());
       onReturned();
       onClose();
       setReason('');
@@ -31,7 +31,7 @@ export const ReturnTicketDialog: React.FC<Props> = ({ ticketId, onClose, onRetur
     }
   };
 
-  if (ticketId === null) return null;
+  if (ticket === null) return null;
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -45,7 +45,7 @@ export const ReturnTicketDialog: React.FC<Props> = ({ ticketId, onClose, onRetur
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <p className="text-sm text-on-surface-variant">
-            {t('ticketing.return.title')} <span className="font-bold text-primary">#TKT-{String(ticketId).padStart(4, '0')}</span>{t('ticketing.return.infoSuffix')}
+            {t('ticketing.return.title')} <span className="font-bold text-primary">#TKT-{String(ticket.id).padStart(4, '0')}</span>{t('ticketing.return.infoSuffix')}
           </p>
 
           <div className="space-y-1.5">

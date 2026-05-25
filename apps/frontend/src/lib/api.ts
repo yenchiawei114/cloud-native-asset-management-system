@@ -1,5 +1,16 @@
 import { API_BASE_URL } from "./config";
 
+const TICKET_CONFLICT_DETAIL = "Ticket has been modified by another user";
+const TICKET_CONFLICT_MESSAGE = "此工單已被其他人更新，請重新整理頁面後再操作。";
+
+function formatApiError(status: number, detail: string): string {
+  if (status === 409 && detail.includes(TICKET_CONFLICT_DETAIL)) {
+    return TICKET_CONFLICT_MESSAGE;
+  }
+
+  return `[${status}] ${detail}`;
+}
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem('token');
   const headers = {
@@ -17,7 +28,7 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
       const text = await res.text().catch(() => "");
       if (text) detail = text;
     }
-    throw new Error(`[${res.status}] ${detail}`);
+    throw new Error(formatApiError(res.status, detail));
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -366,8 +377,12 @@ export const api = {
       body: formData,
     });
   },
-  confirmLoanerReturn: (ticketId: number) =>
-    http<RepairRequest>(`/api/tickets/${ticketId}/confirm-loaner-return`, { method: "POST" }),
+  confirmLoanerReturn: (ticketId: number, version: number) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}/confirm-loaner-return`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version })
+    }),
 
   getAssetTickets: (assetId: number) =>
     http<{ request: RepairRequest; attachment: { id: number; file_url: string; file_name: string } | null }[]>(`/api/assets/${assetId}/tickets`),
@@ -385,35 +400,51 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }),
-  approveTicket: (ticketId: number, expectedCompletionDate?: string, loanerAssetId?: number | null) =>
+  updateTicketStatus: (
+    ticketId: number,
+    status: RepairRequest['status'],
+    version: number,
+    payload?: { expected_completion_date?: string | null; reject_reason?: string | null; loaner_asset_id?: number | null }
+  ) =>
+    http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status,
+        version,
+        ...payload,
+      })
+    }),
+  approveTicket: (ticketId: number, version: number, expectedCompletionDate?: string, loanerAssetId?: number | null) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         status: 'IN_PROGRESS',
+        version,
         expected_completion_date: expectedCompletionDate || null,
         loaner_asset_id: loanerAssetId ?? null,
       })
     }),
-  returnTicket: (ticketId: number, reason: string) =>
+  returnTicket: (ticketId: number, version: number, reason: string) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: 'RETURNED', reject_reason: reason })
+      body: JSON.stringify({ status: 'RETURNED', version, reject_reason: reason })
     }),
-  rejectTicket: (ticketId: number, reason?: string) =>
+  rejectTicket: (ticketId: number, version: number, reason?: string) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: 'CANCELLED', note: reason })
+      body: JSON.stringify({ status: 'CANCELLED', version, note: reason })
     }),
-  updateTicket: (ticketId: number, payload: { asset_id: number; requester_id: number; description: string; need_backup: boolean; backup_spec?: string | null; pickup_location?: string | null }) =>
+  updateTicket: (ticketId: number, payload: { asset_id: number; requester_id: number; description: string; version: number; need_backup: boolean; backup_spec?: string | null; pickup_location?: string | null }) =>
     http<RepairRequest>(`/api/tickets/${ticketId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...payload, status: 'OPEN' })
     }),
-  closeTicket: (ticketId: number, payload: { issue_description: string; solution: string; vendor_id: number; cost: number }) =>
+  closeTicket: (ticketId: number, payload: { version: number; issue_description: string; solution: string; vendor_id: number; cost: number }) =>
     http<RepairRequest>(`/api/tickets/${ticketId}/close`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -42,6 +42,10 @@ class RepairRequest(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
+    __mapper_args__ = {
+        "version_id_col": version,
+    }
+
     inspection: Mapped["RepairInspection | None"] = relationship(
         "RepairInspection", back_populates="request", uselist=False, cascade="all, delete-orphan"
     )

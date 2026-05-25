@@ -21,7 +21,7 @@ export const AssetTransferDialog: React.FC<Props> = ({ asset, onClose, onTransfe
 
   useEffect(() => {
     if (!asset) return;
-    api.listUsers().then(setUsers).catch(() => {});
+    api.listUsers({ limit: 1000 }).then(data => setUsers(data.items)).catch(() => {});
     setSelectedUser(null);
     setOwnerSearch('');
     setDone(false);

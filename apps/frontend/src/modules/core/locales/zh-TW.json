@@ -862,7 +862,13 @@
     "saveSuccessTitle": "更新成功",
     "saveSuccessMsg": "資料已成功儲存並同步至系統。",
     "deleteFailed": "刪除失敗",
-    "backToList": "返回列表"
+    "backToList": "返回列表",
+    "paginationInfo": "顯示第 {{start}} 到 {{end}} 筆，共 {{total}} 筆",
+    "pageOf": "第 {{current}} / {{total}} 頁",
+    "firstPage": "第一頁",
+    "lastPage": "最後一頁",
+    "prevPage": "上一頁",
+    "nextPage": "下一頁"
   },
   "repairHistory": {
     "title": "維修紀錄",

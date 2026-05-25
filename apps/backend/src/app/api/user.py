@@ -3,7 +3,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,6 +21,13 @@ from app.models.user import Role, Sex
 
 router = APIRouter()
 admin_required = require_role("ADMIN")
+
+
+class PaginatedUserResponse(BaseModel):
+    total: int
+    items: list
+    skip: int
+    limit: int
 
 
 # Pure business logic functions (testable without DB/HTTP layer)
@@ -405,19 +412,49 @@ async def admin_create_user(
 	)
 
 
-@router.get("/users", response_model=list[UserOut])
+@router.get("/users", response_model=PaginatedUserResponse)
 async def admin_list_users(
 	keyword: str | None = None,
+	sex: str | None = None,
+	department_id: int | None = None,
+	location: str | None = None,
+	role: str | None = None,
+	must_change_password: bool | None = None,
+	skip: int = 0,
+	limit: int = 50,
 	user=Depends(admin_required),
 	db: AsyncSession = Depends(get_db),
-) -> list[UserOut]:
-	stmt = select(User).options(selectinload(User.location)).order_by(User.id.desc())
+) -> PaginatedUserResponse:
+	stmt = select(User)
 	if keyword:
 		like = f"%{keyword}%"
 		stmt = stmt.where((User.employee_id.like(like)) | (User.name.like(like)) | (User.email.like(like)))
+	if sex:
+		try:
+			stmt = stmt.where(User.sex == Sex[sex.upper()])
+		except KeyError:
+			pass
+	if department_id is not None:
+		stmt = stmt.where(User.department_id == department_id)
+	if location:
+		loc_row = (await db.scalars(select(OfficeLocation).where(OfficeLocation.name == location))).first()
+		if loc_row:
+			stmt = stmt.where(User.location_id == loc_row.id)
+		else:
+			return PaginatedUserResponse(total=0, items=[], skip=skip, limit=limit)
+	if role:
+		try:
+			stmt = stmt.where(User.role == Role[role.upper()])
+		except KeyError:
+			pass
+	if must_change_password is not None:
+		stmt = stmt.where(User.must_change_password == must_change_password)
 
-	rows = (await db.scalars(stmt)).all()
-	return [_user_to_out(r) for r in rows]
+	total = await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+
+	data_q = stmt.options(selectinload(User.location)).order_by(User.id.desc()).offset(skip).limit(limit)
+	rows = (await db.scalars(data_q)).all()
+	return PaginatedUserResponse(total=total, items=[_user_to_out(r) for r in rows], skip=skip, limit=limit)
 
 
 @router.get("/users/{target_employee_id}", response_model=UserOut)

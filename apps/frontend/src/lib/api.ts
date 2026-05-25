@@ -256,6 +256,13 @@ export interface AuditLogListResponse {
   page_size: number;
 }
 
+export interface PaginatedResponse<T> {
+  total: number;
+  items: T[];
+  skip: number;
+  limit: number;
+}
+
 export const api = {
   login: (data: any) => http<any>("/api/login", {
     method: "POST",
@@ -269,8 +276,22 @@ export const api = {
   listVendors: () => http<Vendor[]>("/api/vendors"),
 
   getMe: () => http<User>("/api/users/me"),
-  listUsers: (keyword?: string) =>
-    http<User[]>(`/api/users${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
+  listUsers: (params?: {
+    keyword?: string;
+    sex?: string;
+    department_id?: number;
+    location?: string;
+    role?: string;
+    must_change_password?: boolean;
+    skip?: number;
+    limit?: number;
+  }) => {
+    const cleanParams = Object.fromEntries(
+      Object.entries(params || {}).filter(([_, v]) => v !== undefined && v !== null && v !== "")
+    );
+    const query = new URLSearchParams(Object.entries(cleanParams).map(([k, v]) => [k, String(v)])).toString();
+    return http<PaginatedResponse<User>>(`/api/users${query ? `?${query}` : ''}`);
+  },
   createUser: (payload: UserCreatePayload) =>
     http<User>("/api/users", {
       method: "POST",
@@ -341,12 +362,14 @@ export const api = {
     owner_q?: string;
     office_location_q?: string;
     asset_type?: string;
+    skip?: number;
+    limit?: number;
   }) => {
     const cleanParams = Object.fromEntries(
       Object.entries(params || {}).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "undefined")
     );
     const query = new URLSearchParams(Object.entries(cleanParams).map(([k, v]) => [k, String(v)])).toString();
-    return http<Asset[]>(`/api/assets${query ? `?${query}` : ''}`);
+    return http<PaginatedResponse<Asset>>(`/api/assets${query ? `?${query}` : ''}`);
   },
   getAsset: (id: number) => http<Asset>(`/api/assets/${id}`),
   updateAsset: (id: number, payload: Partial<AssetCreatePayload>) =>
@@ -384,10 +407,22 @@ export const api = {
       body: JSON.stringify({ version })
     }),
 
-  getAssetTickets: (assetId: number) =>
-    http<{ request: RepairRequest; attachment: { id: number; file_url: string; file_name: string } | null }[]>(`/api/assets/${assetId}/tickets`),
-  listTickets: (status?: string) =>
-    http<RepairRequest[]>(`/api/tickets${status && status !== 'ALL' ? `?status=${status}` : ''}`),
+  getAssetTickets: (assetId: number, params?: { skip?: number; limit?: number }) => {
+    const p: Record<string, string> = {};
+    if (params?.skip !== undefined) p['skip'] = String(params.skip);
+    if (params?.limit !== undefined) p['limit'] = String(params.limit);
+    const query = new URLSearchParams(p).toString();
+    return http<PaginatedResponse<{ request: RepairRequest; attachment: { id: number; file_url: string; file_name: string } | null }>>(`/api/assets/${assetId}/tickets${query ? `?${query}` : ''}`);
+  },
+  listTickets: (params?: { status?: string; skip?: number; limit?: number }) => {
+    const { status, skip, limit } = params || {};
+    const p: Record<string, string> = {};
+    if (status && status !== 'ALL') p['status'] = status;
+    if (skip !== undefined) p['skip'] = String(skip);
+    if (limit !== undefined) p['limit'] = String(limit);
+    const query = new URLSearchParams(p).toString();
+    return http<PaginatedResponse<RepairRequest>>(`/api/tickets${query ? `?${query}` : ''}`);
+  },
   listMyTickets: async (employeeId: string): Promise<RepairRequest[]> => {
     const items = await http<{ request: RepairRequest; attachment: unknown }[]>(`/api/tickets/list/${employeeId}`);
     return items.map(item => item.request);

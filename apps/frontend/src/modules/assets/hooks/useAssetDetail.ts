@@ -21,8 +21,8 @@ export const useAssetDetail = (assetId: string | undefined) => {
       // we'll fetch all tickets if admin, or user tickets if employee, and filter client-side.
       // But for a professional app, let's assume we can at least try to get them.
       try {
-        const allTickets = await api.listTickets();
-        const assetHistory = allTickets.filter(t => t.asset_id === parseInt(assetId));
+        const ticketData = await api.listTickets({ limit: 1000 });
+        const assetHistory = ticketData.items.filter(t => t.asset_id === parseInt(assetId));
         setHistory(assetHistory);
       } catch (e) {
         console.warn('Failed to fetch maintenance history:', e);

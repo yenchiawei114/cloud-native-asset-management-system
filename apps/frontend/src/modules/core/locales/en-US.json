@@ -862,7 +862,13 @@
     "saveSuccessTitle": "Update Successful",
     "saveSuccessMsg": "Data has been successfully saved and synced to the system.",
     "deleteFailed": "Delete failed",
-    "backToList": "Back to List"
+    "backToList": "Back to List",
+    "paginationInfo": "Showing {{start}}–{{end}} of {{total}} records",
+    "pageOf": "Page {{current}} of {{total}}",
+    "firstPage": "First page",
+    "lastPage": "Last page",
+    "prevPage": "Previous page",
+    "nextPage": "Next page"
   },
   "repairHistory": {
     "title": "Repair History",

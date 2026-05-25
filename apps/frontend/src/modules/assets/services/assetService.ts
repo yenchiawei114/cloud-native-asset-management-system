@@ -11,7 +11,8 @@ export const assetService = {
    * - 管理員：回傳全部，或透過 employeeId 過濾。
    */
   async getMyAssets(employeeId?: string) {
-    return await api.listAssets(employeeId ? { owner_employee_id: employeeId } : undefined);
+    const data = await api.listAssets(employeeId ? { owner_employee_id: employeeId, limit: 1000 } : { limit: 1000 });
+    return data.items;
   },
 
   /**

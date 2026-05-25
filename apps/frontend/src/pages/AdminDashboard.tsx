@@ -10,6 +10,7 @@ import { AssetTransferDialog } from "../modules/assets/components/AssetTransferD
 import { api, Asset, Vendor, OfficeLocation, User, RepairRequest } from "../lib/api";
 import { UserSearchCombobox } from "../modules/core/components/UserSearchCombobox";
 import { PendingTransfersBanner } from "../modules/assets/components/PendingTransfersBanner";
+import { Pagination } from "../modules/core/design-system/Pagination";
 
 const ASSET_TYPE_VALUES = ["laptop", "desktop", "phone", "tablet", "server", "network", "other"] as const;
 const ASSET_STATUS_VALUES = ["available", "in_use", "maintenance", "borrowed", "deactivated"] as const;
@@ -70,7 +71,7 @@ export const AdminDashboard: React.FC = () => {
   const [draft, setDraft] = useState<SearchState>(EMPTY_SEARCH);
   const [submitted, setSubmitted] = useState<SearchState>(EMPTY_SEARCH);
 
-  const { assets, loading, refresh } = useAssets({
+  const { assets, total, skip, limit, loading, refresh, onPageChange } = useAssets({
     asset_code_q: submitted.asset_code_q || undefined,
     name_q: submitted.name_q || undefined,
     model_q: submitted.model_q || undefined,
@@ -99,10 +100,10 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     api
-      .listTickets()
-      .then((tickets) =>
+      .listTickets({ limit: 1000 })
+      .then((data) =>
         setActiveTickets(
-          tickets.filter((t): t is RepairRequest & { status: ActiveTicketStatus } =>
+          data.items.filter((t): t is RepairRequest & { status: ActiveTicketStatus } =>
             (ACTIVE_TICKET_STATUSES as readonly string[]).includes(t.status),
           ),
         ),
@@ -142,12 +143,15 @@ export const AdminDashboard: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  const handleSearch = () =>
+  const handleSearch = () => {
+    onPageChange(0);
     setSubmitted({ ...draft, owner_q: selectedOwner?.employee_id || "" });
+  };
   const handleClear = () => {
     setDraft(EMPTY_SEARCH);
     setSubmitted(EMPTY_SEARCH);
     setSelectedOwner(null);
+    onPageChange(0);
   };
   const draftField = (key: keyof SearchState, value: string) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -684,6 +688,9 @@ export const AdminDashboard: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 py-3 border-t border-outline-variant/10">
+            <Pagination total={total} skip={skip} limit={limit} onPageChange={onPageChange} />
           </div>
         </div>
       </div>

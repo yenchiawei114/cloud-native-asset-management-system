@@ -35,8 +35,8 @@ export const AssetRepairHistoryModal: React.FC<Props> = ({ asset, open, onClose 
     setLoading(true);
     setError(null);
     try {
-      const items = await api.getAssetTickets(asset.id);
-      let results = items.map(item => item.request);
+      const data = await api.getAssetTickets(asset.id, { limit: 1000 });
+      let results = data.items.map(item => item.request);
       // 一般員工只顯示自己申請的維修紀錄
       if (!isAdmin && user?.id) {
         results = results.filter(tk => tk.requester_id === user.id);

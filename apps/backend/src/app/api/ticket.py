@@ -611,7 +611,7 @@ async def update_ticket(
         raise HTTPException(
             status_code=409,
             detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
-        )
+        ) from None
     await db.refresh(row)
 
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
@@ -712,7 +712,7 @@ async def update_ticket_status(
         raise HTTPException(
             status_code=409,
             detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
-        )
+        ) from None
     await db.refresh(row)
 
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
@@ -813,7 +813,7 @@ async def close_ticket(
         raise HTTPException(
             status_code=409,
             detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
-        )
+        ) from None
     await db.refresh(row)
 
     loaner_asset = await db.get(Asset, row.loaner_asset_id) if row.loaner_asset_id else None
@@ -899,7 +899,7 @@ async def confirm_loaner_return(
         raise HTTPException(
             status_code=409,
             detail="該工單已被其他使用者修改，請重新整理後再試 (Ticket has been modified by another user)",
-        )
+        ) from None
     await db.refresh(row)
 
     requester = await db.get(User, row.requester_id)

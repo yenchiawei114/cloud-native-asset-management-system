@@ -1374,3 +1374,65 @@ async def delete_attachment(
         detail={"before": before},
     )
     await db.commit()
+
+
+class RepairRequestDraftSave(BaseModel):
+    description: str = ""
+    need_backup: bool = False
+    backup_spec: str | None = None
+    pickup_location: str | None = None
+
+
+class RepairRequestDraftOut(BaseModel):
+    asset_id: int
+    user_id: int
+    draft_data: dict
+
+
+def _draft_cache_key(user_id: int, asset_id: int) -> str:
+    return f"ticket:draft:{user_id}:{asset_id}"
+
+
+@router.post("/tickets/draft/{asset_id}", response_model=RepairRequestDraftOut)
+async def save_ticket_draft(
+    asset_id: int,
+    payload: RepairRequestDraftSave,
+    user=Depends(get_current_user),
+) -> RepairRequestDraftOut:
+    import json
+    key = _draft_cache_key(user["user_id"], asset_id)
+    draft_dict = payload.model_dump()
+    # Save draft to Redis with TTL of 7 days (604800 seconds)
+    await redis.setex(key, 604800, json.dumps(draft_dict))
+    return RepairRequestDraftOut(
+        asset_id=asset_id,
+        user_id=user["user_id"],
+        draft_data=draft_dict,
+    )
+
+
+@router.get("/tickets/draft/{asset_id}", response_model=RepairRequestDraftOut)
+async def get_ticket_draft(
+    asset_id: int,
+    user=Depends(get_current_user),
+) -> RepairRequestDraftOut:
+    import json
+    key = _draft_cache_key(user["user_id"], asset_id)
+    cached = await redis.get(key)
+    if not cached:
+        raise HTTPException(status_code=404, detail="draft not found")
+    draft_dict = json.loads(cached)
+    return RepairRequestDraftOut(
+        asset_id=asset_id,
+        user_id=user["user_id"],
+        draft_data=draft_dict,
+    )
+
+
+@router.delete("/tickets/draft/{asset_id}", status_code=204)
+async def delete_ticket_draft(
+    asset_id: int,
+    user=Depends(get_current_user),
+) -> None:
+    key = _draft_cache_key(user["user_id"], asset_id)
+    await redis.delete(key)

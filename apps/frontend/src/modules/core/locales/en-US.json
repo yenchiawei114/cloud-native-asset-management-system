@@ -463,6 +463,12 @@
       "submitting": "Submitting...",
       "submit": "Submit Request"
     },
+    "draft": {
+      "loading": "Loading draft...",
+      "saving": "Saving draft...",
+      "saved": "Draft auto-saved",
+      "error": "Failed to save draft"
+    },
     "detail": {
       "title": "Repair Request Detail",
       "basicInfo": "Basic Info",

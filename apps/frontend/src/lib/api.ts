@@ -400,6 +400,16 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }),
+  saveTicketDraft: (assetId: number, payload: any) =>
+    http<{ asset_id: number; user_id: number; draft_data: any }>(`/api/tickets/draft/${assetId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }),
+  getTicketDraft: (assetId: number) =>
+    http<{ asset_id: number; user_id: number; draft_data: any }>(`/api/tickets/draft/${assetId}`),
+  deleteTicketDraft: (assetId: number) =>
+    http<void>(`/api/tickets/draft/${assetId}`, { method: "DELETE" }),
   updateTicketStatus: (
     ticketId: number,
     status: RepairRequest['status'],

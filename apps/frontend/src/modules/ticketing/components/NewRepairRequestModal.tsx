@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Asset } from '../../../lib/api';
 import { ticketService } from '../services/ticketService';
@@ -20,6 +20,63 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingDraft, setLoadingDraft] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'loading' | 'saving' | 'saved' | 'error'>('idle');
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+
+    const loadDraft = async () => {
+      setLoadingDraft(true);
+      setDraftStatus('loading');
+      try {
+        const draft = await ticketService.getDraft(asset.id);
+        if (cancelled) return;
+        setDescription(draft.draft_data.description || '');
+        setNeedBackup(draft.draft_data.need_backup || false);
+        setBackupSpec(draft.draft_data.backup_spec || '');
+        setDraftStatus('saved');
+      } catch {
+        if (cancelled) return;
+        setDescription('');
+        setNeedBackup(false);
+        setBackupSpec('');
+        setDraftStatus('idle');
+      } finally {
+        if (!cancelled) setLoadingDraft(false);
+      }
+    };
+
+    loadDraft();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [asset.id, open]);
+
+  useEffect(() => {
+    if (!open || loadingDraft || submitting) return;
+    if (!description.trim() && !needBackup && !backupSpec.trim()) return;
+
+    setDraftStatus('saving');
+    const timer = setTimeout(async () => {
+      try {
+        await ticketService.saveDraft(asset.id, {
+          description,
+          need_backup: needBackup,
+          backup_spec: needBackup ? backupSpec : null,
+        });
+        setDraftStatus('saved');
+      } catch (err) {
+        console.error('Failed to auto-save draft:', err);
+        setDraftStatus('error');
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [asset.id, backupSpec, description, loadingDraft, needBackup, open, submitting]);
 
   if (!open) return null;
 
@@ -47,6 +104,11 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
       for (const file of files) {
         await ticketService.uploadAttachment(ticket.id, file);
       }
+      try {
+        await ticketService.deleteDraft(asset.id);
+      } catch (err) {
+        console.error('Failed to delete draft:', err);
+      }
       onSuccess();
     } catch (err: any) {
       setError(err.message || t('ticketing.new.submitFailed'));
@@ -67,6 +129,32 @@ export const NewRepairRequestModal: React.FC<Props> = ({ asset, open, onClose, o
             <p className="text-xs text-on-surface-variant mt-0.5">
               {asset.asset_code} · {asset.name}
             </p>
+          </div>
+          <div className="ml-auto mr-3 flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-100 text-[11px] font-medium text-slate-500">
+            {draftStatus === 'loading' && (
+              <>
+                <div className="animate-spin rounded-full h-3 w-3 border-2 border-primary border-t-transparent"></div>
+                <span>{t('ticketing.draft.loading', '正在載入草稿...')}</span>
+              </>
+            )}
+            {draftStatus === 'saving' && (
+              <>
+                <div className="animate-ping h-1.5 w-1.5 rounded-full bg-amber-500"></div>
+                <span>{t('ticketing.draft.saving', '草稿儲存中...')}</span>
+              </>
+            )}
+            {draftStatus === 'saved' && (
+              <>
+                <span className="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+                <span>{t('ticketing.draft.saved', '草稿已自動儲存')}</span>
+              </>
+            )}
+            {draftStatus === 'error' && (
+              <>
+                <span className="material-symbols-outlined text-error text-sm">error</span>
+                <span>{t('ticketing.draft.error', '草稿儲存失敗')}</span>
+              </>
+            )}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-on-surface transition-colors p-1">
             <span className="material-symbols-outlined text-xl">close</span>

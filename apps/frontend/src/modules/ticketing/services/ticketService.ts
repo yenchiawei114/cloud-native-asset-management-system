@@ -23,5 +23,17 @@ export const ticketService = {
     formData.append('attachable_id', id.toString());
     formData.append('file', file);
     return await api.uploadAttachment(formData);
+  },
+
+  async saveDraft(assetId: number, payload: any) {
+    return await api.saveTicketDraft(assetId, payload);
+  },
+
+  async getDraft(assetId: number) {
+    return await api.getTicketDraft(assetId);
+  },
+
+  async deleteDraft(assetId: number) {
+    return await api.deleteTicketDraft(assetId);
   }
 };

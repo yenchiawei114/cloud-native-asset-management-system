@@ -13,6 +13,7 @@ resources:
   - backend/pdb.yaml
   - frontend/deployment.yaml
   - frontend/service.yaml
+  - frontend/hpa.yaml
   - cloudsql-proxy/deployment.yaml
   - cloudsql-proxy/service.yaml
   - ingress/ingress.yaml

@@ -54,7 +54,7 @@ class AssetUpdate(BaseModel):
     type: AssetType | None = None
     model: str | None = None
     specification: str | None = None
-    vendor: str | None = None
+    vendor_id: int | None = None
     purchase_date: date | None = None
     purchase_price: int | None = None
     storage_location: str | None = None

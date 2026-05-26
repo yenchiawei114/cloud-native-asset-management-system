@@ -6,7 +6,8 @@ import { useAuth } from '../modules/auth/hooks/useAuth';
 import { useAssetDetail } from '../modules/assets/hooks/useAssetDetail';
 import { FeedbackDialog } from '../modules/core/components/FeedbackDialog';
 import { useFeedback } from '../modules/core/hooks/useFeedback';
-import { api } from '../lib/api';
+import { api, Vendor } from '../lib/api';
+import { VendorCombobox } from '../components/VendorCombobox';
 import { fmtDate, fmtNumber } from '../lib/locale';
 
 const ASSET_STATUS_BADGE: Record<string, string> = {
@@ -30,6 +31,13 @@ export const AssetDetailPage: React.FC = () => {
   const [form, setForm] = useState<any>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      api.listVendors().then(setVendors).catch(() => {});
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     if (asset) {
@@ -63,7 +71,7 @@ export const AssetDetailPage: React.FC = () => {
   const handleSave = async () => {
     setIsSubmitting(true);
     try {
-      await updateAsset(form);
+      await updateAsset(form, vendors);
       setIsEditing(false);
       await refresh();
       showFeedback({ 
@@ -241,10 +249,11 @@ export const AssetDetailPage: React.FC = () => {
                 <div className="p-4 rounded-xl bg-surface-container-low">
                   <span className="text-xs font-bold text-slate-400 block mb-1">{t('assets.detail.vendor')}</span>
                   {isEditing ? (
-                    <input
-                      className="w-full bg-transparent border-none p-0 text-sm font-semibold focus:ring-0"
-                      value={form.vendor}
-                      onChange={e => setForm({ ...form, vendor: e.target.value })}
+                    <VendorCombobox
+                      vendors={vendors}
+                      value={form.vendor ?? ''}
+                      onChange={(name) => setForm({ ...form, vendor: name })}
+                      inputCls="w-full bg-transparent border-none p-0 text-sm font-semibold focus:ring-0"
                     />
                   ) : (
                     <span className="text-sm font-semibold">{asset.vendor}</span>

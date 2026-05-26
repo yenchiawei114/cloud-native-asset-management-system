@@ -8,6 +8,7 @@ import { AddAssetDialog } from "../modules/assets/components/AddAssetDialog";
 import { AssetImportDialog } from "../modules/assets/components/AssetImportDialog";
 import { AssetTransferDialog } from "../modules/assets/components/AssetTransferDialog";
 import { api, Asset, Vendor, OfficeLocation, User, RepairRequest } from "../lib/api";
+import { buildAssetUpdatePayload } from "../modules/assets/utils/buildAssetUpdatePayload";
 import { UserSearchCombobox } from "../modules/core/components/UserSearchCombobox";
 import { PendingTransfersBanner } from "../modules/assets/components/PendingTransfersBanner";
 import { Pagination } from "../modules/core/design-system/Pagination";
@@ -129,6 +130,11 @@ export const AdminDashboard: React.FC = () => {
     ? assets.filter((a) => activeTicketMap.get(a.id)?.status === ticketStatusFilter)
     : assets;
 
+  const assetById = useMemo(
+    () => new Map(assets.map((asset) => [asset.id, asset])),
+    [assets],
+  );
+
   const toggleTicketFilter = (status: ActiveTicketStatus) =>
     setTicketStatusFilter((prev) => (prev === status ? null : status));
 
@@ -171,9 +177,16 @@ export const AdminDashboard: React.FC = () => {
     setSaveError("");
     try {
       const updateResults = await Promise.allSettled(
-        Object.entries(pendingEdits).map(([id, edits]) =>
-          api.updateAsset(Number(id), edits as any),
-        ),
+        Object.entries(pendingEdits).map(([id, edits]) => {
+          const asset = assetById.get(Number(id));
+          if (!asset) {
+            return Promise.reject(new Error(`Asset ${id} not found`));
+          }
+          return api.updateAsset(
+            Number(id),
+            buildAssetUpdatePayload(asset, edits, vendors),
+          );
+        }),
       );
       const updateFailed = updateResults.filter(
         (r) => r.status === "rejected",

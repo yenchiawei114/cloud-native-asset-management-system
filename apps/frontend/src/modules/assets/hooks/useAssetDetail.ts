@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, Asset, RepairRequest } from '../../../lib/api';
+import { api, Asset, RepairRequest, Vendor } from '../../../lib/api';
+import { buildAssetUpdatePayload } from '../utils/buildAssetUpdatePayload';
 
 export const useAssetDetail = (assetId: string | undefined) => {
   const [asset, setAsset] = useState<Asset | null>(null);
@@ -39,10 +40,13 @@ export const useAssetDetail = (assetId: string | undefined) => {
     fetchData();
   }, [fetchData]);
 
-  const updateAsset = async (payload: any) => {
+  const updateAsset = async (edits: Record<string, string | number | null | undefined>, vendors?: Vendor[]) => {
     if (!asset) return;
     try {
-      const updated = await api.updateAsset(asset.id, payload);
+      const updated = await api.updateAsset(
+        asset.id,
+        buildAssetUpdatePayload(asset, edits, vendors),
+      );
       setAsset(updated);
       return updated;
     } catch (err: any) {

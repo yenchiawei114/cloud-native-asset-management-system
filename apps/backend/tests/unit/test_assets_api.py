@@ -186,6 +186,8 @@ class FakeSession:
             return self.transfers.get(key)
         if model is OfficeLocation:
             return self.locations.get(key)
+        if model is Vendor:
+            return self._vendor_by_id(key)
         return None
 
     def add(self, obj):
@@ -602,6 +604,43 @@ def test_when_update_asset_version_mismatch_then_should_return_409(client, fake_
 
     assert response.status_code == 409
     assert "modified by another user" in response.json()["detail"]
+
+
+def test_when_update_asset_with_valid_payload_then_should_return_200(client, fake_db_session):
+    _seed_asset(fake_db_session, asset_id=1, name="Update Target", owner_id=1)
+    vendor = fake_db_session.vendors[0]
+
+    token = get_token(client, "A00000001")
+    response = client.put(
+        "/api/assets/1",
+        json={
+            "version": 1,
+            "name": "Updated Name",
+            "vendor_id": vendor.id,
+            "purchase_price": 2000,
+        },
+        headers=_auth_header(token),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "Updated Name"
+    assert data["vendor_id"] == vendor.id
+    assert data["purchase_price"] == 2000
+
+
+def test_when_update_asset_with_unknown_vendor_id_then_should_return_400(client, fake_db_session):
+    _seed_asset(fake_db_session, asset_id=1, name="Update Target", owner_id=1)
+
+    token = get_token(client, "A00000001")
+    response = client.put(
+        "/api/assets/1",
+        json={"version": 1, "vendor_id": 9999},
+        headers=_auth_header(token),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "vendor not found"
 
 
 def test_when_deactivate_missing_asset_then_should_return_404(client):

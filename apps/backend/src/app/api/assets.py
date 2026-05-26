@@ -64,6 +64,7 @@ class AssetUpdate(BaseModel):
 
 class AssetOut(AssetCreate):
     id: int
+    vendor_id: int | None = None
     created_at: datetime
     version: int
     borrower_id: int | None = None
@@ -115,7 +116,8 @@ def _to_out(asset: Asset, owner: User | None = None) -> AssetOut:
         type=asset.type,
         model=asset.model,
         specification=asset.specification,
-        vendor=asset.vendor.name,
+        vendor=asset.vendor.name if asset.vendor else "",
+        vendor_id=asset.vendor_id,
         purchase_date=asset.purchase_date,
         purchase_price=asset.purchase_price,
         storage_location=asset.storage_location,
@@ -756,23 +758,15 @@ async def update_asset(
         )
 
     before_data = _to_out(asset, _asset_owner(asset)).model_dump(mode="json")
-    # 使用 model_fields_set 確保明確傳入 null 時能清除欄位
     update_data = payload.model_dump(exclude_unset=True, exclude={"version"})
-    vendor_name = update_data.pop("vendor", None)
-    if "vendor" in payload.model_fields_set:
-        if vendor_name is None:
-            raise HTTPException(status_code=400, detail="vendor required")
-        vendor = (
-            await db.scalars(
-                select(Vendor).where(Vendor.name == vendor_name)
-            )
-        ).first()
 
+    if "vendor_id" in payload.model_fields_set:
+        if payload.vendor_id is None:
+            raise HTTPException(status_code=400, detail="vendor required")
+        vendor = await db.get(Vendor, payload.vendor_id)
         if vendor is None:
             raise HTTPException(status_code=400, detail="vendor not found")
 
-        asset.vendor_id = vendor.id
-    # 建立日誌專用的序列化數據
     after_data = payload.model_dump(exclude_unset=True, exclude={"version"}, mode="json")
 
     for field, value in update_data.items():

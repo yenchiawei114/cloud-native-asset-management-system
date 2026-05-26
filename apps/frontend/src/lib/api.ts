@@ -136,6 +136,7 @@ export interface Asset {
   model: string;
   specification: string;
   vendor: string;
+  vendor_id?: number | null;
   purchase_date: string;
   purchase_price: number;
   storage_location: string | null;
@@ -165,6 +166,20 @@ export interface AssetCreatePayload {
   activation_date: string;
   warranty_expiry: string;
   status?: string;
+}
+
+export interface AssetUpdatePayload {
+  version: number;
+  name?: string;
+  type?: string;
+  model?: string;
+  specification?: string;
+  vendor_id?: number;
+  purchase_date?: string;
+  purchase_price?: number;
+  storage_location?: string | null;
+  activation_date?: string;
+  warranty_expiry?: string;
 }
 
 export interface AssetImportRowResult {
@@ -372,7 +387,7 @@ export const api = {
     return http<PaginatedResponse<Asset>>(`/api/assets${query ? `?${query}` : ''}`);
   },
   getAsset: (id: number) => http<Asset>(`/api/assets/${id}`),
-  updateAsset: (id: number, payload: Partial<AssetCreatePayload>) =>
+  updateAsset: (id: number, payload: AssetUpdatePayload) =>
     http<Asset>(`/api/assets/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

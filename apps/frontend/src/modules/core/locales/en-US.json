@@ -928,7 +928,10 @@
       "allOperators": "All Operators",
       "allTypes": "All Types",
       "allActions": "All Actions",
-      "dateRange": "Date Range",
+      "dateRange": "Time Range",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "invalidRange": "End time must be after start time",
       "to": "to"
     },
     "summary": {
@@ -970,6 +973,7 @@
     "noLogs": "No audit logs found matching the filters",
     "liveUpdating": "LIVE UPDATING",
     "completed": "Completed",
+    "system": "System",
     "pagination": "Showing {{start}} to {{end}} of {{total}} records",
     "compliance": {
       "title": "Compliance Suggestions",

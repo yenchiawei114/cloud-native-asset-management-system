@@ -4,8 +4,8 @@ import { api, AuditLog } from '../../../lib/api';
 interface UseAuditLogsParams {
   target_type?: string;
   action?: string;
-  from_date?: string;
-  to_date?: string;
+  from_datetime?: string;
+  to_datetime?: string;
   user_id?: number;
   page?: number;
   page_size?: number;

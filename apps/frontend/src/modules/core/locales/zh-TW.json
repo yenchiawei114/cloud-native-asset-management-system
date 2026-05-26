@@ -928,7 +928,10 @@
       "allOperators": "全部操作員",
       "allTypes": "全部類型",
       "allActions": "全部動作",
-      "dateRange": "日期範圍",
+      "dateRange": "時間區間",
+      "startTime": "開始時間",
+      "endTime": "結束時間",
+      "invalidRange": "結束時間必須晚於開始時間",
       "to": "至"
     },
     "summary": {
@@ -970,6 +973,7 @@
     "noLogs": "目前沒有符合的稽核紀錄",
     "liveUpdating": "LIVE 更新中",
     "completed": "已完成",
+    "system": "系統",
     "pagination": "顯示第 {{start}} 到 {{end}} 筆，共 {{total}} 筆紀錄",
     "compliance": {
       "title": "系統合規性建議",

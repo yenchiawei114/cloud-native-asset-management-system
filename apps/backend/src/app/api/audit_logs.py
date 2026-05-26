@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -64,8 +64,8 @@ async def list_audit_logs(
     target_id: int | None = None,
     user_id: int | None = None,
     action: str | None = None,
-    from_date: date | None = None,
-    to_date: date | None = None,
+    from_datetime: datetime | None = None,
+    to_datetime: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -87,11 +87,12 @@ async def list_audit_logs(
             stmt = stmt.where(AuditLog.action == Action(action))
         except ValueError:
             raise HTTPException(status_code=422, detail=f"invalid action: {action}") from None
-    if from_date is not None:
-        stmt = stmt.where(AuditLog.timestamp >= datetime(from_date.year, from_date.month, from_date.day, tzinfo=UTC))
-    if to_date is not None:
-        upper = datetime(to_date.year, to_date.month, to_date.day, tzinfo=UTC) + timedelta(days=1)
-        stmt = stmt.where(AuditLog.timestamp < upper)
+    if from_datetime is not None:
+        from_dt = from_datetime.replace(tzinfo=UTC) if from_datetime.tzinfo is None else from_datetime.astimezone(UTC)
+        stmt = stmt.where(AuditLog.timestamp >= from_dt)
+    if to_datetime is not None:
+        to_dt = to_datetime.replace(tzinfo=UTC) if to_datetime.tzinfo is None else to_datetime.astimezone(UTC)
+        stmt = stmt.where(AuditLog.timestamp <= to_dt)
 
     total = (await db.scalar(select(func.count()).select_from(stmt.subquery()))) or 0
 

@@ -552,7 +552,7 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
-  listAuditLogs: (params?: { target_type?: string; action?: string; from_date?: string; to_date?: string; user_id?: number; page?: number; page_size?: number }) => {
+  listAuditLogs: (params?: { target_type?: string; action?: string; from_datetime?: string; to_datetime?: string; user_id?: number; page?: number; page_size?: number }) => {
     const cleanParams = Object.fromEntries(
       Object.entries(params || {}).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "undefined")
     );

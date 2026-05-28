@@ -24,6 +24,12 @@ _SEVERITY = {
 }
 
 
+_EXTRA_FIELDS = {
+    "service", "replica", "method", "path", "route",
+    "status", "duration_ms", "trace_id",
+}
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, object] = {
@@ -32,6 +38,9 @@ class JsonFormatter(logging.Formatter):
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "logger": record.name,
         }
+        for field in _EXTRA_FIELDS:
+            if hasattr(record, field):
+                payload[field] = getattr(record, field)
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         return json.dumps(payload, ensure_ascii=False)

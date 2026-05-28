@@ -15,6 +15,9 @@ resources:
 persistence:
   enabled: false
 
+plugins:
+  - googlecloud-logging-datasource
+
 grafana.ini:
   server:
     root_url: "https://cnams.duckdns.org/grafana"
@@ -29,6 +32,32 @@ datasources:
         url: http://prometheus.monitoring.svc:9090
         isDefault: true
         access: proxy
+
+      - name: GMP
+        type: prometheus
+        url: http://gmp-frontend.monitoring.svc:9090
+        access: proxy
+        jsonData:
+          timeInterval: 30s
+
+      - name: Loki
+        type: loki
+        url: http://loki.monitoring.svc:3100
+        access: proxy
+
+      - name: CloudMonitoring
+        type: stackdriver
+        access: proxy
+        jsonData:
+          authenticationType: gce
+          defaultProject: cloud-native-project-494008
+
+      - name: CloudLogging
+        type: googlecloud-logging-datasource
+        access: proxy
+        jsonData:
+          authenticationType: gce
+          defaultProject: cloud-native-project-494008
 
 dashboardProviders:
   dashboardproviders.yaml:

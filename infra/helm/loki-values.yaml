@@ -1,0 +1,27 @@
+loki:
+  enabled: true
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  auth_enabled: false
+  limits_config:
+    retention_period: 24h
+    ingestion_rate_mb: 4
+    ingestion_burst_size_mb: 6
+
+singleBinary:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+promtail:
+  enabled: false
+
+grafana:
+  enabled: false

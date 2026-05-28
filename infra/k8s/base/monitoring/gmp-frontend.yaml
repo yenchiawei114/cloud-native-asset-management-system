@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gmp-frontend
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gmp-frontend
+  template:
+    metadata:
+      labels:
+        app: gmp-frontend
+    spec:
+      serviceAccountName: grafana-sa
+      containers:
+        - name: frontend
+          image: asia-east1-artifactregistry.gcr.io/gke-release/gke-release/prometheus-engine/frontend@sha256:26829951d955285186512eb33916adad253dde6849e0d409de1b7443263eda74
+          args:
+            - --web.listen-address=:9090
+            - --query.project-id=cloud-native-project-494008
+          ports:
+            - containerPort: 9090
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gmp-frontend
+  namespace: monitoring
+spec:
+  selector:
+    app: gmp-frontend
+  ports:
+    - port: 9090
+      targetPort: 9090

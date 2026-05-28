@@ -1,0 +1,13 @@
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: frontend
+  namespace: asset-mgmt
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  endpoints:
+    - port: 9113
+      path: /metrics
+      interval: 30s

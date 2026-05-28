@@ -17,4 +17,7 @@ resources:
   - cloudsql-proxy/deployment.yaml
   - cloudsql-proxy/service.yaml
   - ingress/ingress.yaml
+  - frontend/nginx-config.yaml
   - monitoring/service-monitor.yaml
+  - monitoring/backend-pod-monitoring.yaml
+  - monitoring/frontend-pod-monitoring.yaml

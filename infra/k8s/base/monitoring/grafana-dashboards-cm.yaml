@@ -78,7 +78,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le))",
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le))",
               "legendFormat": "p95 backend",
               "refId": "A"
             },
@@ -87,7 +87,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le))",
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le))",
               "legendFormat": "p99 backend",
               "refId": "B"
             },
@@ -96,7 +96,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le, pod))",
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le, pod))",
               "legendFormat": "p95 {{pod}}",
               "refId": "C"
             },
@@ -105,7 +105,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le, pod))",
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le, pod))",
               "legendFormat": "p99 {{pod}}",
               "refId": "D"
             }
@@ -160,7 +160,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\"}[$__rate_interval]))",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval]))",
               "legendFormat": "backend",
               "refId": "A"
             },
@@ -224,7 +224,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\",status=~\"5.*\"}[$__rate_interval]))",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\",status=~\"5.*\"}[$__rate_interval]))",
               "legendFormat": "5xx backend",
               "refId": "A"
             },
@@ -233,7 +233,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\",status=~\"4.*\"}[$__rate_interval]))",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\",status=~\"4.*\"}[$__rate_interval]))",
               "legendFormat": "4xx backend",
               "refId": "B"
             },
@@ -242,7 +242,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\",status=~\"4.*\"}[$__rate_interval])) by (pod)",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\",status=~\"4.*\"}[$__rate_interval])) by (pod)",
               "legendFormat": "4xx {{pod}}",
               "refId": "C"
             }
@@ -419,7 +419,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le, pod))",
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le, pod))",
               "legendFormat": "{{pod}}",
               "refId": "A"
             }
@@ -474,7 +474,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\",status=~\"5.*\"}[$__rate_interval])) by (pod)",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\",status=~\"5.*\"}[$__rate_interval])) by (pod)",
               "legendFormat": "{{pod}}",
               "refId": "A"
             }
@@ -710,7 +710,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\",status=~\"5.*\"}[$__rate_interval])) by (pod)",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\",status=~\"5.*\"}[$__rate_interval])) by (pod)",
               "legendFormat": "{{pod}}",
               "refId": "A"
             }
@@ -921,7 +921,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\"}[$__rate_interval])) by (handler)",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (handler)",
               "legendFormat": "{{handler}}",
               "refId": "A"
             }
@@ -976,7 +976,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\",status=~\"5.*\"}[$__rate_interval])) / sum(rate(http_requests_total{job=\"backend\"}[$__rate_interval]))",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\",status=~\"5.*\"}[$__rate_interval])) / sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval]))",
               "legendFormat": "frontend",
               "refId": "A"
             },
@@ -985,7 +985,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(rate(http_requests_total{job=\"backend\",status=~\"5.*\"}[$__rate_interval])) by (pod) / sum(rate(http_requests_total{job=\"backend\"}[$__rate_interval])) by (pod)",
+              "expr": "sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\",status=~\"5.*\"}[$__rate_interval])) by (pod) / sum(rate(http_requests_total{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (pod)",
               "legendFormat": "{{pod}}",
               "refId": "B"
             }
@@ -1040,7 +1040,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.5,  sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le))",
+              "expr": "histogram_quantile(0.5,  sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le))",
               "legendFormat": "p50 backend",
               "refId": "A"
             },
@@ -1049,7 +1049,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le))",
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le))",
               "legendFormat": "p95 backend",
               "refId": "B"
             },
@@ -1058,7 +1058,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le))",
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le))",
               "legendFormat": "p99 backend",
               "refId": "C"
             },
@@ -1067,7 +1067,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.5,  sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le, pod))",
+              "expr": "histogram_quantile(0.5,  sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le, pod))",
               "legendFormat": "p50 {{pod}}",
               "refId": "D"
             },
@@ -1076,7 +1076,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le, pod))",
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le, pod))",
               "legendFormat": "p95 {{pod}}",
               "refId": "E"
             },
@@ -1085,7 +1085,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[$__rate_interval])) by (le, pod))",
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\",handler=~\"/api/.*\"}[$__rate_interval])) by (le, pod))",
               "legendFormat": "p99 {{pod}}",
               "refId": "F"
             }
@@ -1140,7 +1140,7 @@ data:
                 "type": "prometheus",
                 "uid": "${prom_ds}"
               },
-              "expr": "sum(increase(http_requests_total{job=\"backend\"}[5m])) by (handler, status)",
+              "expr": "sum(increase(http_requests_total{job=\"backend\",handler=~\"/api/.*\"}[5m])) by (handler, status)",
               "legendFormat": "{{handler}} {{status}}",
               "refId": "A",
               "instant": true,

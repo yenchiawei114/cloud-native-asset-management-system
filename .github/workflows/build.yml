@@ -1,0 +1,182 @@
+name: Build & Push Images
+
+on:
+  push:
+    branches: [main, feature/deployment]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: cloud-native-project-494008
+  REGION: asia-east1
+  CLUSTER: asset-mgmt-cluster
+  REGISTRY: asia-east1-docker.pkg.dev/cloud-native-project-494008/asset-mgmt
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: asset_mgmt_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        working-directory: apps/backend
+        run: uv sync --frozen
+
+      - name: Lint
+        working-directory: apps/backend
+        run: uv run ruff check src/
+
+      - name: Run tests
+        working-directory: apps/backend
+        env:
+          DB_URL: mysql+asyncmy://root:test@localhost:3306/asset_mgmt_test
+          DB_SYNC_URL: mysql+pymysql://root:test@localhost:3306/asset_mgmt_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key-for-ci
+          STORAGE_BACKEND: local
+          APP_ENV: test
+        run: uv run pytest tests/ -v --tb=short
+
+  test-frontend:
+    name: Frontend Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/frontend
+        run: npm ci
+
+      - name: Type check
+        working-directory: apps/frontend
+        run: npm run build
+
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    outputs:
+      sha: ${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/755095444561/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: asset-mgmt-cicd@cloud-native-project-494008.iam.gserviceaccount.com
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker asia-east1-docker.pkg.dev --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/backend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/backend:${{ github.sha }}
+            ${{ env.REGISTRY }}/backend:latest
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/frontend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/frontend:${{ github.sha }}
+            ${{ env.REGISTRY }}/frontend:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+  deploy:
+    name: Deploy to GKE
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/755095444561/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: asset-mgmt-cicd@cloud-native-project-494008.iam.gserviceaccount.com
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.CLUSTER }}
+          location: ${{ env.REGION }}
+
+      - name: Update image tags in overlay
+        working-directory: infra/k8s/overlays/production
+        run: |
+          kustomize edit set image \
+            ${{ env.REGISTRY }}/backend=${{ env.REGISTRY }}/backend:${{ github.sha }}
+          kustomize edit set image \
+            ${{ env.REGISTRY }}/frontend=${{ env.REGISTRY }}/frontend:${{ github.sha }}
+
+      - name: Delete previous migration job
+        run: kubectl delete job migration -n asset-mgmt --ignore-not-found=true
+
+      - name: Apply manifests
+        run: kustomize build infra/k8s/overlays/production | kubectl apply -f -
+
+      - name: Run database migration
+        run: |
+          kubectl apply -f infra/k8s/base/migration/job.yaml
+          kubectl wait --for=condition=complete job/migration \
+            -n asset-mgmt --timeout=300s
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/backend -n asset-mgmt --timeout=180s
+          kubectl rollout status deployment/frontend -n asset-mgmt --timeout=60s

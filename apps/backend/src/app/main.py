@@ -5,12 +5,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import assets, health
+from app.api import assets, audit_logs, auth, health, ticket, user, vendor
 from app.core.cache import close_cache
 from app.core.config import settings
 from app.core.db import dispose_engines
+from app.core.limiter import limiter
 from app.core.logging import configure_logging
+from app.core.request_logging import RequestLoggingMiddleware
 from app.core.storage import LocalStorage, storage
 
 configure_logging()
@@ -27,6 +32,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Asset Management", lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,3 +59,9 @@ if settings.enable_metrics:
 
 app.include_router(health.router, tags=["health"])
 app.include_router(assets.router, prefix="/api", tags=["assets"])
+app.include_router(audit_logs.router, prefix="/api", tags=["audit-logs"])
+app.include_router(auth.router, prefix="/api", tags=["auth"])
+app.include_router(ticket.router, prefix="/api", tags=["tickets"])
+# /api/transfers/* 和 /api/assets/*/transfers 都在 assets router 內
+app.include_router(user.router, prefix="/api", tags=["users"])
+app.include_router(vendor.router, prefix="/api", tags=["vendors"])

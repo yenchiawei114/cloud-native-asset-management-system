@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - configmap.yaml
+  - secretstore.yaml
+  - externalsecret.yaml
+  - backend/deployment.yaml
+  - backend/service.yaml
+  - backend/hpa.yaml
+  - backend/pdb.yaml
+  - frontend/deployment.yaml
+  - frontend/service.yaml
+  - frontend/hpa.yaml
+  - cloudsql-proxy/deployment.yaml
+  - cloudsql-proxy/service.yaml
+  - ingress/ingress.yaml
+  - frontend/nginx-config.yaml
+  - monitoring/service-monitor.yaml
+  - monitoring/backend-pod-monitoring.yaml
+  - monitoring/frontend-pod-monitoring.yaml

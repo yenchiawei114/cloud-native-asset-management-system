@@ -1,0 +1,76 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [dev]
+
+jobs:
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: asset_mgmt_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        working-directory: apps/backend
+        run: uv sync --frozen
+
+      - name: Lint
+        working-directory: apps/backend
+        run: uv run ruff check src/
+
+      - name: Run tests
+        working-directory: apps/backend
+        env:
+          DB_URL: mysql+asyncmy://root:test@localhost:3306/asset_mgmt_test
+          DB_SYNC_URL: mysql+pymysql://root:test@localhost:3306/asset_mgmt_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key-for-ci
+          STORAGE_BACKEND: local
+          APP_ENV: test
+        run: uv run pytest tests/ -v --tb=short
+
+  frontend:
+    name: Frontend Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/frontend
+        run: npm ci
+
+      - name: Type check
+        working-directory: apps/frontend
+        run: npm run build

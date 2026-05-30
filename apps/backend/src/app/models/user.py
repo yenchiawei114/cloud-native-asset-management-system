@@ -1,0 +1,107 @@
+from datetime import date, datetime
+from enum import Enum as PyEnum
+
+from sqlalchemy import (
+    CHAR,
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.base import Base
+
+
+class Sex(PyEnum):
+    MALE = "M"
+    FEMALE = "F"
+
+
+class Role(PyEnum):
+    EMPLOYEE = "employee"
+    ADMIN = "admin"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    employee_id: Mapped[str] = mapped_column(CHAR(9), unique=True, nullable=False)
+    password: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    sex: Mapped[Sex] = mapped_column(Enum(Sex), name='sex',
+        nullable=False,
+        default=Sex.MALE
+    )
+    department_id: Mapped[int] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    role: Mapped[Role] = mapped_column(Enum(Role), name='role',
+        nullable=False
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("office_locations.id"), nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    termination_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=func.now(), 
+        nullable=False
+    )
+
+    department: Mapped["Department"] = relationship(
+        "Department", 
+        back_populates="users"
+    )
+    location: Mapped["OfficeLocation | None"] = relationship(
+        "OfficeLocation",
+        back_populates="users"
+    )
+    assets: Mapped[list["Asset"]] = relationship(
+        "Asset",
+        back_populates="owner",
+        foreign_keys="Asset.owner_id"
+    )
+    borrowed_assets: Mapped[list["Asset"]] = relationship(
+        "Asset",
+        back_populates="borrower",
+        foreign_keys="Asset.borrower_id"
+    )
+    initiated_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="initiator",
+        foreign_keys="AssetTransfer.initiator_id"
+    )
+    outgoing_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="from_owner",
+        foreign_keys="AssetTransfer.from_owner_id"
+    )
+    incoming_transfers: Mapped[list["AssetTransfer"]] = relationship(
+        "AssetTransfer",
+        back_populates="to_owner",
+        foreign_keys="AssetTransfer.to_owner_id"
+    )
+    notification_preferences: Mapped[list["NotificationPreference"]] = relationship(
+        "NotificationPreference", 
+        back_populates="user"
+    )
+    audit_logs: Mapped[list["AuditLog"]] = relationship(
+        "AuditLog",
+        back_populates="user"
+    )
+    repair_inspections: Mapped[list["RepairInspection"]] = relationship(
+        "RepairInspection",
+        back_populates="checker"
+    )
+    repair_requests: Mapped[list["RepairRequest"]] = relationship(
+        "RepairRequest",
+        back_populates="requester",
+        foreign_keys="[RepairRequest.requester_id]"
+    )

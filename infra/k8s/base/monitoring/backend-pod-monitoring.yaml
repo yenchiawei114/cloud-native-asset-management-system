@@ -1,0 +1,13 @@
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: backend
+  namespace: asset-mgmt
+spec:
+  selector:
+    matchLabels:
+      app: backend
+  endpoints:
+    - port: 8000
+      path: /metrics
+      interval: 30s

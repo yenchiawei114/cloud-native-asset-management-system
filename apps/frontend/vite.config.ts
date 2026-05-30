@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
@@ -11,6 +11,15 @@ export default defineConfig({
       "/static": "http://localhost:8000",
       "/healthz": "http://localhost:8000",
       "/readyz": "http://localhost:8000",
+    },
+  },
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: "./src/tests/setup.ts",
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
     },
   },
 });

@@ -1,0 +1,76 @@
+adminPassword: "admin"
+
+serviceAccount:
+  name: grafana-sa
+  create: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+persistence:
+  enabled: false
+
+plugins:
+  - googlecloud-logging-datasource
+
+grafana.ini:
+  server:
+    root_url: "https://cnams.duckdns.org/grafana"
+    serve_from_sub_path: true
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus.monitoring.svc:9090
+        isDefault: true
+        access: proxy
+
+      - name: GMP
+        type: prometheus
+        url: http://gmp-frontend.monitoring.svc:9090
+        access: proxy
+        jsonData:
+          timeInterval: 30s
+
+      - name: Loki
+        type: loki
+        url: http://loki.monitoring.svc:3100
+        access: proxy
+
+      - name: CloudMonitoring
+        type: stackdriver
+        access: proxy
+        jsonData:
+          authenticationType: gce
+          defaultProject: cloud-native-project-494008
+
+      - name: CloudLogging
+        type: googlecloud-logging-datasource
+        access: proxy
+        jsonData:
+          authenticationType: gce
+          defaultProject: cloud-native-project-494008
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: Observability
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboardsConfigMaps:
+  default: grafana-dashboards

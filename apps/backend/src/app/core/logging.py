@@ -10,7 +10,7 @@ GKE 上的 Cloud Logging 會自動把看起來像 JSON 的 stdout 解析為 JSON
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.config import settings
 
@@ -24,17 +24,36 @@ _SEVERITY = {
 }
 
 
+_EXTRA_FIELDS = {
+    "service", "replica", "method", "path", "route",
+    "status", "duration_ms", "trace_id",
+}
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, object] = {
             "severity": _SEVERITY.get(record.levelno, record.levelname),
             "message": record.getMessage(),
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "logger": record.name,
         }
+        for field in _EXTRA_FIELDS:
+            if hasattr(record, field):
+                payload[field] = getattr(record, field)
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         return json.dumps(payload, ensure_ascii=False)
+
+
+class _HealthCheckFilter(logging.Filter):
+    """過濾掉 uvicorn access log 中的 health check 請求，避免 log 被 probe 洗版。"""
+
+    _PATHS = ("/healthz", "/readyz")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(path in msg for path in self._PATHS)
 
 
 def configure_logging() -> None:
@@ -50,3 +69,5 @@ def configure_logging() -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(settings.log_level.upper())
+
+    logging.getLogger("uvicorn.access").addFilter(_HealthCheckFilter())

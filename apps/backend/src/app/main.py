@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.db import dispose_engines
 from app.core.limiter import limiter
 from app.core.logging import configure_logging
+from app.core.request_logging import RequestLoggingMiddleware
 from app.core.storage import LocalStorage, storage
 
 configure_logging()
@@ -35,6 +36,8 @@ app = FastAPI(title="Asset Management", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

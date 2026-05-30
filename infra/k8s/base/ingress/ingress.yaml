@@ -40,34 +40,6 @@ spec:
                 name: grafana-proxy
                 port:
                   number: 80
-          - path: /healthz
-            pathType: Exact
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 80
-          - path: /readyz
-            pathType: Exact
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 80
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 80
-          - path: /static
-            pathType: Prefix
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 80
           - path: /
             pathType: Prefix
             backend:

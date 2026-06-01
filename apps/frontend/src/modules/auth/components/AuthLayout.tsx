@@ -31,10 +31,6 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
           <h1 className="font-headline text-5xl font-extrabold text-on-primary leading-tight mb-6">
             {t('auth.layout.headline')}
           </h1>
-          <div className="mt-12 flex gap-4 text-on-primary font-medium">
-            <div>{t('auth.layout.availabilityLabel')}: --</div>
-            <div>{t('auth.layout.auditLabel')}: --</div>
-          </div>
         </div>
       </section>
 
